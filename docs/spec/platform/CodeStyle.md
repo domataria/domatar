@@ -2,11 +2,9 @@
 
 For use by LLMs generating or modifying Java code.
 
-Source of truth: the IntelliJ project code style at
-  devIDEA/IDEA/quippin/.idea/codeStyles/Project.xml
-This document translates that XML into prose rules and adds naming and comment
-conventions derived from the existing codebase. Follow every rule here; do not
-invent alternatives.
+This document is the source of truth for Java in this tree. Follow every
+rule here; do not invent alternatives. Naming and comment conventions are
+those of the existing codebase.
 
 ## PART 1 — FILES
 
@@ -194,8 +192,7 @@ invent alternatives.
 ## PART 7 — FINAL LOCALS AND PARAMETERS
 
 7.1  Declare local variables and parameters as FINAL wherever they are not
-     reassigned. IntelliJ is configured to generate finals automatically; follow
-     this habit in new code.
+     reassigned. Follow this habit in new code.
 
        public static String resolve(final DomId clsDescDomId,
                                     final String clsAppId,
