@@ -404,7 +404,7 @@ OUT OF SCOPE (Direction, PART 9):
   chain). Saving a new list therefore affects accounts created AFTER the save.
   Existing accounts are never retro-provisioned or de-provisioned by this
   control — consistent with the platform's per-account, minting-time philosophy
-  (cf. act.FpVersion, [Identifiers](../platform/Identifiers.md)). Removing an app from the
+  (cf. act.FpVersion, [Identifiers](../platform/Identifiers.md) PART 18). Removing an app from the
   default set does NOT uninstall it from anyone.
 
 ## PART 7 - SECURITY / AUTHORIZATION

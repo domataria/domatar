@@ -16,7 +16,7 @@ Read in this order. Stop after the umbrella PART 1–6 if you only need
 the vocabulary.
 
 - [Domatar Overview](spec/Domatar.md) — objects, hosts, messages, dispatch
-- [Identifiers](spec/platform/Identifiers.md) — ownId, actId, usrId
+- [Identifiers](spec/platform/Identifiers.md) — ownId, actId, usrId, fingerprint versioning
 - [Login protocol](spec/apps/Login-Protocol.md) — federated identity (the protocol)
 - [Security](spec/platform/Security.md) — delegations, origin signatures, the wire
 - [Platform App](spec/platform/Platform-App.md) — the platform's own application (`domatar`) and shell roles

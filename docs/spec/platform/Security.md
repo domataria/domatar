@@ -3,37 +3,14 @@
 This document specifies how Domatar secures inter-object communication:
 how a receiving object knows WHO sent a message (the caller's identity),
 by WHAT PATH it arrived (the chain of objects it passed through), and how
-the bytes are protected ON THE WIRE. It builds directly on the core
-platform ([Domatar](../Domatar.md)), refining and extending:
+the bytes are protected ON THE WIRE.
 
-- PART 3 — Identity: hsts, apps, accounts
-- PART 4 — Hosts and the global directory
-- PART 6 — Object dispatch, verification, and authorization
-- PART 16.4 — Security direction
+Account identity (ownId, actId, usrId, genesis/ownership keys, binding,
+rebind) is [Identifiers](Identifiers.md). This document is the wire:
+origin signatures, signed path hops, delegations carried on the message,
+and TLS.
 
-STATUS. Phase 1 is live: self-certifying actIds, server-held ownership
-keys, message-carried delegations, origin signatures, signed path hops,
-and TLS on the wire (PART 15). Phase 2+ (device-held keys, proactive
-revocation, message-level encryption) is Direction.
-
-TERMINOLOGY. Two account identifiers recur throughout:
-
-  * "account ID" / actId / ActId
-      The immutable identity of an account, embedded in every DomId and
-      every obj/lnk row. In this design its value is a fingerprint of
-      the account's root public key (PART 3.3); "fingerprint" is used
-      only as a DESCRIPTION of how the value is formed, never as a
-      field or entity name.
-
-  * "user ID" / usrId / UsrId
-      The mutable login handle of the form `name@homePrvId`. It is a
-      login label / human-readable handle; "login label" and "human
-      label" are used only as DESCRIPTIONS, never as field or entity
-      names.
-
-The design rests on three separate mechanisms answering three separate
-questions. They are intentionally independent and can be built and
-reasoned about one at a time:
+The system uses three independent mechanisms:
 
   Q1  ORIGIN     "Is the caller who it claims to be?"    -> signatures
                                                             (PART 7)
@@ -42,6 +19,10 @@ reasoned about one at a time:
                                                             (PART 8)
   Q3  WIRE       "Can a network eavesdropper read or       -> TLS
                   alter the bytes in transit?"               (PART 9)
+
+Ownership keys are server-held on signing providers (T1). Device-held
+keys, proactive revocation, and message-level encryption are Direction
+(PART 15).
 
 ## PART 1 - GOALS AND NON-GOALS
 
@@ -79,14 +60,14 @@ reasoned about one at a time:
     is deliberately the OPPOSITE of anonymity: it reveals the route to
     the endpoint (see PART 8.5).
 
-  * Confidentiality against a relaying provider. Phase 1 uses transport
-    (per-hop) encryption only; a provider that handles a message can
-    read it. End-to-end body encryption is a later phase (PART 15).
+  * Confidentiality against a relaying provider. Transport (per-hop)
+    encryption only; a provider that handles a message can read it.
+    End-to-end body encryption is Direction (PART 15).
 
-  * Proactive revocation. Phase 1 de-authorizes a provider by letting
-    its delegation expire (PART 6), not by a revocation list. A short
-    delegation lifetime bounds the exposure; a revocation service is a
-    later option (PART 15).
+  * Proactive revocation. A provider is de-authorized by letting its
+    delegation expire (PART 6), not by a revocation list. A short
+    delegation lifetime bounds the exposure; a revocation service is
+    Direction (PART 15).
 
 ## PART 2 - THREAT MODEL
 
@@ -107,19 +88,22 @@ reasoned about one at a time:
   A4  A replay attacker that captures a valid signed message and
       re-sends it.
 
-2.2  Trusted, by design (Phase 1 accepted limitations)
+2.2  Trusted, by design (accepted limitations)
 
-  T1  A user's OWN home providers are trusted to act as the user. In
-      Phase 1 the account's root key lives on the home provider
-      (PART 5.4) and is usable without the user present, so a home
-      provider can sign as the account AND can issue delegations
-      (PART 6.4). This is the price of server-held keys; Phase 2
-      (device-held key, PART 15) removes it.
+  T1  A user's OWN home providers are trusted to act as the user. The
+      ownership private key lives on each signing provider
+      ([Identifiers](Identifiers.md) PART 5; this PART 5.4) and is usable
+      without the user present, so a home provider can sign as the
+      account AND can issue delegations (PART 6.4). This is the price of
+      server-held keys. Rebind ([Identifiers](Identifiers.md) PART 10)
+      evicts a dishonest signing provider. Device-held ownership keys
+      (PART 15) would remove T1 between rebinds.
 
   T2  The directory's provider/host records (PART 10) are trusted for
       PROVIDER identity once signed. Accounts do NOT trust the directory
-      for account identity -- an account's identity is self-certifying
-      and travels with each message (PART 3, PART 6).
+      for account identity — an account's identity is self-certifying
+      and travels with each message ([Identifiers](Identifiers.md),
+      PART 6).
 
 2.3  Explicitly out of scope
 
@@ -127,157 +111,46 @@ reasoned about one at a time:
   already holds the keys; side-channel attacks on the crypto library;
   denial of service. These are real but not addressed here.
 
-## PART 3 - IDENTITY MODEL
+## PART 3 - IDENTITY ON THE WIRE
 
-This part REVISES [Domatar](../Domatar.md) PART 2/PART 3. Domatar ALREADY
-separates the two identifiers this design relies on: the `act` table
-carries both an ActId (the account identity embedded in DomIds and
-objects) and a UsrId (the login identity), and the message Context
-carries both ([Domatar](../Domatar.md) PART 7 / PART 17.2). This part does NOT
-introduce that split. What it changes is HOW THE actId IS CHOSEN -- from
-a `name@issuer` string to a self-certifying fingerprint of the account's
-root public key (3.3) -- and it pins down the usrId as the mobile
-`name@homePrvId` login label. The two keep their opposite requirements:
-the actId baked into stored objects must be immutable and provider-free,
-while the usrId must be able to follow the user between providers.
+Account identifiers are defined in [Identifiers](Identifiers.md). This
+part states only what the message path needs.
 
-3.1  Two identities, two jobs
+3.1  actId and usrId
 
-  * The account ID (actId)  --  "who owns this object"
-      A SELF-CERTIFYING identifier: a fingerprint of the account's root
-      public key (3.3). Immutable for the life of the account. Contains
-      no provider reference. This is the actId component embedded in
-      every DomId ([Domatar](../Domatar.md) PART 2) and therefore in every obj
-      and lnk row.
+  * actId — permanent account identity, a fingerprint of the genesis
+    public key ([Identifiers](Identifiers.md) PART 4). Embedded in every
+    DomId and in the signed Origin block (PART 7). Never authorizes by
+    itself; the credential chain (PART 6) proves it.
 
-  * The user ID (usrId)     --  "who is logged in"
-      The mutable login label of the form `name@homePrvId`, where
-      `homePrvId` is the provider the user is CURRENTLY logged in to. It
-      is a display / routing hint only. It changes whenever the user's
-      home provider changes; even its local part may change (if a new
-      home provider already has that name). It is NEVER stored as an
-      ownership reference.
+  * usrId — mutable login handle `<localname>@<appId>`
+    ([Identifiers](Identifiers.md) PART 2.3;
+    [Login protocol](../apps/Login-Protocol.md) PART 3.2). Travels in
+    Context.UsrId ([Domatar](../Domatar.md) PART 17.2). Display / routing
+    hint only; never an ownership reference; never authorizes.
 
-  The two travel together on every message -- the actId in the DomId and
-  in the signed Origin block (PART 7), the usrId in Context.UsrId
-  ([Domatar](../Domatar.md) PART 17.2). There is no global usrId-to-actId
-  resolution step: the binding is asserted per message, and the actId
-  half of it is cryptographically proven (PART 7). The usrId is only a
-  label and never authorizes anything.
+  There is no global usrId-to-actId resolution step: the binding is
+  asserted per message, and the actId half is cryptographically proven
+  (PART 7).
 
-3.2  What actually changes: the source of uniqueness
+3.2  Immutability
 
-  The actId is written into every object the account creates and can
-  never change, or a home-provider switch would require rewriting all of
-  the user's rows. It therefore must not encode anything mutable, such as
-  a home provider.
-
-  It already met that bar. The old `name@issuer` actId was, in effect,
-  already provider-free: the `@issuer` suffix was INERT -- never parsed
-  for routing or authority ([Domatar](../Domatar.md) routes by hstId only), it
-  existed solely to make the whole string globally unique via a
-  namespace. So this change removes no functional dependency; there was
-  none to remove.
-
-  What changes is the SOURCE of that uniqueness -- from a namespace
-  authority (the `@issuer` suffix) to key-derived randomness (a
-  fingerprint of the root public key, 3.3). The payoff is twofold:
-    - uniqueness now needs no allocator or namespace at all: an account
-      is globally unique the moment its key pair exists, minted offline
-      (3.4); and, more importantly,
-    - the actId becomes SELF-CERTIFYING -- the same identifier that names
-      an owner also cryptographically binds to that owner's key, so it
-      can anchor authentication (Q1, PART 7). A merely-unique string
-      cannot do that, and that is the whole reason for the change.
-
-  This is a change to how the actId is CHOSEN, not a new identifier: the
-  actId/usrId separation predates this spec (PART 3.1).
+  The actId is written into every object the account creates and cannot
+  change, or a home-provider switch would require rewriting all of the
+  user's rows. It encodes no provider. Uniqueness is key-derived
+  ([Identifiers](Identifiers.md) PART 4.3), not a namespace allocator.
 
 3.3  How the actId is derived
 
-  Each account has a root Ed25519 key pair (PART 4). The actId is a
-  fingerprint of its public key:
+  See [Identifiers](Identifiers.md) PART 4.1 (v1 fingerprint algorithm)
+  and PART 18 (`act.FpVersion`). ownId uses the same registry.
 
-      actId = Base64Encoder.encode( SHA-256( rootPublicKeyBytes )[0 .. 24) )
+3.4  usrId uniqueness
 
-  i.e. the first 24 bytes (192 bits) of the SHA-256 digest of the 32-byte
-  Ed25519 root public key, encoded with the platform's URL-safe
-  Base64Encoder (com.domatar.util.Base64Encoder). 24 bytes is a multiple
-  of 3, so the encoding is exactly 32 characters with no padding, using
-  only the alphabet [0-9 A-Z _ a-z ~]. That alphabet contains neither '.'
-  (the DomId separator) nor '@' (the usrId separator), so an actId is
-  safe as a DomId component and in a URL without escaping.
-
-  Example shape (illustrative, not a real key):
-      qK3nZ8pMvB2rT9wLxF4hJ7dScA1yE6gU
-
-3.4  Global uniqueness by construction
-
-  Uniqueness comes from key randomness, not from a namespace
-  authority:
-
-    * Two distinct key pairs yield distinct public keys, hence distinct
-      actIds (barring hash collision).
-    * The output is uniform over essentially the full 2^192 space: valid
-      Ed25519 public keys number ~2^252, so the truncated SHA-256 output
-      covers every 192-bit value (~2^60 preimages each), and the hash
-      launders any structure in the key. There is no meaningful set of
-      "unreachable" actIds that would shrink the effective space.
-    * At 192 bits, an ACCIDENTAL collision (birthday bound ~2^96) is
-      negligible. Note the population is NOT bounded by the number of
-      people: an account may be a person, an organization or other
-      entity, a role within an entity, an automated agent, and so on, so
-      there can be far more accounts than humans. Even so the margin is
-      vast -- at, say, 2^50 accounts the collision probability is about
-      2^-93 -- and it stays negligible even if the effective space were
-      somehow reduced by tens of bits.
-    * A DELIBERATE collision with a specific existing account
-      (second-preimage, ~2^192) is infeasible; and even a collision
-      would not grant impersonation, since the attacker still would not
-      hold the matching private key. Grinding keys (vanity generation)
-      does not raise accidental-collision odds -- each attempt is still a
-      uniform draw over the full space.
-
-  Consequences:
-    * A new account can be minted entirely OFFLINE (generate key pair ->
-      derive actId) and is globally unique before contacting any server.
-      No allocator, no registry, no coordination.
-    * "First-writer-wins" registration ([Domatar](../Domatar.md) PART 3) is no
-      longer load-bearing for identity: one cannot mint an actId whose
-      key one does not hold, nor reach a victim's actId.
-
-  WARNING -- key-generation entropy (known risk, not solved here). All of
-  the above assumes root key pairs are generated with GOOD randomness.
-  The abstract 2^192 space is robust, but a WEAK or unseeded random
-  number generator collapses the EFFECTIVE entropy far below what any
-  actId length could compensate for, and that is the only realistic path
-  to a collision. Worse, two accounts generated from the same weak
-  randomness would share not just an actId but the same PRIVATE KEY --
-  able to sign as each other.   This has real precedent (e.g. the 2008
-  Debian OpenSSL flaw; low-entropy embedded devices emitting duplicate
-  keys). No choice of hash or actId length addresses this; only the
-  quality of key generation does.
-
-  Scope of the concern. TODAY this is NOT a practical problem: there is a
-  single Domatar implementation, and it generates root keys correctly
-  (vetted CSPRNG). The risk materializes only once there are MULTIPLE,
-  independent implementations -- Domatar is a protocol meant to be
-  realised by more than one ([Domatar](../Domatar.md) PART 17) -- some of which
-  might generate keys poorly and emit weak or duplicate actIds onto a
-  shared network. At that point a conformance requirement is needed:
-  every implementation MUST generate root keys with a vetted CSPRNG, and
-  the network MAY additionally detect the same actId appearing with a
-  different root public key. This specification records the risk but
-  defers the enforcement to that future (PART 14.2, PART 15). Increasing
-  the actId length would NOT help and is not proposed.
-
-3.5  usrId uniqueness
-
-  The usrId keeps its classic uniqueness: local name unique within a
-  provider, times the globally-unique provider id. Because it is only a
-  label, moving home providers may change it wholesale while the actId is
-  invariant. Nothing authorizes on the usrId; authorization is always
-  against the actId via a signature (PART 7).
+  Local name unique within a provider, times the globally-unique
+  provider / app id. Moving home providers may change the usrId while
+  the actId is invariant. Authorization is always against the actId via
+  a signature (PART 7).
 
 ## PART 4 - CRYPTOGRAPHIC PRIMITIVES
 
@@ -286,8 +159,9 @@ while the usrId must be able to follow the user between providers.
                  fast verification, and freedom from parameter/padding
                  pitfalls. No RSA.
 
-  Hash           SHA-256. Used for the actId (truncated to 24 bytes,
-                 PART 3.3), for body digests, and for hop links (PART 8).
+  Hash           SHA-256. Used for the actId fingerprint
+                 ([Identifiers](Identifiers.md) PART 4.1), for body digests,
+                 and for hop links (PART 8).
 
   Text encoding  com.domatar.util.Base64Encoder (URL-safe alphabet, no
                  padding) for all binary-in-string values: actIds, public
@@ -315,7 +189,7 @@ while the usrId must be able to follow the user between providers.
 Three kinds of key exist. Keep them distinct; they answer different
 questions and have different lifetimes.
 
-5.1  Account root key  (the identity itself) — SPLIT by [Identifiers](Identifiers.md)
+5.1  Account keys (genesis + ownership)
 
   Two Ed25519 key pairs ([Identifiers](Identifiers.md)):
 
@@ -355,20 +229,18 @@ questions and have different lifetimes.
   configuration. This is the ONLY pre-shared trust root, and it vouches
   only for "which key belongs to which provider," never for accounts.
 
-5.4  Key storage (Phase 1)
+5.4  Key storage
 
   Two private keys are held on the provider, in two different places:
 
     * The ACCOUNT OWNERSHIP private key is per account and is stored in
       `act.OwnPrvKey` ([Domatar](../Domatar.md) PART 7 /
-      [Identifiers](Identifiers.md)), encrypted at
+      [Identifiers](Identifiers.md) PART 5), encrypted at
       rest under a provider master key. Only the private key is stored;
-      the account's public key is derivable from it, and the actId
-      (already the `act.ActId` primary key) is the fingerprint of that
-      public key. (This is distinct from the existing `act.Encryption`
-      column, which records the VERSION of the password-hashing method
-      -- currently 1 -- for future migration, and is unrelated to these
-      keys.)
+      the public key is derivable from it. The actId is the fingerprint
+      of the *genesis* public key, not of this key
+      ([Identifiers](Identifiers.md) PART 4). (This is distinct from
+      `act.Encryption`, which versions the password-hashing method.)
 
     * The PROVIDER operational private key is per provider, not per
       account, and lives in a provider-level key store (its public half
@@ -377,11 +249,11 @@ questions and have different lifetimes.
 
   Both are usable by the provider WITHOUT the user's password, so the
   provider can sign (and issue delegations) for background and relayed
-  sends. This is exactly the accepted limitation T1: in Phase 1, a home
-  provider can both act as the account and re-delegate to itself. Phase 2
-  moves the account root private key to the user's device (PART 15),
-  after which a provider can only act with a device-issued, expiring
-  delegation and no longer stores `act.OwnPrvKey`.
+  sends. This is T1: a home provider can both act as the account and
+  re-delegate to itself. Direction (PART 15) moves the ownership private
+  key to the user's device, after which a provider can only act with a
+  device-issued, expiring delegation and no longer stores
+  `act.OwnPrvKey`.
 
 ## PART 6 - DELEGATION AND THE CREDENTIAL CHAIN
 
@@ -397,8 +269,8 @@ to publish an account's set of home providers anywhere.
 
   A verified message carries a chain that a receiver checks bottom-up
   against the one thing it inherently trusts about the account -- the
-  actId itself. [Identifiers](Identifiers.md) extends this with a genesis-signed
-  Binding hop between actId and the ownership key:
+  actId itself. The chain includes the genesis-signed Binding
+  ([Identifiers](Identifiers.md) PART 6 / PART 11):
 
      actId                      the account identity (in the Origin
                                 block, PART 7), = fingerprint(GenesisPubKey)
@@ -427,12 +299,12 @@ to publish an account's set of home providers anywhere.
 
 6.2  The delegation certificate
 
-  A delegation is issued by the account root key and provisioned to a
-  home provider. It is self-contained (it carries the root public key so
-  the whole chain verifies from the actId alone):
+  A delegation is issued by the ownership key and provisioned to a
+  home provider. It is self-contained (it carries the operating public
+  key so the whole chain verifies from the actId plus the Binding):
 
     Delegation {
-      ActId       : <account ID>                    (PART 3.3)
+      ActId       : <account ID>                    ([Identifiers](Identifiers.md) PART 4)
       RootPubKey  : <base64 Ed25519 public key>     (32 bytes)
       PrvId       : <prvId authorized to sign for ActId>
       NotAfter    : <expiry, millis-since-epoch>
@@ -469,14 +341,14 @@ to publish an account's set of home providers anywhere.
 
 6.4  Issuing, renewing, and abandoning delegations
 
-  Issuing / adding a home provider. The account root key holder (in
-  Phase 1 a home provider; in Phase 2 the user's device) signs a
+  Issuing / adding a home provider. The ownership-key holder (a signing
+  provider today; the user's device in PART 15 Direction) signs a
   Delegation naming the new provider and provisions it to that provider,
   which stores it and attaches it to the messages it signs. This is a
-  LOCAL act of the root-key holder; it involves no directory and no
+  LOCAL act of the ownership-key holder; it involves no directory and no
   global record.
 
-  Renewing. Before NotAfter, the root-key holder issues a fresh
+  Renewing. Before NotAfter, the ownership-key holder issues a fresh
   Delegation with a later NotAfter. Providers renew as long as they
   remain authorized.
 
@@ -484,37 +356,30 @@ to publish an account's set of home providers anywhere.
   provider's delegation. Its last delegation lapses at NotAfter, after
   which no verifier will accept its signatures for the account. The actId
   is unchanged; no object is rewritten; the abandoned provider may be the
-  original creating provider. This realizes G4.
+  original creating provider. This realizes G4. A signing provider that
+  still holds the ownership key can self-renew until a rebind
+  ([Identifiers](Identifiers.md) PART 10).
 
   De-authorization latency is therefore bounded by the delegation
-  lifetime (PART 13), not instantaneous. Phase 1 has no proactive
+  lifetime (PART 13), not instantaneous. There is no proactive
   revocation (a non-goal, PART 1.2): choose a NotAfter short enough that
   lapse-based removal is timely for the deployment.
 
-  Governance caveat (T1). In Phase 1 the root key lives on the home
+  Governance caveat (T1). The ownership key lives on the home
   provider(s), so a provider that holds it can renew its OWN delegation
-  indefinitely -- it cannot be forcibly abandoned while it holds the root
-  key. Phase 2 removes this by moving the root key to the user's device:
-  providers then depend on device-issued, expiring delegations, so
-  ceasing to renew genuinely de-authorizes them.
+  indefinitely -- it cannot be forcibly abandoned while it holds that
+  key, except by rebind. Direction (PART 15) moves the ownership key to
+  the user's device: providers then depend on device-issued, expiring
+  delegations, so ceasing to renew genuinely de-authorizes them.
 
-  Desktop-assisted removal (Phase 2 direction). A future
-  self-synchronizing Desktop app that knows all of the user's home
-  providers and holds (or coordinates) the device root key makes
-  COOPERATIVE removal clean: it stops issuing delegations to the dropped
-  provider, whose last one lapses at NotAfter -- with the root key off
-  the providers, that provider genuinely cannot self-renew. Note the
-  limit: this eases MANAGEMENT of the provider set, but it does not give
-  IMMEDIATE revocation of a compromised provider, because the parties
-  that must reject that provider are arbitrary third-party VERIFIERS, not
-  the user's other home providers -- so "updating the other home
-  providers" reaches the wrong audience. Cutting a compromised provider
-  off before its delegation lapses requires reaching verifiers, i.e. a
-  revocation service (PART 15, Phase 3) or a verifier-consulted published
-  set (which would reintroduce the lookup PART 6.3 removes). This is the
-  fundamental tension: "no published state / no lookup" and "instant
-  network-wide revocation" cannot both hold. Keeping NotAfter short
-  (PART 13) bounds the gap without a revocation service.
+  Desktop-assisted removal (Direction). A future self-synchronizing
+  Desktop that knows all of the user's home providers and holds (or
+  coordinates) the device ownership key makes COOPERATIVE removal clean:
+  it stops issuing delegations to the dropped provider, whose last one
+  lapses at NotAfter. Instant network-wide revocation still needs a
+  revocation service (PART 15) or a published set (which would
+  reintroduce the lookup PART 6.3 removes). Keeping NotAfter short
+  (PART 13) bounds the gap.
 
 6.5  Caching (optimization, not required)
 
@@ -532,7 +397,7 @@ to publish an account's set of home providers anywhere.
   the canonical form of:
 
     Origin {
-      ActId       : <account ID on whose behalf we send>   (PART 3.3)
+      ActId       : <account ID on whose behalf we send>   ([Identifiers](Identifiers.md) PART 4)
       SrcDomId    : <full source DomId>
       DstDomId    : <full destination DomId>
       BodyHash    : SHA-256( canonical message Body )
@@ -547,10 +412,10 @@ to publish an account's set of home providers anywhere.
   credential chain of PART 6.1. All of this travels in the message Head,
   extending the JsonMsg Head of [Domatar](../Domatar.md) PART 17.2 (see PART 11).
 
-7.2  Where signing happens: the browser never signs (Phase 1)
+7.2  Where signing happens: the browser never signs
 
-  In Phase 1 the account key lives on the home provider, so the ORIGIN
-  SIGNATURE is created at the browser trust boundary (DomatarServlet,
+  The ownership key lives on the home provider, so the ORIGIN SIGNATURE
+  is created at the browser trust boundary (DomatarServlet,
   [Domatar](../Domatar.md) PART 6.1 / 17.4):
 
     1. The browser authenticates to its home provider with the existing
@@ -562,7 +427,8 @@ to publish an account's set of home providers anywhere.
   Thus the `(usrId, token)` bearer mechanism SURVIVES on the
   browser->home-provider hop only. Inter-object and inter-provider hops
   are authenticated by signature, not by token. The browser holds no key
-  and performs no crypto in Phase 1.
+  and performs no crypto. Direction (PART 15) would have the device
+  sign Origin and issue delegations.
 
 7.3  Verification
 
@@ -586,25 +452,23 @@ to publish an account's set of home providers anywhere.
 
   A malicious provider prvEvil crafts a message claiming a victim's
   ActId. To pass 7.3 it must present a Delegation for that ActId naming
-  prvEvil as Provider and signed by the victim's root key. prvEvil does
-  not hold that root key; it cannot forge the root-key signature (b of
-  PART 6.2), and it cannot substitute its own key because SHA-256 of its
-  key would not equal the victim's ActId (a of PART 6.2). The usrId's
-  `@prv` suffix is never consulted for authorization -- only the
-  credential chain to the actId is. Impersonation therefore fails
-  cryptographically, not by policy.
+  prvEvil as Provider, chained to the victim's current ownId
+  ([Identifiers](Identifiers.md) PART 11). prvEvil does not hold the
+  ownership key; it cannot forge the ownership signature (b of PART 6.2),
+  and it cannot substitute its own key because the self-certifying
+  checks would fail (a of PART 6.2). The usrId is never consulted for
+  authorization -- only the credential chain to the actId is.
+  Impersonation therefore fails cryptographically, not by policy.
 
 7.5  Relationship to "verified" in the core spec
 
-  This REDEFINES the Verified flag of [Domatar](../Domatar.md) PART 6 for
-  cross-provider messages: `Verified=true` now means "the origin
+  For cross-provider messages, `Verified=true` means "the origin
   signature verified, and it was made by a provider holding a valid
   delegation from the named account," not "some provider asserted a
-  token." Authorization (hasRights, PART 6.3) is UNCHANGED and remains
-  separate: signatures answer WHO; hasRights answers MAY. In particular,
-  the envelope-class abuse noted in [Domatar](../Domatar.md) PART 6.2 is still an
-  authorization concern -- a valid signature proves the caller's actId,
-  not its right to act on the destination.
+  token" ([Domatar](../Domatar.md) PART 6). Authorization (hasRights,
+  PART 6.3) is separate: signatures answer WHO; hasRights answers MAY.
+  A valid signature proves the caller's actId, not its right to act on
+  the destination.
 
 ## PART 8 - Q2: PATH PROVENANCE (SIGNED HASH CHAIN)
 
@@ -665,7 +529,7 @@ both.
 8.4  Signing principal: provider, not account
 
   Path hops are signed by the PROVIDER performing each send (its
-  operational key), NOT by the account root key. The account attests
+  operational key), NOT by the account ownership key. The account attests
   ORIGIN (Q1, via a provider it delegated to); providers attest ROUTE
   (Q2). This is why the two mechanisms are cleanly separable and why a
   hop performed by an object whose account key lives elsewhere is still
@@ -692,9 +556,9 @@ both.
 9.1  Transport encryption
 
   Every inter-provider dispatch ([Domatar](../Domatar.md) PART 5, the HTTP POST
-  to `http(s)://<domain>/domatar/Msg`) uses TLS 1.3. This replaces the
-  plain `http://` of the current implementation and realizes
-  [Domatar](../Domatar.md) PART 16.4 "TLS on every wire dispatch."
+  to `http(s)://<domain>/domatar/Msg`) uses TLS 1.3 when
+  `DOMATAR_WIRE_SCHEME=https` (the default). Local simulation may set
+  `WireScheme=http` ([Login protocol](../apps/Login-Protocol.md) PART 15).
 
 9.2  Why one hop is enough here
 
@@ -704,7 +568,7 @@ both.
   PART 5); messages are not onion-routed through a chain of relays at the
   network layer. The logical multi-hop path (Q2) is about
   object-to-object causality, and its INTEGRITY is already protected
-  end-to-end by the signed hash chain (PART 8). So Phase 1 does not add
+  end-to-end by the signed hash chain (PART 8). There is no
   message-level encryption: Q2 covers path integrity, Q1 covers body
   integrity, and TLS covers per-link confidentiality. A relay provider
   can read a body it handles (accepted, PART 1.2 / T1).
@@ -723,7 +587,7 @@ both.
   directory. A rebind ([Identifiers](Identifiers.md) PART 10) cuts off an evicted
   provider's Desktop access and is tile-neutral ([Desktop](../apps/Desktop.md)
   PART 11). Attach transmits the ownership key over TLS (this PART); the
-  sim may bypass TLS (Phase 6 note / [Login protocol](../apps/Login-Protocol.md) PART 15).
+  sim may bypass TLS ([Login protocol](../apps/Login-Protocol.md) PART 15).
 
 9.4  Bootstrap
 
@@ -746,18 +610,18 @@ both.
 
 10.1  Two distribution channels
 
-  * ACCOUNT keys: self-certifying and MESSAGE-CARRIED. The root public
-    key travels inside the delegation (PART 6.2) and is proven against
-    the actId; there is no account key distribution service and no
-    account certificate authority.
+  * ACCOUNT keys: self-certifying and MESSAGE-CARRIED. The genesis and
+    ownership public keys travel inside the Binding and Delegation
+    (PART 6.1; [Identifiers](Identifiers.md) PART 6 / 11) and are proven
+    against the actId; there is no account key distribution service and
+    no account certificate authority.
 
   * PROVIDER keys: distributed via the directory host record, which
-    gains a public-key column and is signed by the directory root key
-    (PART 5.3). This realizes [Domatar](../Domatar.md) PART 4.2 "signing of
-    records." The directory remains the authority for PROVIDER identity
-    and host routing only.
+    carries a public-key column and is signed by the directory root key
+    (PART 5.3; [Domatar](../Domatar.md) PART 4.2). The directory remains
+    the authority for PROVIDER identity and host routing only.
 
-  Revised hst record (extends [Domatar](../Domatar.md) PART 4.1 / PART 7):
+  hst record ([Domatar](../Domatar.md) PART 4.1 / PART 7):
 
     hst ( HstId, Domain, PrvId, Version, FetchedAt,
           PubKey      -- provider Ed25519 public key (base64)
@@ -768,9 +632,10 @@ both.
     directory root key            (pinned, out of band)
       -> signs hst records        => provider PubKeys are trusted
          -> provider keys sign     => origin (Q1) and path hops (Q2)
-    account root key              (self-certifying: actId ==
-                                   fingerprint(RootPubKey))
-      -> signs delegation          => a provider is authorized to sign
+    account genesis / ownership keys  (self-certifying: actId ==
+                                   fingerprint(GenesisPubKey);
+                                   [Identifiers](Identifiers.md) PART 4)
+      -> Binding then Delegation       => a provider is authorized to sign
                                       for the actId (PART 6)
 
   A receiver trusts exactly one pre-shared key (the directory root) for
@@ -787,7 +652,7 @@ both.
       signature.
     * A message whose sole purpose is to fetch provider keys/host records
       is exempt from the signed-chain requirement, exactly as directory
-      traffic is exempt today.
+      traffic is exempt.
 
   Account verification needs no such carve-out because it performs no
   lookup: the credential chain is entirely in the message (PART 6.1).
@@ -797,9 +662,9 @@ both.
 
 ## PART 11 - INTEGRATION WITH THE CORE RUNTIME
 
-11.1  Message envelope additions (extends [Domatar](../Domatar.md) PART 17.2)
+11.1  Message envelope ([Domatar](../Domatar.md) PART 17.2)
 
-  The JsonMsg Head gains an optional security block carrying the full
+  The JsonMsg Head has an optional security block carrying the full
   credential chain (PART 6.1) plus the provenance path (PART 8):
 
     Head {
@@ -815,24 +680,23 @@ both.
     }
 
   Delegation/DelegSig MAY be omitted when the verifier is known to have
-  cached them (PART 6.5); otherwise they are always present. Absent the
-  whole Sec block, a message is UNVERIFIED (as today an unauthenticated
-  caller is Verified=false). Public handlers still run for unverified
-  callers ([Domatar](../Domatar.md) PART 6.1).
+  cached them (PART 6.5); otherwise they are always present.   Absent the
+  whole Sec block, a message is UNVERIFIED (Verified=false). Public
+  handlers still run for unverified callers ([Domatar](../Domatar.md)
+  PART 6.1).
 
-11.2  The two trust boundaries (extends [Domatar](../Domatar.md) PART 6.1)
+11.2  The two trust boundaries ([Domatar](../Domatar.md) PART 6.1)
 
   * DomatarServlet (browser entry): after the existing cookie
     verification, STAMP and SIGN the Origin (PART 7.2), attach the
     provider's Delegation, and start the Q2 path with Hop[0].
 
-  * Msg.doAction (cross-prv inbound): REPLACE the "re-run verifyLogin
-    against the local act table" step with credential-chain verification
-    (PART 7.3) and, where the handler requires provenance, path-chain
-    verification (PART 8.3). Set Verified accordingly. The rule "a prv
-    only believes its own checks, never the wire's Verified flag"
-    ([Domatar](../Domatar.md) PART 6.1) is preserved -- it now re-verifies
-    signatures rather than tokens.
+  * Msg.doAction (cross-prv inbound): verify origin signatures
+    (PART 7.3) and, where the handler requires provenance, the path
+    chain (PART 8.3). Set Verified accordingly. A prv only believes
+    its own checks, never the wire's Verified flag
+    ([Domatar](../Domatar.md) PART 6.1) -- it re-verifies signatures
+    rather than tokens.
 
   * HttpClient.sendLocal / sendHttp: sendHttp APPENDS a signed Hop
     (PART 8.2) before dispatch; in-process sendLocal extends the path in
@@ -844,21 +708,21 @@ both.
   Authorization (ObjImpl.hasRights, [Domatar](../Domatar.md) PART 6.3), routing
   by hstId (PART 5), the class envelope and service qualifier (PART 6.2 /
   PART 8), and the obj/lnk persistence shapes (PART 7) are unchanged.
-  What changes: the actId FORMAT (now a fingerprint); the verification
-  MECHANISM (now signatures + delegations); and the `act` table gains a
-  `RootPrivKey` column for the account root private key (PART 5.4) and
-  the `hst` table gains `PubKey` / `RecordSig` columns (PART 10.1).
+  Verification is signatures + delegations + Binding
+  ([Identifiers](Identifiers.md) PART 11). The `act` table holds
+  `OwnPrvKey` (PART 5.4) and the `hst` table holds `PubKey` /
+  `RecordSig` (PART 10.1).
 
 ## PART 12 - OPERATIONS
 
-Account credentials are LOCAL to the root-key holder; they are not
+Account credentials are LOCAL to the ownership-key holder; they are not
 directory operations. Host-record operations are authorized by the
 directory (mTLS + directory-root signing, PART 9.3 / 10.1).
 
-  Account operations (local to the root-key holder; PART 6.4):
+  Account operations (local to the ownership-key holder; PART 6.4):
 
     IssueDelegation (Provider, NotAfter) -> Delegation + DelegSig
-        Signed by the account root key. Provisioned to the named home
+        Signed by the ownership key. Provisioned to the named home
         provider, which attaches it to the messages it signs. Adding a
         home provider is exactly issuing it a delegation; renewing is
         re-issuing before NotAfter.
@@ -873,9 +737,9 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
 
     UpdateHst / RegisterHst / MoveHst (HstId, ...)
         Authenticated by mTLS against an authorized provider identity and
-        re-signed by the directory root (PART 9.3). Closes the current
-        "anyone who can reach the directory may write" gap
-        ([Domatar](../Domatar.md) PART 4.2 / 16.4).
+        re-signed by the directory root (PART 9.3). Directory writes
+        require a matching client certificate when mTLS is on
+        ([Domatar](../Domatar.md) PART 16.4).
 
   There is deliberately NO GetAccountRecord / PutAccountRecord /
   RegisterAccount: an account publishes nothing and is looked up by no
@@ -895,27 +759,20 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
     authorization -- including one for a provider you have stopped
     renewing (abandoned) -- remains valid (PART 6.4). It is the sole
     de-authorization mechanism (no proactive revocation, PART 1.2).
-    Recommended values are PHASE-AWARE, because the window means
-    different things in each phase:
+    Recommended values depend on who holds the ownership key:
 
-      - Phase 1 (root key on the provider): NotAfter is NOT a security
-        lever. A compromised home provider holds the root key and can
-        self-renew regardless of lifetime (PART 6.4 governance caveat),
-        so the lifetime only sets how fast a VOLUNTARILY dropped
-        provider stops working. Renewal is a free local signature, so
-        pick an operationally comfortable value -- default ~1 hour
-        (3600 s).
+      - Server-held ownership key (T1, now): NotAfter is NOT a security
+        lever against a compromised home provider, which can self-renew
+        (PART 6.4). The lifetime only sets how fast a VOLUNTARILY dropped
+        provider stops working, or how soon a rebind's leftover
+        delegations lapse. Default ~1 hour (3600 s).
 
-      - Phase 2 (root key on the user's device): NotAfter IS the
+      - Device-held ownership key (PART 15 Direction): NotAfter IS the
         compromise-exposure window, since providers can no longer
-        self-renew. Balance it against device availability: too short
-        and a lapse while the device is offline locks the user out; too
-        long and a rogue provider lingers. Default ~24 hours, renewed by
-        the device at ~50% of lifetime so a single missed renewal still
-        has a half-life of slack. If a deployment needs an exposure
-        window shorter than device availability comfortably allows, add
-        the revocation service (PART 15, Phase 3) rather than shrinking
-        NotAfter into lockout territory.
+        self-renew. Default ~24 hours, renewed by the device at ~50% of
+        lifetime. A shorter exposure window than device availability
+        allows needs the revocation service (PART 15) rather than
+        shrinking NotAfter into lockout territory.
 
     Keep this delegation window DISTINCT from the per-message freshness
     window above (Timestamp SKEW ~120 s + the nonce cache): the latter
@@ -933,8 +790,8 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
 
   A1 eavesdrop/tamper on wire   -> TLS 1.3 (PART 9).
   A2 provider impersonates acct -> the origin signature must be backed by
-                                   a delegation signed by the account's
-                                   own root key; an outside provider holds
+                                   a delegation chained to the account's
+                                   current ownId; an outside provider holds
                                    no such delegation and cannot forge it
                                    (PART 6.2, 7.4).
   A3 relay tampers body/route   -> BodyHash (Q1) + signed hash chain (Q2)
@@ -943,81 +800,58 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
   A4 replay                     -> nonce + timestamp window (PART 13).
   Fake usrId                    -> the usrId never authorizes; only the
                                    credential chain to the actId does
-                                   (PART 3.5, 7.4).
+                                   (PART 3.4, 7.4).
   Loss of a provider            -> multiple delegated home providers;
                                    abandonment with no identity change
                                    (G4, PART 6.4).
 
-14.2  Residual (accepted in Phase 1)
+14.2  Residual (accepted)
 
   * A home provider can act as the user and can re-delegate to itself
-    (T1). Closed in Phase 2 by the device-held root key.
+    (T1). Rebind ([Identifiers](Identifiers.md) PART 10) evicts a signing
+    provider. Device-held ownership keys (PART 15) would remove T1
+    between rebinds.
   * De-authorization is expiry-only: a compromised home provider's
     unexpired delegation stays usable until NotAfter (no proactive
     revocation, PART 1.2). Mitigated by a short delegation lifetime; a
-    revocation service is a later option (PART 15).
+    revocation service is Direction (PART 15).
   * A relaying/home provider can read message bodies it handles (no
-    end-to-end encryption yet). Closed later by message-level encryption
+    end-to-end encryption). Message-level encryption is Direction
     (PART 15).
-  * Account root-key compromise is unrecoverable without a recovery
-    mechanism (Phase 3).
-  * Weak key-generation entropy would collapse actId uniqueness (and
-    could duplicate private keys), independent of actId length (PART 3.4
-    WARNING). Not a problem for the current single implementation (which
-    generates keys correctly); it becomes relevant only with multiple
-    independent implementations. A vetted-CSPRNG conformance requirement
-    and same-actId / different-key detection are deferred (PART 15).
+  * Genesis-key compromise is catastrophic
+    ([Identifiers](Identifiers.md) PART 16.3).
+  * Weak key-generation entropy would collapse actId uniqueness
+    ([Identifiers](Identifiers.md) PART 4.3). Not a problem for the
+    current single implementation; a vetted-CSPRNG conformance
+    requirement is Direction (PART 15).
   * The directory root key is a single provider-identity trust anchor;
     its compromise forges provider identity (not account identity).
-    Threshold/multiple signers are a later option.
+    Threshold/multiple signers are Direction.
 
-## PART 15 - PHASES AND DIRECTION
+## PART 15 - DIRECTION
 
-  The account root key is split into genesis + ownership; the credential
-  chain carries a Binding; rebind rotates ownId without changing actId.
-  See [Identifiers](Identifiers.md).
+  Identity (genesis, ownership, Binding, rebind) is
+  [Identifiers](Identifiers.md). This PART is remaining security work.
 
-  PHASE 1  (this document's buildable target)
-    - Self-certifying actIds (a fingerprint of the root public key)
-      replacing the `name@issuer` actId; usrId pinned as the mobile
-      home-provider label (PART 3).
-    - Account root key + provider keys, stored server-side (PART 5).
-    - Message-carried delegation credential chain; no account record;
-      multi-home; abandonment by delegation lapse (PART 6).
-    - Q1 origin signatures at the Wui boundary (PART 7).
-    - Q2 signed hash chain over the path (PART 8).
-    - Q3 TLS on inter-provider dispatch; mTLS for directory writes
-      (PART 9).
-    - Signed directory host records carrying provider keys (PART 10).
-
-  PHASE 2  (close T1)
-    - Account root key moves to the USER'S DEVICE (browser WebCrypto /
+  Device-held ownership key (close T1)
+    - The ownership private key moves to the USER'S DEVICE (WebCrypto /
       passkey). The browser then signs the Origin directly and issues
-      delegations from the device; the home provider no longer holds the
-      root key, so ceasing to renew a delegation genuinely
-      de-authorizes a provider (PART 6.4 governance caveat resolved).
+      delegations from the device; the home provider no longer holds
+      `act.OwnPrvKey`, so ceasing to renew a delegation genuinely
+      de-authorizes a provider (PART 6.4).
 
-  PHASE 3  (hardening)
+  Hardening
     - Message-level confidentiality (JWE-style) for bodies that must be
       opaque to relaying providers.
     - Proactive delegation revocation (a revocation list / status
-      service) for immediate de-authorization of a compromised provider,
-      if the expiry-only model proves insufficient.
-    - Account recovery: a user-held offline recovery key or social
-      recovery, since the root key cannot rotate (PART 5.1).
-    - Key-generation assurance (needed once multiple implementations
-      exist): a conformance requirement that every implementation
-      generate root keys with a vetted CSPRNG, and optionally detect the
-      same actId presented with a different root public key, addressing
-      the entropy risk of PART 3.4.
+      service) if expiry-only proves insufficient.
+    - Key-generation assurance once multiple implementations exist:
+      vetted CSPRNG, optional same-actId / different-key detection
+      ([Identifiers](Identifiers.md) PART 4.3).
     - Threshold / multiple directory-root signers (PART 14.2).
     - Optional self-certifying PROVIDER ids (hstId derived from the
-      provider key), unifying "identity = key" across accounts and
-      providers; today providers stay on the hstId scheme with keys in
-      the directory (PART 10.1).
-
-  These extend the security items of [Domatar](../Domatar.md) PART 16.4 and
-  PART 18 ("Security").
+      provider key); providers currently stay on the hstId scheme with
+      keys in the directory (PART 10.1).
 
 ## Implementation surface
 

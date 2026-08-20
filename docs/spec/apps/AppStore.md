@@ -26,7 +26,8 @@ Companion documents:
 - [Domatar](../Domatar.md) — App Catalog, directory, routing, apps-as-JARs
 - [Desktop](Desktop.md) — Desktop tiles / LaunchPath / sync
 - [Login protocol](Login-Protocol.md) — multi-provider identity; replica hosts for login/desktop/navigator only (PART 5) — not the pattern for ordinary app data
-- [Security](../platform/Security.md) / [Identifiers](../platform/Identifiers.md) — cross-provider identity and delegation
+- [Identifiers](../platform/Identifiers.md) — actId / ownId / binding
+- [Security](../platform/Security.md) — delegations, origin signatures, TLS
 - [Money](Money.md) — payment channel (Direction only here)
 
 Present-tense statements describe the system AS IT WILL BE. Where behaviour
@@ -343,7 +344,8 @@ new ops may be added rather than overloading GetApps beyond recognition.
     5. Provision on the OFFERING provider (PART 10): dispatch InstallUser to
        `(appId, install)` for this actId / usrId / usrName, addressed at the
        PART 9 host id. Cross-provider: existing msgClient / directory /
-       credential chain / delegation ([Security](../platform/Security.md) / [Identifiers](../platform/Identifiers.md);
+       credential chain / delegation ([Security](../platform/Security.md);
+       Binding in [Identifiers](../platform/Identifiers.md));
        PART 10.2).
     6. Create or update a Desktop TILE on the user's Desktop (home provider
        replica is enough for "appears on Desktop"; sync propagates per

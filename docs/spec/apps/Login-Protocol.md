@@ -21,10 +21,11 @@ The architecture holds if every part of the system follows the same rules.
 Five commitments:
 
   C1. actId is a 32-character self-certifying fingerprint
-      derived from the account's Ed25519 root public key ([Security](../platform/Security.md)
-      PART 3.3). It is globally unique without any cross-host coordination:
-      the cryptographic key generation ensures uniqueness. The actId has no
-      '@' and encodes no provider or app information.
+      derived from the account's Ed25519 genesis public key
+      ([Identifiers](../platform/Identifiers.md) PART 4.1). It is globally unique
+      without any cross-host coordination: cryptographic key generation
+      ensures uniqueness. The actId has no '@' and encodes no provider
+      or app information.
 
       The actId is minted server-side at sign-up time and returned to the
       client; the client never supplies it for a new account. For cross-app
@@ -129,8 +130,7 @@ is shown to actually matter.
     as opaque by everything outside the minting host.
 
     Format: a 32-character self-certifying fingerprint of the genesis
-    public key ([Security](../platform/Security.md) PART 3.3 /
-    [Identifiers](../platform/Identifiers.md)). It has no '@' and encodes
+    public key ([Identifiers](../platform/Identifiers.md) PART 4.1). It has no '@' and encodes
     no provider or app.
 
     Properties:
@@ -616,8 +616,7 @@ usrId; actId is never shown.
 11.1 actId generation
 
   ActManagerImpl mints a fingerprint actId from the genesis public
-  key ([Identifiers](../platform/Identifiers.md) / [Security](../platform/Security.md)
-  PART 3.3). usrId is `<localname>@<appId>`, where appId is the
+  key ([Identifiers](../platform/Identifiers.md) PART 4.1). usrId is `<localname>@<appId>`, where appId is the
   central host running addAct (DomatarConfig.getHstId() when that
   tomcat is acting as that app in the directory).
 
@@ -1040,13 +1039,11 @@ security specifications:
                         session, multi-app linking).
   - [Login](Login.md)  (the Login app UI and its per-user login
                         directory login-<actId>).
-  - [Security](../platform/Security.md)  (self-certifying actIds, the account keys,
-                        delegations, and the multi-home-provider goal
-                        G4).
-  - [Identifiers](../platform/Identifiers.md)    (the three-level identity model: the rotatable
-                        ownId, the permanent actId, and the genesis key
-                        that binds them - what turns cooperative removal
-                        into cryptographic eviction, PART 11.)
+  - [Security](../platform/Security.md)  (delegations on the message, origin
+                        signatures, path hops, TLS).
+  - [Identifiers](../platform/Identifiers.md)    (ownId, actId, usrId, genesis and
+                        ownership keys, binding, rebind — cryptographic
+                        eviction of a signing provider, PART 10.)
 
 Membership is the account directory. Each login-home provider holds a
 replica at login-<actId>-<prvId> with the app-login tile, membership
@@ -1068,10 +1065,10 @@ container, binding obj, and peer rows (PART 14).
       loss of any one provider loses nothing: every other provider still
       has a full copy.
 
-  R3  ONE IDENTITY. All replicas share ONE actId ([Security](../platform/Security.md)
-      PART 3.3), under one current ownId anchored to that actId
-      ([Identifiers](../platform/Identifiers.md)). Adding a provider never mints a new account; it
-      attaches a new per-provider login to the existing actId.
+  R3  ONE IDENTITY. All replicas share ONE actId
+      ([Identifiers](../platform/Identifiers.md) PART 4.1), under one current ownId
+      anchored to that actId. Adding a provider never mints a new
+      account; it attaches a new per-provider login to the existing actId.
 
 1.2  Non-goals
 
@@ -1091,8 +1088,8 @@ container, binding obj, and peer rows (PART 14).
 1.3  Terminology (used consistently below)
 
   * actId       - the account identity, a fingerprint of the GENESIS
-                  public key ([Identifiers](../platform/Identifiers.md) PART 4; [Security](../platform/Security.md)
-                  PART 3.3). Immutable, provider-free, never in UI.
+                  public key ([Identifiers](../platform/Identifiers.md) PART 4). Immutable,
+                  provider-free, never in UI.
   * ownId       - the account's CURRENT operative key identity, a
                   fingerprint of the ownership public key. Rotatable; it,
                   not the actId, is what delegations chain to
@@ -1195,10 +1192,11 @@ lookup for the network.
 
 ## PART 4 - KEY CUSTODY, AND WHAT IS (AND IS NOT) REPLICATED
 
-4.1  Server-held keys (Phase 1 custody)
+4.1  Server-held ownership keys
 
-  This spec adopts the [Security](../platform/Security.md) PART 5.4 Phase 1 key model, as
-  refined by [Identifiers](../platform/Identifiers.md) into two keys:
+  Signing providers hold the ownership private key
+  ([Identifiers](../platform/Identifiers.md) PART 5; [Security](../platform/Security.md)
+  PART 5.4):
 
     * the OWNERSHIP private key (the operative key that issues
       delegations; [Identifiers](../platform/Identifiers.md) PART 5) is stored server-side
@@ -1273,24 +1271,24 @@ lookup for the network.
 
 5.2  Parsing is unambiguous
 
-  The separator is '-' (the Phase 2 separator, [Login](Login.md) PART 2).
+  The separator is '-' (`DomId.HOST_SEP`, [Login](Login.md) PART 2).
   It is safe because:
 
     * v1 actIds use the fingerprint alphabet [0-9 A-Z _ a-z ~]
-      ([Security](../platform/Security.md) PART 3.3) and therefore contain no '-';
+      ([Identifiers](../platform/Identifiers.md) PART 4.1) and therefore contain no '-';
     * appIds ("login", "desktop", ...) contain no '-';
     * prvIds ("prv1", "prv2", ...) contain no '-'.
 
   So "<appId>-<actId>-<prvId>" splits deterministically: appId up to the
   FIRST '-', prvId after the LAST '-', actId = the middle (width-
-  independent; [Identifiers](../platform/Identifiers.md) PART 7 / KD7). Public parsers
+  independent; [Identifiers](../platform/Identifiers.md) PART 18.5 / KD7). Public parsers
   still gate on the v1 32-char shape today.
 
 5.3  actId stays provider-free
 
   The '-<prvId>' suffix is on the HOST id, not on the actId. The actId
   embedded in every obj/lnk row remains provider-free and immutable
-  ([Security](../platform/Security.md) PART 3.2). Host ids have always mapped to a provider
+  ([Identifiers](../platform/Identifiers.md) PART 2.2). Host ids have always mapped to a provider
   (that is what the hst table is), so naming the provider in a replica's
   host id is consistent with the model, not a violation of it.
 
@@ -1427,8 +1425,8 @@ verified) and is now visiting a NEW provider N's sign-up page.
        password, or satisfy 2FA once PART 12 exists). This proves the
        caller controls actId X before N is trusted with a copy.
 
-  8.3  DELEGATE + PROVISION. The current ownership-key holder (in Phase 1,
-       the user's existing signing provider) does, as one logical
+  8.3  DELEGATE + PROVISION. The current ownership-key holder (the
+       user's existing signing provider) does, as one logical
        operation:
          a. issue a Delegation naming N ([Security](../platform/Security.md) PART 6.2, 6.4);
          b. transmit to N, over TLS ([Security](../platform/Security.md) PART 9), the
@@ -1582,10 +1580,10 @@ plain app link.
   N), so N cannot block it. The one residual is the binding-propagation
   window ([Identifiers](../platform/Identifiers.md) PART 16.2).
 
-  So the v1 wording split is: describe plain removal as "stop using"
-  (cooperative, no genesis key needed); reserve "evict / revoke" for a
-  rebind. The device-held key ([Security](../platform/Security.md) Phase 2) and a
-  revocation service (Phase 3) remain longer-term hardening.
+  Plain removal is "stop using" (cooperative, no genesis key needed).
+  "Evict / revoke" is a rebind. Device-held ownership keys and a
+  revocation service ([Security](../platform/Security.md) PART 15) remain
+  Direction.
 
 ## PART 12 - TWO-FACTOR AUTHENTICATION (FORWARD-LOOKING)
 
@@ -1615,7 +1613,7 @@ plain app link.
       phone/hardware authenticator, not the browser.
   All are consistent with this design's no-client-storage rule. (The
   thing that rule excludes is a browser-held OPERATIVE key - the
-  [Security](../platform/Security.md) Phase 2 / [Identifiers](../platform/Identifiers.md) device-held ownership key -
+  [Security](../platform/Security.md) PART 15 / [Identifiers](../platform/Identifiers.md) device-held ownership key -
   which is a different mechanism. The cold GENESIS key on a recovery
   device, [Identifiers](../platform/Identifiers.md) PART 7, is also not browser storage.)
 
@@ -1703,7 +1701,7 @@ redundancy for one user:
   attach, and confirm a login-<actId>-prv2 replica and a peer row appear
   on both providers after reconcile.
 
-  In the sim, TLS is bypassed ([Security](../platform/Security.md) Phase 6 note); the
+  In the sim, TLS is bypassed ([Security](../platform/Security.md) PART 9); the
   ownership-key transfer in PART 8.3 travels over plain http between
   tomcats. This is acceptable for the sim only. The GENESIS key stays out
   of the tomcats, in a sim-only user vault ([Identifiers](../platform/Identifiers.md) PART 15).
@@ -1723,7 +1721,8 @@ redundancy for one user:
     dishonest one. This is now ESCAPABLE by a REBIND (PART 11.3,
     [Identifiers](../platform/Identifiers.md) PART 10), which invalidates the old ownId without
     rewriting objects; the residual is the binding-propagation window
-    ([Identifiers](../platform/Identifiers.md) PART 16.2). Phase 2 / Phase 3 remain longer-term.
+    ([Identifiers](../platform/Identifiers.md) PART 16.2). Device-held keys and
+    revocation remain Direction ([Security](../platform/Security.md) PART 15).
   * The attach step 8.3 transmits the ownership private key between
     providers; it MUST be over TLS ([Security](../platform/Security.md) PART 9). Compromise
     of that channel leaks the operative key (recoverable by a rebind, but
@@ -1745,7 +1744,8 @@ redundancy for one user:
   - Cryptographic provider eviction is now provided for SIGNING providers
     by rebind ([Identifiers](../platform/Identifiers.md) PART 10); wire the rebind flow into the
     account page and shrink the propagation window ([Identifiers](../platform/Identifiers.md)
-    PART 16.2). Phase 2/3 device keys remain the deeper hardening.
+    PART 16.2). Device-held ownership keys remain Direction
+    ([Security](../platform/Security.md) PART 15).
   - Membership-change notification instead of pure display-time pull, if
     convergence latency is ever shown to matter (analogous to
     [Login protocol](Login-Protocol.md) PART 7.3's cache discussion).

@@ -69,7 +69,7 @@ under PART 14 TODO.
                    (one per login-home provider; [Desktop](Desktop.md)
                    PART 3.1). Separator is `-` (`DomId.HOST_SEP`; it is
                    not in the fingerprint alphabet). actId is a 32-char
-                   fingerprint ([Security](../platform/Security.md) PART 3.3).
+                   fingerprint ([Identifiers](../platform/Identifiers.md) PART 4.1).
                    The navigator TREE is per-provider and is NOT
                    content-merged across providers (unlike Desktop tiles);
                    each provider serves its own roots locally.

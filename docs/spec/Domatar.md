@@ -107,7 +107,7 @@ notion in the system is composed from these.
                    Accounts are identified by an immutable `actId` that
                    is a 32-character self-certifying fingerprint derived
                    from the account's Ed25519 genesis public key
-                   ([Security](platform/Security.md) PART 3.3). The fingerprint has no
+                   ([Identifiers](platform/Identifiers.md) PART 4.1). The fingerprint has no
                    `@` and is provider-free: it is globally unique and
                    does not encode who issued it.
 
@@ -219,9 +219,9 @@ Domatar has three independent identity axes:
     uniqueness within a network (today enforced socially, not by the
     directory).
 
-  * `actId` identifies an account. Since Phase 2 ([Security](platform/Security.md)
-    PART 3.3) the actId is a 32-character Base64-encoded fingerprint
-    of the account's Ed25519 root public key. It contains no `@` and
+  * `actId` identifies an account. It is a 32-character Base64-encoded
+    fingerprint of the account's Ed25519 genesis public key
+    ([Identifiers](platform/Identifiers.md) PART 4.1). It contains no `@` and
     is provider-free. An account is "the same account" across providers
     iff it has the same actId; account replication (Direction) makes the
     same actId resolvable on more than one provider.
@@ -252,12 +252,11 @@ table:
                                --   into a cache; 0 in the directory
          PubKey    varchar(64),-- provider operational Ed25519 public key
                                --   (Base64Encoder, 43 chars). NULL for
-                               --   sub-hosts; set at provider bootstrap
-                               --   (Phase 3+).
+                               --   sub-hosts; set at provider bootstrap.
          RecordSig varchar(128))-- directory-root Ed25519 signature over
                                --   canonical JSON {HstId,Domain,PrvId,
                                --   Version,PubKey}. NULL until the
-                               --   directory node signs (Phase 3+).
+                               --   directory node signs.
 
 Every provider also keeps a local cache of `hst` rows with the same
 schema; FetchedAt is the cache freshness column on cached rows.
@@ -297,9 +296,10 @@ the directory's /Msg endpoint:
                                           (when it has DirectoryRootPrivKey)
                                           and stores RecordSig.
 
-Phase 3+: GetHst includes PubKey and RecordSig.  HttpClient verifies
-RecordSig against the pinned DirectoryRootPubKey before caching the
-record; a bad signature is treated as "Hst not found".
+GetHst includes PubKey and RecordSig. HttpClient verifies RecordSig
+against the pinned DirectoryRootPubKey before caching the record; a
+bad signature is treated as "Hst not found". Directory writes use
+mTLS when configured ([Security](platform/Security.md) PART 9).
 
 Direction:
   - Add a first-class RegisterHst (new hsts joining the directory)
@@ -312,7 +312,6 @@ Direction:
     The client-side retry is already implemented in
     HttpClient.shouldRefreshAndRetry; no server actually issues
     "Hst moved" today.
-  - Secure the directory writes (mTLS): Phase 6.
 
 4.3  Local hst cache
 
@@ -407,24 +406,21 @@ Direction (Option C):
         hard-required-verified page), and dispatches the WUI operation
         via HttpClient.
 
-        Phase 4+: HttpClient.send attaches a signed OriginBlock +
+        HttpClient.send attaches a signed OriginBlock +
         account Delegation to the outbound message before the first
         cross-prv hop (if the context is verified and a fingerprint
         actId is present).  The signing uses THIS provider's operational
         key (ProviderKeyStore) and the account's current Delegation.
 
     * `Msg.doAction` (/domatar/Msg; cross-prv inbound):
-        Phase 3 and earlier: ran LoginRemote.verifyLogin against THIS
-        prv's `act` table using the wire (usrId, token).
-
-        Phase 4+: verifies the credential chain from Head.Sec
+        verifies the credential chain from Head.Sec
         ([Security](platform/Security.md) PART 7.3):
           (a) Parse Head.Sec.Origin + Head.Sec.Delegation.
               If absent → verified=false, dispatch continues.
           (b) Verify Delegation: self-cert (actId == fingerprint
               (rootPubKey)), signature, expiry, PrvId == SignerPrvId.
           (c) Fetch SignerPrv's operational pubkey from the local hst
-              cache (Phase 3). Verify OriginSig over the canonical body.
+              cache. Verify OriginSig over the canonical body.
           (d) Verify BodyHash matches.
           (e) Timestamp within ±DOMATAR_MSG_SKEW_MS AND nonce not seen
               (NonceCache in-memory sliding window).
@@ -1585,11 +1581,10 @@ deliberately positioned for a further split into per-app processes
 
 16.4  Security
 
-  Phase 6 realized TLS on every wire dispatch (Q3, [Security](platform/Security.md)
-  PART 9):
+  Inter-provider dispatch uses TLS 1.3 when configured
+  (Q3, [Security](platform/Security.md) PART 9):
 
-    - Inter-provider dispatch scheme is now configurable via
-      {@code DOMATAR_WIRE_SCHEME} (default {@code "https"}).
+    - Scheme is {@code DOMATAR_WIRE_SCHEME} (default {@code "https"}).
       {@code HttpClient.sendHttp} uses the configured scheme and — when
       {@code "https"} — applies a custom {@link TlsConfig} SSL context
       built from the configured trust store and/or key store.
@@ -1598,17 +1593,18 @@ deliberately positioned for a further split into per-app processes
       when {@code DOMATAR_MTLS_REQUIRED=true} (the default in https mode).
       The directory application verifies that the TLS client certificate
       presented by the caller matches the stored provider operational key.
-      This closes the "anyone who can reach the directory may write" gap.
 
     - Cert provisioning is documented in {@code provider.config.txt}:
       trust-store, key-store, and the OpenSSL commands to generate a
       self-signed P-256 client certificate.  Dev mode: set
       {@code WireScheme=http} to bypass TLS for local simulation.
 
-  Remaining security directions (future phases):
+  Remaining security directions:
 
     - Per-app secret material out of environment variables and into a vault.
     - Threshold / multiple directory-root signers ([Security](platform/Security.md) PART 14).
+    - Device-held ownership keys, revocation, message-level encryption
+      ([Security](platform/Security.md) PART 15).
 
 16.5  The class layer
 

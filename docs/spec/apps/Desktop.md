@@ -970,7 +970,7 @@ PART 15):
     restart prv2, display, confirm the tombstone propagates and the tile
     disappears.
   * Cross-replica PullApps/MergeApps travel tomcat-to-tomcat; TLS is
-    bypassed in the sim ([Security](../platform/Security.md) Phase 6 note).
+    bypassed in the sim ([Security](../platform/Security.md) PART 9).
 
 ## PART 13 - IMPLEMENTATION SURFACE
 

@@ -15,6 +15,10 @@ The present-tense statements describe the reference Java realisation
 protocol of objects, hosts, and messages; other realisations may exist
 later. Direction: per-app processes ([Domatar](../Domatar.md) PART 16).
 
+Identity (ownId, actId, usrId, binding) is
+[Identifiers](../platform/Identifiers.md). How a message proves origin,
+path, and TLS is [Security](../platform/Security.md).
+
 
 ## PART 1 — The pattern
 
@@ -191,7 +195,7 @@ Types the author uses (`com.domatar.*`):
 - `servlet.DomatarServlet` — WUI base
 
 Override `ObjImpl.requiresPath()` only when the handler must verify the
-signed hop chain ([Security](../platform/Security.md)).
+signed hop chain ([Security](../platform/Security.md) PART 8).
 
 
 ## PART 7 — WUI servlets

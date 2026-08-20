@@ -1,7 +1,8 @@
 # Identifiers
 
-This document is the identity spec: the three-level ownId / actId / usrId
-model, and actId fingerprint versioning.
+This document is the identity spec: ownId, actId, usrId, the genesis and
+ownership keys, the actId→ownId binding, rebind, and fingerprint
+versioning (`act.FpVersion`).
 
   - ownId  - the account's OPERATIVE cryptographic identity. Rotatable.
              The top of the day-to-day authority chain. Never seen by
@@ -9,63 +10,59 @@ model, and actId fingerprint versioning.
              objects.
   - actId  - the account's PERMANENT identity. Immutable. Stamped into
              every object. Visible in the navigator, never in ordinary
-             apps. A fingerprint of the genesis public key
-             ([Security](Security.md) PART 3.3).
+             apps. A fingerprint of the genesis public key (PART 4).
   - usrId  - a login handle "<localname>@<appId>". Mutable label.
 
 Splitting name (actId / genesis key) from operation (ownId / ownership key)
 lets an account rotate its operative key — and evict a dishonest provider —
 without rewriting the identifier baked into stored objects.
 
+[Security](Security.md) is the wire: origin signatures, signed path hops,
+delegations on the message, TLS. This document is who the account is.
 [Login protocol](../apps/Login-Protocol.md) replicates the identity layer
 across providers; membership carries the ownId binding. [Desktop](../apps/Desktop.md)
 keys on actId, which never changes here.
 
 ## PART 1 - PURPOSE AND SCOPE
 
-1.1  The problem this solves
+1.1  Why three identifiers
 
-  In the two-level model, actId = fingerprint(root public key), and that
-  ONE key both NAMES the account (defines the actId) and OPERATES it
-  (issues delegations to providers). The two jobs are fused, with one
-  hard consequence spelled out in [Security](Security.md) PART 5.1: the root
-  key can NEVER rotate, because rotating it would change the actId - the
-  identifier already written into every stored object - and force a
-  rewrite of all of the user's rows.
+  Naming an account and operating it have opposite requirements. Naming
+  wants permanence: the actId is written into every stored object and
+  cannot rotate. Operating wants replaceability: a dishonest home
+  provider that holds the operating key must be evictable without
+  discarding the account. A single key cannot be both permanent and
+  replaceable, so the model splits them.
 
-  That fusion is exactly what makes a dishonest home provider
-  unevictable. In Phase 1 the root key is server-held ([Security](Security.md)
-  PART 5.4, T1), so a home provider can renew its own delegation forever;
-  the only key that could disown it is the root key, which cannot rotate
-  without discarding the account's identity.
+  The ownership private key is server-held on signing providers
+  ([Security](Security.md) T1, PART 5). Between rebinds that provider can
+  act as the account and renew its own delegation. Rebind (PART 10)
+  rotates the ownId so those self-issued delegations no longer chain.
 
-1.2  What this provides
+1.2  What the model provides
 
-  O1  ROTATABLE OPERATIVE KEY. Separate the "name the account" job from
-      the "operate the account" job into two keys. The name-defining key
-      (GENESIS, PART 4) never rotates and defines the immutable actId.
-      The operating key (OWNERSHIP, PART 5) defines a rotatable ownId and
-      issues delegations. Rotating the ownId re-keys the account's
-      operative authority WITHOUT touching the actId or any object.
+  O1  ROTATABLE OPERATIVE KEY. The genesis key (PART 4) never rotates
+      and defines the immutable actId. The ownership key (PART 5)
+      defines a rotatable ownId and issues delegations. Rotating the
+      ownId re-keys operative authority WITHOUT touching the actId or
+      any object.
 
   O2  CRYPTOGRAPHIC EVICTION. Because delegations chain to the ownId, a
       new ownId (a rebind, PART 10) invalidates every delegation a
       dishonest provider self-issued under the old ownId, once the new
-      binding has propagated (PART 12). This is the eviction that the
-      cooperative-only removal of [Login protocol](../apps/Login-Protocol.md) PART 11 could
-      not achieve.
+      binding has propagated (PART 12). Cooperative-only removal in
+      [Login protocol](../apps/Login-Protocol.md) PART 11 cannot do this.
 
-  O3  STABLE OBJECTS. Objects keep carrying actId, exactly as today
-      ([Security](Security.md) PART 3.2). Rotation changes only the binding
-      records (PART 6), of which there are few - one per Login peer -
-      never the objects, of which there are many.
+  O3  STABLE OBJECTS. Objects carry actId (PART 2.2). Rotation changes
+      only the binding records (PART 6), of which there are few — one
+      per Login peer — never the objects.
 
-  O4  UNIVERSAL TRUST WITHOUT A REGISTRY. The actId->ownId binding is
+  O4  UNIVERSAL TRUST WITHOUT A REGISTRY. The actId→ownId binding is
       SELF-AUTHENTICATING: it is signed by the genesis key, and actId is
       the fingerprint of the genesis public key, so ANY provider can
       verify the current ownId from the actId alone, with no third-party
-      lookup - preserving [Security](Security.md) PART 6.3's no-account-registry
-      property even for providers where the user never logs in (PART 8).
+      lookup ([Security](Security.md) PART 6.3), including providers where
+      the user never logs in (PART 8).
 
 1.3  Non-goals
 
@@ -74,10 +71,8 @@ keys on actId, which never changes here.
   * Rotating the actId. The actId is permanent by construction (PART 4).
     Eviction rotates the ownId, not the actId.
   * Strong consistency of the binding across providers. Rotation takes
-    effect as the new binding propagates; eventual consistency, as in the
-    sibling specs (PART 12).
-  * Replacing 2FA or per-app data redundancy (unchanged; see the sibling
-    specs).
+    effect as the new binding propagates; eventual consistency (PART 12).
+  * Replacing 2FA or per-app data redundancy (see the sibling specs).
 
 1.4  Terminology
 
@@ -87,8 +82,8 @@ keys on actId, which never changes here.
   * actId         - fingerprint(genesis public key). Permanent account
                     identity, stamped into every object (PART 4).
   * ownership key - a hot Ed25519 key pair. Defines the ownId and issues
-                    delegations. Server-held in Phase 1 (PART 5).
-                    Rotatable.
+                    delegations. Server-held on signing providers
+                    (PART 5). Rotatable.
   * ownId         - fingerprint(ownership public key). The account's
                     current operative identity (PART 5).
   * binding       - the genesis-signed record "actId -> current ownId"
@@ -97,13 +92,16 @@ keys on actId, which never changes here.
   * rebind        - minting a new ownership key and publishing a new,
                     higher-versioned binding (PART 10). This is a
                     re-key / eviction, NOT a change of actId.
+  * fpVersion     - which fingerprint algorithm minted this account's
+                    actId and ownId (PART 18). v1 is the shipped
+                    algorithm (PART 4.1).
 
 ## PART 2 - THE THREE IDENTIFIERS
 
 2.1  ownId - the operative identity (rotatable)
 
   ownId = fingerprint(ownership public key), derived the same way an
-  actId is derived from a public key ([Security](Security.md) PART 3.3):
+  actId is derived from a public key (PART 4.1):
 
       ownId = Base64Encoder.encode( SHA-256( ownPublicKeyBytes )[0 .. 24) )
 
@@ -113,25 +111,23 @@ keys on actId, which never changes here.
   ownership key pair and a new ownId, leaving the actId untouched
   (PART 10).
 
-  It is stored only in the binding records (PART 6) - "a few places" -
+  It is stored only in the binding records (PART 6) — "a few places" —
   and NEVER embedded in objects.
 
 2.2  actId - the permanent identity (immutable)
 
   actId = fingerprint(genesis public key) (PART 4). It is the identifier
   written into every DomId and therefore into every obj/lnk row
-  ([Domatar](../Domatar.md) PART 2; [Security](Security.md) PART 3.2), and it NEVER
-  changes for the life of the account. It is provider-free.
+  ([Domatar](../Domatar.md) PART 2), and it NEVER changes for the life of
+  the account. It is provider-free.
 
-  This is the SAME slot and the SAME shape as today's actId; what changes
-  is only WHICH key it fingerprints (the cold genesis key, not the hot
-  operating key). Existing objects need no change (PART 3.2).
+2.3  usrId - the login handle
 
-2.3  usrId - the login handle (unchanged)
-
-  usrId keeps its [Login protocol](../apps/Login-Protocol.md) PART 3.2 meaning and rules: a mutable
-  "<localname>@<appId>" label that routes verification to an app central
-  host and authorizes nothing on its own.
+  usrId is a mutable "<localname>@<appId>" label that routes verification
+  to an app central host and authorizes nothing on its own
+  ([Login protocol](../apps/Login-Protocol.md) PART 3.2). Nothing authorizes
+  on the usrId; authorization is always against the actId via the
+  credential chain ([Security](Security.md) PART 7).
 
 2.4  Visibility ladder (who sees what)
 
@@ -147,76 +143,72 @@ keys on actId, which never changes here.
 
 2.5  Why three, not two
 
-  The two jobs that [Security](Security.md) PART 5.1 fused - NAME and OPERATE -
-  have opposite requirements. Naming wants permanence (it is in every
-  object). Operating wants replaceability (to evict a bad provider).
-  A single key cannot be both permanent and replaceable, so the model
-  splits it: actId is the permanent NAME, ownId is the replaceable
-  OPERATOR, and a genesis-signed binding (PART 6) ties them together.
+  Naming wants permanence (it is in every object). Operating wants
+  replaceability (to evict a bad provider). actId is the permanent NAME,
+  ownId is the replaceable OPERATOR, and a genesis-signed binding
+  (PART 6) ties them together.
 
-## PART 3 - RELATIONSHIP TO [Security](Security.md) (WHAT THIS REVISES)
+## PART 3 - RELATIONSHIP TO [Security](Security.md)
 
-3.1  The single root key becomes two keys
+This document is the identity model. [Security](Security.md) is how a
+message proves origin, path, and wire protection (Q1 / Q2 / Q3).
 
-  [Security](Security.md) PART 5.1 defines ONE "account root key" that both
-  defines the actId and issues delegations, and states it never rotates.
-  This spec REPLACES that single key with two:
+3.1  Two keys, not one
 
-    GENESIS key   (cold)  - takes over "defines the actId" and adds "signs
-                            the actId->ownId binding". Never rotates. User-
-                            held offline (PART 7).
-    OWNERSHIP key (hot)   - takes over "issues delegations". IS rotatable.
-                            Server-held in Phase 1 (PART 5), exactly where
-                            [Security](Security.md) PART 5.4 puts the root key
-                            today.
+    GENESIS key   (cold)  - defines the actId and signs the actId→ownId
+                            binding. Never rotates. User-held offline
+                            (PART 7).
+    OWNERSHIP key (hot)   - issues delegations. Rotatable. Server-held
+                            on signing providers (PART 5).
 
-  The server-held operating key is the OWNERSHIP key (rotatable,
-  identified by ownId). A cold GENESIS key sits above it to own the
-  actId and authorize re-keys.
+  [Security](Security.md) T1 applies to the ownership key between rebinds:
+  a signing provider that holds it can act as the account and renew its
+  own delegation. Direction in [Security](Security.md) PART 15 moves the
+  ownership key to the user's device; that is orthogonal to genesis.
 
-3.2  Objects are unaffected
+3.2  Objects carry actId only
 
-  The actId slot in every obj/lnk row is unchanged in shape and meaning
-  (PART 2.2). An account whose actId is fingerprint of a single
-  operating key is upgraded by DECLARING that key to be the genesis
-  key and publishing an initial binding to a freshly minted ownership
-  key (PART 10.5). No object is rewritten. This is the whole point (O3).
+  The actId slot in every obj/lnk row is the permanent name (PART 2.2).
+  Rebind never rewrites objects (O3). PART 10.5 covers any leftover
+  account that still fingerprints a single operating key: declare that
+  key genesis and publish an initial binding.
 
-3.3  The credential chain gains one link
+3.3  The credential chain
 
-  [Security](Security.md) PART 6.1's chain
-    actId -> RootPubKey -> Delegation -> provider key -> OriginSig
-  becomes (PART 11)
+  A verified message is checked bottom-up against the actId (PART 11;
+  [Security](Security.md) PART 6.1):
+
     actId -> GenesisPubKey -> Binding -> OwnPubKey -> Delegation
           -> provider key -> OriginSig
-  i.e. one extra, self-authenticating hop (the genesis-signed binding)
-  is inserted between the actId and the operating key.
 
-3.4  Phases still apply
-
-  Phase 1 keeps the OWNERSHIP key server-held (T1 still holds for signing
-  providers between rebinds; PART 5.3). The GENESIS key is user-held from
-  the start (it is the [Security](Security.md) PART 15 "user-held offline
-  recovery key", promoted to a first-class part of the model). Phase 2's
-  device-held operating key ([Security](Security.md) PART 15) is then the
-  ownership key on the device, orthogonal to the genesis key.
+  Origin signatures, path hops, and TLS stay in [Security](Security.md)
+  PART 7 / 8 / 9. The binding hop is the identity-anchoring step.
 
 ## PART 4 - THE GENESIS KEY AND actId
 
 4.1  Derivation
 
   At account creation the user mints a GENESIS Ed25519 key pair. The
-  actId is the fingerprint of its public key, using the identical formula
-  as [Security](Security.md) PART 3.3 (fingerprint algorithm version 1;
-  [Identifiers](Identifiers.md)):
+  actId is the fingerprint of its public key (algorithm version 1;
+  PART 18):
 
       actId = Base64Encoder.encode( SHA-256( genesisPublicKeyBytes )[0 .. 24) )
 
-  So the actId is a fixed 32-character string over [0-9 A-Z _ a-z ~],
-  provider-free, with no '.', '@' or '-'. It is safe as a DomId component
-  and in a host id suffix ([Login protocol](../apps/Login-Protocol.md) PART 5.2). Self-
-  certification is version-aware via act.FpVersion /
-  AccountKeys.fingerprintsTo (v1 unchanged).
+  i.e. the first 24 bytes (192 bits) of the SHA-256 digest of the 32-byte
+  Ed25519 genesis public key, encoded with the platform's URL-safe
+  Base64Encoder (com.domatar.util.Base64Encoder). 24 bytes is a multiple
+  of 3, so the encoding is exactly 32 characters with no padding, using
+  only the alphabet [0-9 A-Z _ a-z ~]. That alphabet contains neither '.'
+  (the DomId separator) nor '@' (the usrId separator) nor '-'
+  (`DomId.HOST_SEP`), so an actId is safe as a DomId component, in a host
+  id suffix ([Login protocol](../apps/Login-Protocol.md) PART 5.2), and in a
+  URL without escaping.
+
+  Example shape (illustrative, not a real key):
+      qK3nZ8pMvB2rT9wLxF4hJ7dScA1yE6gU
+
+  Self-certification is version-aware via act.FpVersion /
+  AccountKeys.fingerprintsTo (v1 unchanged, PART 18).
 
 4.2  actId is arbitrary in USE but anchored in ORIGIN
 
@@ -231,23 +223,31 @@ keys on actId, which never changes here.
 
 4.3  No squatting, no allocator
 
-  Because actId = fingerprint(genesis public key), the uniqueness and
-  anti-forgery arguments of [Security](Security.md) PART 3.4 carry over intact:
+  Because actId = fingerprint(genesis public key), uniqueness comes from
+  key randomness, not from a namespace authority:
 
+    * Two distinct key pairs yield distinct public keys, hence distinct
+      actIds (barring hash collision).
+    * At 192 bits, an accidental collision (birthday bound ~2^96) is
+      negligible. A deliberate second-preimage (~2^192) is infeasible,
+      and even a collision would not grant impersonation without the
+      matching private key.
     * A malicious host cannot issue YOUR actId to a different user: to
       produce a valid binding for actId (PART 6) one must sign with the
-      genesis key whose fingerprint IS that actId, which the attacker
-      does not hold. A binding not so signed is rejected by every
-      verifier (PART 11).
-    * Therefore first-come-first-served registration is NOT load-bearing
-      for identity (as in [Security](Security.md) PART 3.4): even if two
-      providers both claim to host actId X, only the one presenting a
-      genesis-signed binding is believed.
+      genesis key whose fingerprint IS that actId. A binding not so
+      signed is rejected by every verifier (PART 11).
+    * First-come-first-served registration is NOT load-bearing for
+      identity: even if two providers both claim to host actId X, only
+      the one presenting a genesis-signed binding is believed.
     * An account is globally unique the moment its genesis key pair
       exists, minted offline, with no registry.
 
-  The [Security](Security.md) PART 3.4 key-entropy WARNING applies unchanged:
-  all of this assumes the genesis key is generated with a vetted CSPRNG.
+  WARNING — key-generation entropy. All of the above assumes the genesis
+  key is generated with a vetted CSPRNG. A weak RNG collapses effective
+  entropy and can duplicate private keys. The current implementation
+  generates keys correctly; a conformance requirement for multiple
+  independent implementations is Direction ([Security](Security.md) PART 15).
+  Increasing the actId length would NOT help.
 
 ## PART 5 - THE OWNERSHIP KEY AND ownId
 
@@ -256,27 +256,26 @@ keys on actId, which never changes here.
   The OWNERSHIP key is the operating key: its private half signs
   DELEGATIONS authorizing providers to act for the account
   ([Security](Security.md) PART 6.2), and ownId = fingerprint(its public key)
-  is the identity those delegations chain to (PART 11). It is what
-  [Security](Security.md) PART 5.1 calls the root key, minus the identity-naming
-  job (which moved to genesis) and minus the never-rotate constraint.
+  is the identity those delegations chain to (PART 11). Genesis names
+  the account; ownership operates it.
 
-5.2  Custody (Phase 1)
+5.2  Custody
 
-  In Phase 1 the ownership private key is SERVER-HELD on the account's
-  SIGNING providers (5.4), encrypted at rest, in act.OwnPrvKey.
+  The ownership private key is SERVER-HELD on the account's SIGNING
+  providers (5.4), encrypted at rest, in act.OwnPrvKey.
   A signing provider is a complete, independent copy that can verify
   and sign without the user's password
   ([Login protocol](../apps/Login-Protocol.md) PART 4.1).
 
-5.3  T1 persists between rebinds, but is now escapable
+5.3  T1 persists between rebinds, but is escapable
 
   Because a signing provider holds the ownership private key, it can
   still act as the account and renew its own delegation (T1,
-  [Security](Security.md) PART 5.4). What is NEW is the escape hatch: the user
-  can REBIND to a fresh ownership key (PART 10), after which the dishonest
-  provider's copy of the OLD ownership key is worthless - its self-issued
-  delegations no longer chain to the current ownId. T1 is thus downgraded
-  from "permanent" to "until the next rebind propagates".
+  [Security](Security.md) PART 2.2 / 5.4). The escape hatch is REBIND to a
+  fresh ownership key (PART 10), after which the dishonest provider's
+  copy of the OLD ownership key is worthless — its self-issued
+  delegations no longer chain to the current ownId. T1 lasts until the
+  next rebind propagates.
 
 5.4  Signing providers vs object-only providers
 
@@ -378,7 +377,7 @@ keys on actId, which never changes here.
   ownership/provider keys (Layer 2). So its custody can be offline and
   mildly inconvenient; day to day it sits untouched.
 
-  Note this is NOT the [Security](Security.md) Phase 2 "device signs every
+  Note this is NOT the [Security](Security.md) Direction "device signs every
   message" model. The device (or paper) holds only the COLD genesis key,
   consulted rarely; the browser still stores nothing and the signing
   providers still do all routine signing. "No permanent data in the
@@ -585,10 +584,11 @@ keys on actId, which never changes here.
 11.2  What travels with the message
 
   The message carries the Delegation (which carries OwnPubKey) and the
-  Binding (which carries GenesisPubKey and Version), exactly as
-  [Security](Security.md) PART 6.1 carries the delegation today - one extra
-  self-contained object. The only external fetch remains provider P's key
-  from the directory (already cached for routing). No account lookup.
+  Binding (which carries GenesisPubKey and Version), as
+  [Security](Security.md) PART 6.1 carries the delegation — plus the binding
+  as one extra self-contained object. The only external fetch remains
+  provider P's key from the directory (already cached for routing). No
+  account lookup.
 
 11.3  The freshness rule
 
@@ -599,12 +599,11 @@ keys on actId, which never changes here.
   about an account, and it is monotonic and self-correcting: a newer
   binding always wins.
 
-11.4  Compatibility
+11.4  Wire mechanisms are separate
 
-  Everything [Security](Security.md) PART 7/8/9 does (origin signature, path
-  provenance, TLS) is unchanged; the binding hop is inserted purely at the
-  identity-anchoring step (PART 6.3) and does not alter per-hop or
-  per-message signing.
+  Origin signature, path provenance, and TLS are [Security](Security.md)
+  PART 7 / 8 / 9. The binding hop is the identity-anchoring step
+  (PART 6.3) and does not alter per-hop or per-message signing.
 
 ## PART 12 - REPLICATION OF THE BINDING
 
@@ -714,16 +713,16 @@ Building on the two-provider sim ([Login protocol](../apps/Login-Protocol.md) PA
     which cooperative removal ([Login protocol](../apps/Login-Protocol.md) PART 11) could not
     do - achieved WITHOUT rewriting objects (O3).
   * Universal, registry-free trust in the current ownId, even on no-login
-    providers (O4, PART 8), preserving [Security](Security.md) PART 6.3.
+    providers (O4, PART 8), with no account-record lookup
+    ([Security](Security.md) PART 6.3).
 
 16.2  Propagation window (residual)
 
   A rebind is effective at a verifier only after the new binding reaches
   it (PART 12.3). During the window a not-yet-updated verifier may still
   accept the evicted provider's old-ownId delegations. Fan-out on rebind
-  bounds this; it is the same eventual-consistency caveat as the sibling
-  specs, now the ONLY residual for signing-provider eviction rather than a
-  permanent inability.
+  bounds this. It is the residual risk for signing-provider eviction,
+  not a permanent inability to evict.
 
 16.3  Genesis key is the crown jewel (residual)
 
@@ -738,10 +737,10 @@ Building on the two-provider sim ([Login protocol](../apps/Login-Protocol.md) PA
   One could make actId a genuinely arbitrary tag (not key-derived) and
   defend ownership by first-come-first-served registration. Rejected
   because:
-    * It reintroduces an allocator/registry and the squatting race
-      [Security](Security.md) PART 3.4 eliminated - a malicious host could
-      register your actId to someone else, and honest providers would have
-      no self-contained way to tell who is right.
+    * It reintroduces an allocator/registry and a squatting race
+      (PART 4.3) — a malicious host could register your actId to someone
+      else, and honest providers would have no self-contained way to tell
+      who is right.
     * Bindings could not be self-authenticating (6.3): trust would again
       require a lookup, reversing [Security](Security.md) PART 6.3.
   Anchoring actId to the genesis key keeps the actId permanent AND makes
@@ -751,477 +750,139 @@ Building on the two-provider sim ([Login protocol](../apps/Login-Protocol.md) PA
 16.5  Ownership-key compromise between rebinds
 
   A stolen ownership private key lets the thief act until a rebind
-  propagates (PART 10.3). This is strictly better than the two-level model
-  (where the equivalent theft was permanent, since the key could not
-  rotate). Detection-to-rebind latency is the exposure.
+  propagates (PART 10.3). Detection-to-rebind latency is the exposure.
+  Without a rotatable ownId that theft would be permanent.
 
-16.6  Layering with 2FA (unchanged)
+16.6  Layering with 2FA
 
   2FA ([Login protocol](../apps/Login-Protocol.md) PART 12) sits in the authentication layer
   and is orthogonal to all three identifiers here. It hardens "may this
   person start a session"; it does not sign bindings or delegations.
 
-## PART 17 - TODO / RECONCILIATION WITH SIBLING SPECS
+## PART 17 - DIRECTION
 
-  - Reconcile terminology in [Login protocol](../apps/Login-Protocol.md) and
-    [Desktop](../apps/Desktop.md) with this spec:
-      * "the account root key" ([Login protocol](../apps/Login-Protocol.md) PART 4.1, 8.3,
-        11.3, 16) -> "the ownership key"; note it is now ROTATABLE.
-      * "binds the usrIds to one actId" phrasing -> "binds the usrIds to
-        one ownId, anchored to the permanent actId".
-      * PART 11.3's "cannot evict a dishonest provider" -> "cooperative
-        removal alone cannot; rebind ([Identifiers](Identifiers.md) PART 10) can, for
-        signing providers".
-  - Replicate the binding in the membership container as a first-class
-    row (PART 14) and add GetBinding/PutBinding to the sim seed.
-  - Decide genesis custody default for the product (PART 7.3): recovery
-    device + backup codes recommended; wire the sign-up UX for showing
-    codes and the "loss is final" warning (PART 7.5).
-  - Formalize PART 10.5 as a one-shot install step if any dumps still
+  * Genesis custody default for the product (PART 7.3): recovery device
+    + backup codes; sign-up UX that shows codes and the "loss is final"
+    warning (PART 7.5).
+  * Formalize PART 10.5 as a one-shot install step if any dumps still
     lack a binding.
-  - Consider a short signed "revocation hint" a rebind can push so that
-    verifiers proactively drop a superseded ownId cache entry, shrinking
-    the PART 16.2 window.
+  * A short signed revocation hint a rebind can push so verifiers
+    drop a superseded ownId cache entry, shrinking the PART 16.2 window.
+  * Object-only third-provider sim (PART 15).
 
-# END OF SPEC
+## PART 18 - FINGERPRINT VERSIONING (implemented)
 
-## ActId versioning
+The actId is self-certifying: a verifier re-derives the fingerprint from
+the presented key and compares it to the stored actId (crypto.Binding,
+crypto.Delegation). That derivation is VERSIONED so a future algorithm
+can be added without rewriting identifiers already minted.
 
-This section specifies how Domatar records WHICH fingerprint algorithm
-produced a given actId (and ownId), so the derivation algorithm can be
-changed in the future WITHOUT rewriting the identifiers already minted
-under the old algorithm.
+There is exactly ONE shipped algorithm (v1), PART 4.1:
 
-Today there is exactly ONE algorithm (call it "v1"):
+    actId = Base64Encoder.encode( SHA-256(pubKey)[0 .. 24) )   → 32 chars
 
-    actId = Base64Encoder.encode( SHA-256(rootPubKey)[0 .. 24) )   → 32 chars
+(com.domatar.crypto.AccountKeys.deriveId(..., 1)). v1 does not change.
+Each account keeps forever the algorithm that minted it. New accounts
+mint under the current default version. A future change is "add v2;
+accept v1 and v2; default new mints to v2" — never recompute existing
+actIds.
 
-([Security](Security.md) PART 3.3; [Identifiers](Identifiers.md) PART 2.1;
-com.domatar.crypto.AccountKeys.deriveId(..., 1)). This spec does NOT
-change that algorithm. It introduces the machinery to add a "v2" later
-with a controlled, node-by-node rollout and no mass re-identification.
+Unlike `act.Encryption` (password hash, upgradable in place on next
+login), an actId IS the identity and is never upgraded in place.
+Re-identification (old actId → new actId) is a separate, rare migration
+(18.8), not the normal path. ownId uses the SAME version as the
+account's actId.
 
-It sits alongside, and defers to, the existing identity specs:
+18.1  Storage: act.FpVersion
 
-  - [Security](Security.md)        : self-certifying actIds, the account root
-                               key, the credential chain.
-  - [Identifiers](Identifiers.md)          : actId = fingerprint(genesis pub);
-                               ownId = fingerprint(ownership pub); the
-                               actId is PERMANENT and stamped into every
-                               object.
-  - [Login protocol](../apps/Login-Protocol.md)  : provider-qualified replica hosts
-                               <app>-<actId>-<prvId>; peer records carry
-                               FpVersion; host parsing is width-independent.
-  - [Desktop](../apps/Desktop.md) : keys on actId; unaffected in
-                               mechanism.
+  `FpVersion` int NOT NULL DEFAULT 1 — fingerprint algorithm that minted
+  this ActId (and its OwnId). 1 = v1 (PART 4.1).
 
-The parenthetical "(v1)" everywhere refers to the single shipped
-algorithm above. Implementation refinements (KD1–KD7) are recorded in
-PART 12 of this section.
+  A missing/NULL value reads as 1. Legacy non-fingerprint ActIds
+  (archaeology: `name@appId`, `act@act`) SHOULD carry FpVersion=0;
+  `DomId.isFingerprintActId` skips self-certification for them. Fresh
+  DBs have no such rows.
 
-## PART 1 - PURPOSE AND SCOPE
+  FpVersion travels with the account on membership / peer replicas
+  ([Login protocol](../apps/Login-Protocol.md)). A missing inbound FpVersion
+  defaults to 1.
 
-1.1  The problem this solves
+18.2  Algorithm registry
 
-  An actId is self-certifying: it IS the fingerprint of a public key, and
-  every verifier RE-DERIVES the fingerprint from the presented key and
-  compares it to the stored actId ([Identifiers](Identifiers.md) PART 8; crypto.Binding,
-  crypto.Delegation). That check hard-codes ONE derivation:
-  SHA-256[0..24) → Base64Encoder → 32 chars. If we ever need a different
-  hash, a different truncation length, or a different encoding, every
-  such check would silently reject every existing account, because the
-  presented key no longer fingerprints to the stored id under the new
-  rule.
+  All fingerprinting goes through com.domatar.crypto.AccountKeys:
 
-  The actId is also PERMANENT by design ([Identifiers](Identifiers.md) PART 1): it is
-  written into the ObjDb rows of every object the account ever created,
-  into provider-qualified host names (login-<actId>-<prvId>,
-  desktop-<actId>-<prvId>, navigator-<actId>-<prvId>), into peer/binding
-  records, and into cookies. It CANNOT be recomputed in place.
-
-  Therefore the algorithm must be VERSIONED, not upgraded:
-
-    - Each account's actId keeps forever the algorithm that minted it.
-    - The verifier learns the version and applies the matching algorithm.
-    - New accounts are minted under the current default version.
-    - A future algorithm change is "add v2; accept v1 and v2; default new
-      mints to v2" — never "recompute existing actIds".
-
-1.2  Analogy to act.Encryption (and where it differs)
-
-  The act table already versions the password hash via the `Encryption`
-  column: `encrypt(pwd, encryption)` dispatches on an integer
-  (ActDb.encrypt; encryption==1 → Domatar-Base64 SHA-1). A new password
-  scheme is "add encryption==2; verify against the stored code; optionally
-  re-hash on next successful login."
-
-  actId versioning mirrors the DISPATCH idea: store a small integer,
-  branch on it, apply the right algorithm. It DIFFERS in one crucial way:
-
-    - A password hash is an opaque SIDE field. It can be upgraded in place
-      on next login (same ActId/UsrId, new hash) — see PART 6.2.
-    - An actId IS the identity. It can NEVER be upgraded in place, because
-      that would change the identifier stamped across the whole system.
-      The version of a SPECIFIC account is fixed at creation for life.
-
-  So: new accounts adopt the new version; existing accounts keep theirs.
-  Re-identification (old actId → new actId) is a separate, rare,
-  explicitly-triggered migration (PART 9), NOT the normal path.
-
-1.3  In scope
-
-  - A stored actId-version code on each account (PART 3).
-  - A single derivation/validation chokepoint that takes a version
-    (PART 4).
-  - Version-aware self-certification in the credential chain (PART 5).
-  - Rules for minting, reading, and routing by version (PART 6).
-  - Making replica-host parsing version-tolerant (PART 7).
-  - A conservative default and a rollout discipline for adding v2
-    (PART 8).
-
-1.4  Out of scope
-
-  - Choosing a specific v2 algorithm. v2 is hypothetical here; this spec
-    only guarantees v2 can be added safely.
-  - Changing v1. The shipped algorithm and all existing 32-char actIds
-    remain byte-for-byte valid.
-  - ownId rotation mechanics ([Identifiers](Identifiers.md)). ownId versioning follows
-    the SAME algorithm registry as actId (PART 4.4), but rotation policy
-    is unchanged.
-
-## PART 2 - TERMINOLOGY
-
-  fingerprint algorithm
-      A total function (pubKeyBytes → id string). v1 is
-      SHA-256[0..24) → Base64Encoder → 32 chars.
-
-  actId version (fpVersion)
-      A small positive integer naming the fingerprint algorithm that
-      minted an actId. v1 == 1. Stored per account (PART 3).
-
-  default version
-      The version new accounts are minted under. Today == 1. Bumped only
-      by the rollout in PART 8.
-
-  self-certification
-      The check "does the presented public key fingerprint to this actId
-      under actId's version?" (PART 5).
-
-  non-fingerprint actId
-      A "name@appId" ActId that is not a key fingerprint. Treated as
-      version 0 (PART 3.3); never minted for new accounts.
-
-## PART 3 - STORAGE: act.FpVersion
-
-3.1  New column
-
-  Add an integer column to the act table, mirroring `Encryption`:
-
-    `FpVersion` int NOT NULL DEFAULT 1
-        COMMENT 'Fingerprint algorithm version that minted this ActId
-                 (and its OwnId). 1 = SHA-256[0..24)->Base64->32ch
-                 ([Security](Security.md) PART 3.3). See [Identifiers](Identifiers.md).'
-
-  Schema is added by a stored-procedure-guarded ALTER, in the same style
-  as the OwnPrvKey/Delegation additions (mySQL/dump-2024-01-22b-*.sql):
-  idempotent, safe on fresh and live volumes.
-
-3.2  Default backfill
-
-  Every existing account was minted under v1, so the column DEFAULT of 1
-  correctly labels all current rows with no data migration. The migration
-  MAY additionally set FpVersion=1 explicitly for any row where it is NULL
-  (belt-and-suspenders for older dumps).
-
-3.3  Legacy (non-fingerprint) actIds
-
-  Rows whose ActId is NOT a fingerprint (legacy "name@appId", or the
-  system token act@act) predate self-certification. They SHOULD carry
-  FpVersion=0 ("none"), and self-certification (PART 5) MUST be skipped
-  for them exactly as today (DomId.isFingerprintActId gates those paths).
-  A fresh dev DB has no such rows; this clause is for archaeology only.
-
-3.4  The column travels with the account
-
-  Because Login-Multiple replicates the account across providers, the
-  FpVersion is part of the account's canonical membership state. When a
-  peer row / membership replica is materialised on another provider
-  ([Login protocol](../apps/Login-Protocol.md)), the FpVersion MUST be carried alongside the
-  actId, so every provider derives/validates that account identically.
-  A missing FpVersion on an inbound record defaults to 1 (v1).
-
-## PART 4 - THE ALGORITHM REGISTRY (single chokepoint)
-
-4.1  One place to derive, one place to validate
-
-  All fingerprinting MUST go through a single registry so a future v2 is
-  one edit, not a repo-wide hunt. Concretely, in
-  com.domatar.crypto.AccountKeys (or a new Fingerprint class it delegates
-  to):
-
-    // Current signatures (v1 only) — RETAINED, redefined as "v == 1":
-    static String deriveActId(byte[] pubKey)              // = deriveId(pubKey, 1)
-    static String deriveOwnId(byte[] pubKey)              // = deriveId(pubKey, 1)
-
-    // New version-aware chokepoint:
-    static String deriveId(byte[] pubKey, int version)
+    static String  deriveActId(byte[] pubKey)     // deriveId(pubKey, 1)
+    static String  deriveOwnId(byte[] pubKey)     // deriveId(pubKey, 1)
+    static String  deriveId(byte[] pubKey, int version)
     static boolean fingerprintsTo(byte[] pubKey, String id, int version)
-    static int     defaultVersion()                        // returns 1 today
+    static int     defaultVersion()               // 1 unless config says otherwise
 
-  deriveId dispatches on version:
+  deriveId: version 1 is PART 4.1; version 2 is reserved; otherwise throw.
+  New mints use deriveId(pub, defaultVersion()). Re-derivation of a known
+  account uses that account's FpVersion. No call site outside the
+  registry encodes SHA-256/24/Base64 directly.
 
-    version == 1 : SHA-256(pubKey)[0..24) → Base64Encoder.encode → 32 ch
-    version == 2 : (reserved; not defined here)
-    otherwise    : throw DomatarException("Unsupported FpVersion " + v)
+  `DomId.isFingerprintActId(actId, version)` knows the shape for that
+  version (v1 ⇒ 32 chars of the fingerprint alphabet). The zero-arg form
+  is the v1/legacy gate only.
 
-  This is the EXACT structural analogue of ActDb.encrypt(pwd, encryption).
+18.3  Self-certification
 
-4.2  Existing call sites delegate, they do not branch
+  Binding and Delegation verify "presented key fingerprints to stored id"
+  under the account's FpVersion (KD2: Binding.verify / Delegation.verify
+  also try every registered version so a self-authenticating record
+  still validates with no lookup, PART 6.3). An unknown/unsupported
+  version is REJECTED (fail closed).
 
-  Call sites that mint identity (AccountKeys.generate, .fromPrivKey,
-  ownId derivation) call deriveId(pub, defaultVersion()) for NEW mints,
-  and deriveId(pub, account.fpVersion) when RE-DERIVING a known account's
-  id. No call site outside the registry may encode SHA-256/24/Base64
-  directly.
+  FpVersion at verify time, in order: local act row; membership/peer
+  record; default 1.
 
-4.3  Validation is version-driven, not length-driven
+18.4  Minting, reading, routing
 
-  DomId.isFingerprintActId today asserts "length == 32 and alphabet ok".
-  That stays valid for v1, but new code MUST NOT treat 32 as the
-  definition of "is an actId". Introduce:
+  Account creation records FpVersion = defaultVersion() next to the
+  actId just produced. An existing actId is NEVER re-minted on login.
 
-    static boolean isFingerprintActId(String actId, int version)
+  Routing that distinguishes fingerprint actIds from a string containing
+  '@' is version-agnostic (all fingerprint versions share the '@'-free
+  alphabet). UI and logs treat actId as an opaque string; do not assume
+  length 32.
 
-  which knows the shape produced by `version` (v1 ⇒ 32 chars of the
-  fingerprint alphabet). The zero-arg form remains as "looks like a v1
-  fingerprint" for legacy gating only (PART 3.3), and SHOULD be treated
-  as deprecated for new logic.
+18.5  Replica-host parsing (KD7)
 
-4.4  ownId shares the registry
+  Provider-qualified replica hosts are `<app>-<actId>-<prvId>`
+  ([Login protocol](../apps/Login-Protocol.md) PART 5). Parsing MUST NOT assume
+  a fixed 32-char actId. prvId values contain no HOST_SEP (`-`). Parse:
 
-  ownId = fingerprint(ownership pub) under the SAME version as the
-  account ([Identifiers](Identifiers.md) PART 2.1). deriveOwnId(pub) == deriveId(pub,
-  account.fpVersion). An account never mixes versions between its actId
-  and ownId.
+    - appPrefix = substring before the FIRST HOST_SEP
+    - prvId     = substring after the LAST HOST_SEP
+    - actId     = everything between them
 
-## PART 5 - SELF-CERTIFICATION IN THE CREDENTIAL CHAIN
+  Existing v1 host names round-trip. Existing hosts are not renamed.
 
-5.1  The check becomes version-aware
+18.6  Direction: a future v2
 
-  Everywhere the credential chain verifies "presented key fingerprints to
-  stored id" it MUST use the account's version:
+  defaultVersion() stays 1 until a deliberate v2. Adding v2: implement
+  deriveId(pub, 2); dual-accept v1 and v2 on every node BEFORE any node
+  mints v2; then flip FpDefaultVersion / DOMATAR_FP_DEFAULT_VERSION to 2.
+  No data migration of existing actIds.
 
-    - Binding verification (crypto.Binding): GenesisPubKey fingerprints to
-      ActId, and OwnPubKey fingerprints to OwnId, BOTH under the account's
-      FpVersion.
-    - Delegation verification (crypto.Delegation): actId ==
-      fingerprint(rootPubKey) under FpVersion.
-    - Msg / Auth seams that re-establish trust (servlet.Msg PART on
-      self-cert; core.Auth) pass the FpVersion through.
+  Changing an EXISTING account's actId (re-identification) would rewrite
+  every object, host name, lnk, peer/binding, and cookie. Out of scope;
+  versioning exists to avoid it.
 
-  Replace any hard-coded deriveActId(pub).equals(actId) with
-  fingerprintsTo(pub, actId, version).
-
-5.2  Where the version comes from at verify time
-
-  The verifier already has the actId in hand. It obtains the matching
-  FpVersion from, in order:
-
-    1. The local act row (ActDb) when the account is local.
-    2. The membership replica / peer record when cross-provider
-       ([Login protocol](../apps/Login-Protocol.md)), which carries FpVersion per PART 3.4.
-    3. Default 1 if a record predates the column (PART 3.2 guarantees this
-       is correct for all existing accounts).
-
-5.3  Security invariant unchanged
-
-  Self-certification still proves possession of the key that the id names.
-  Versioning only selects the derivation; it never weakens the check. A
-  request whose actId version is unknown/unsupported MUST be REJECTED
-  (fail closed), never accepted under a guessed algorithm.
-
-## PART 6 - MINTING, READING, ROUTING
-
-6.1  Minting (new accounts)
-
-  Account creation (AccountKeys.generate → ActDb.addAct) records
-  FpVersion = defaultVersion() in the act row, alongside the actId it just
-  produced with that same version. addAct's INSERT gains the FpVersion
-  column (today it writes the literal 1 for Encryption; it should write
-  defaultVersion() for FpVersion).
-
-6.2  Reading (existing accounts) — NO in-place upgrade
-
-  Unlike passwords, an actId is NEVER re-minted on login. There is no
-  "re-fingerprint on next login" step. The FpVersion is read and used;
-  it is not advanced. (Password upgrade-on-login via `Encryption` remains
-  independent and unaffected.)
-
-6.3  Routing
-
-  Routing that today distinguishes fingerprint actIds from legacy
-  "name@appId" (e.g. AppstoreWui, HttpClient) continues to key on
-  "has '@' ⇒ legacy; else fingerprint". That test is version-agnostic and
-  needs no change: all fingerprint versions share the '@'-free alphabet.
-
-6.4  Display
-
-  actId length/appearance may differ across versions (a future v2 could be
-  longer). UI and logs MUST treat actId as an opaque string of variable
-  length, never assume 32, and never parse meaning out of its characters.
-
-## PART 7 - REPLICA-HOST PARSING MUST BE VERSION-TOLERANT
-
-7.1  The current rigidity
-
-  Provider-qualified replica hosts are <app>-<actId>-<prvId>
-  ([Login protocol](../apps/Login-Protocol.md) PART 5). DomId.replicaActId / replicaPrvId
-  parse them by slicing a FIXED 32-char actId (actStart + 32) and
-  checking the next char is '-'. This hard-codes v1's length into the
-  host grammar and would break for a longer v2 actId.
-
-7.2  The rule
-
-  Replica-host parsing MUST NOT assume a fixed actId width. Because prvId
-  values contain no HOST_SEP ('-') (they are simple tokens like "prv1",
-  [Login protocol](../apps/Login-Protocol.md)) and app prefixes are known, parse structurally:
-
-    - appPrefix = substring before the FIRST HOST_SEP.
-    - prvId     = substring after the LAST HOST_SEP.
-    - actId     = everything between them.
-    - Validate actId with isFingerprintActId(actId, versionFor(actId))
-      — or, when version is not yet known, accept any known fingerprint
-      shape (v1 today) and defer strict validation to the account lookup.
-
-  This makes the host grammar independent of actId length while remaining
-  exactly compatible with every existing v1 host name.
-
-7.3  Non-goal
-
-  This spec does NOT require renaming existing hosts or changing HOST_SEP.
-  It only removes the "+ 32" assumption from parsing so v2 needs no host
-  grammar change.
-
-## PART 8 - ROLLOUT DISCIPLINE FOR A FUTURE v2
-
-8.1  Conservative default
-
-  defaultVersion() stays 1 until a deliberate decision to introduce v2.
-  Adding the column and the registry (this spec) does NOT change any
-  minted id.
-
-8.2  Adding v2 later (the intended future edit)
-
-  a. Implement deriveId(pub, 2) in the registry (PART 4.1) and the shape
-     for isFingerprintActId(id, 2).
-  b. Teach every verifier nothing new — they already pass version through
-     (PART 5). They simply now accept version 2 as well.
-  c. DUAL-ACCEPT PERIOD: all nodes must recognise v1 AND v2 before ANY
-     node starts minting v2. Recognition ships first; minting second.
-  d. Flip defaultVersion() to 2 (config-gated is preferable to a code
-     constant, so providers can roll forward independently). New accounts
-     now mint v2; existing accounts keep v1 forever.
-  e. No data migration of existing actIds. Ever, as routine.
-
-8.3  Why recognition-before-minting
-
-  A v2 actId minted on an updated node would be rejected by a not-yet-
-  updated node's self-certification (unknown version ⇒ fail closed,
-  PART 5.3). Shipping recognition everywhere first prevents a partial
-  fleet from locking out new accounts.
-
-8.4  Config surface (recommended)
-
-  Expose the default as provider.config.txt "FpDefaultVersion" (read by
-  DomatarConfig), defaulting to 1. This lets the fleet enable v2 minting
-  by config flip after code recognition is universal, without a rebuild.
-
-## PART 9 - RE-IDENTIFICATION (explicitly NOT the normal path)
-
-9.1  When it would be needed
-
-  Changing an EXISTING account's actId (e.g. deprecating v1 for a
-  compromised hash) is a full identity migration: mint a new actId, then
-  rewrite every object row, host name, lnk, peer/binding record, and
-  cookie that embeds the old actId, with a binding that proves old→new
-  continuity.
-
-9.2  Status
-
-  Re-identification is out of scope for this spec and is expected to be
-  rare-to-never. The whole point of versioning is to AVOID it: v1
-  accounts stay v1, and only NEW accounts adopt v2. If re-identification
-  is ever required, it gets its own Spec/Update pair modelled on the
-  Security/OwnIds migrations, and reuses the delegation machinery to
-  attest the linkage.
-
-## PART 10 - IMPLEMENTATION SURFACE
-
-  Schema:
-    - mySQL guarded ALTER adding act.FpVersion int NOT NULL DEFAULT 1
-      (style of dump-2024-01-22b-security-schema.sql).
-
-  Core:
-    - com.domatar.crypto.AccountKeys: add deriveId(pub, version),
-      fingerprintsTo(pub, id, version), defaultVersion(); redefine
-      deriveActId/deriveOwnId as the v==1 delegators; keep the v1 math in
-      exactly one branch.
-    - com.domatar.util.DomId: add isFingerprintActId(actId, version);
-      rewrite replicaActId/replicaPrvId to parse by delimiters, not
-      "+ 32" (PART 7.2); keep the zero-arg isFingerprintActId as the
-      deprecated v1/legacy gate.
-    - com.domatar.crypto.Binding, Delegation: verify via
-      fingerprintsTo(pub, id, version) instead of a hard-coded derive.
-    - com.domatar.db.ActDb: SELECT/INSERT FpVersion; expose it on the Act
-      value holder; addAct writes defaultVersion().
-    - Login-Multiple membership/peer records: carry FpVersion (PART 3.4).
-    - DomatarConfig (optional): FpDefaultVersion, default 1 (PART 8.4).
-
-  No change required to: the v1 algorithm, existing actIds, existing host
-  names, Desktop/Navigator sync mechanism, password Encryption handling.
-
-## PART 11 - ACCEPTANCE
-
-  Live:
-
-  * act.FpVersion exists, defaults to 1, and every existing account reads
-    back as version 1 with no data migration.
-  * All fingerprint derivation and self-certification flow through the
-    registry; no call site outside it encodes SHA-256/24/Base64 directly.
-  * Self-certification passes the account's FpVersion and fails closed on
-    an unknown/unsupported version.
-  * Replica-host parsing round-trips every existing v1 host name WITHOUT a
-    fixed-width (+ 32) assumption.
-  * A hypothetical v2 can be added by (a) one registry branch, (b) a shape
-    rule, (c) a default-version flip — with existing v1 accounts untouched
-    and a recognition-before-minting rollout.
-  * Passwords (act.Encryption) are unaffected; actId versioning never
-    re-mints an existing account's id in place.
-
-## PART 12 - IMPLEMENTATION REFINEMENTS (KD1–KD7)
-
-  Key decisions:
+18.7  Implementation (KD1–KD7)
 
   KD1  Registry lives in AccountKeys (deriveId / fingerprintsTo /
        defaultVersion / registeredVersions). deriveActId/deriveOwnId
-       remain as thin v1 delegators.
-
+       remain thin v1 delegators.
   KD2  Binding.verify() / Delegation.verify(Binding) are version-tolerant
-       (try every registered version) so self-authenticating records still
-       validate with no external lookup ([Identifiers](Identifiers.md) PART 6.3). The
-       credential chain uses verify(fpVersion) with the stored version.
-
+       (try every registered version). The credential chain uses
+       verify(fpVersion) with the stored version.
   KD3  ActDb.getFpVersion(actId) returns 1 when the row is missing/NULL.
-
-  KD4  AccountKeys.fromPrivKey(bytes) stays pinned to v1; fromPrivKey(bytes,
-       version) is the versioned overload.
-
+  KD4  AccountKeys.fromPrivKey(bytes) stays pinned to v1;
+       fromPrivKey(bytes, version) is the versioned overload.
   KD5  defaultVersion() reads DomatarConfig.getFpDefaultVersion()
        (FpDefaultVersion / DOMATAR_FP_DEFAULT_VERSION), falling back to 1.
-
-  KD6  Schema: mySQL/dump-2024-01-22d-fpversion-schema.sql (fresh volumes)
-       + live guarded ALTER; canonical restore point includes FpVersion in
-       act CREATE TABLE (canonical-*-actidver-db{1,2}.sql).
-
+  KD6  Schema includes FpVersion in act CREATE TABLE.
   KD7  Replica-host parsing is delimiter-based (first/last HOST_SEP), not
        fixed-width (+ 32). Public parsers still gate on the v1 shape.
