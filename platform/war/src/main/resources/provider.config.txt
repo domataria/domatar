@@ -1,0 +1,137 @@
+# Domatar provider configuration
+# Edit this file before running provider installation (see Spec-Installation.txt PART 3).
+# Values here are overridden by environment variables (DOMATAR_HSTID, etc.).
+
+# Unique identifier for this host within the Domatar network.
+# Must match the HstId that will be registered in the hst table.
+HstId=prv1
+
+# Provider ID. Determines the provider account identity: <PrvId>@<PrvId>.
+# Defaults to HstId if not set.
+PrvId=prv1
+
+# Public domain name (or host:port for development) of this server.
+# Wire / Msg routing address (may be Docker-internal, e.g. tomcat2:8080).
+Domain=quippin:8080
+
+# Optional browser-facing hostname (front door), e.g. domatar.quippin.com.
+# When set and distinct from Domain, absolute asset URLs use this host.
+# Env: DOMATAR_PUBLIC_DOMAIN.
+# PublicDomain=domatar.quippin.com
+#
+# Browser path prefix for app assets. /domatar = Tomcat WAR context.
+# Empty / "-" = reverse proxy that remounts the app at /.
+# When unset, a distinct PublicDomain implies empty. Env: DOMATAR_ASSET_CONTEXT_PATH.
+# AssetContextPath=/domatar
+
+# Database JDBC connection URL.
+DbUrl=jdbc:mysql://db/domatar?user=root&password=domatar
+
+# Default apps for new accounts live in default-apps-config.txt (same directory
+# as this file when deployed under /opt/domatar/, or bundled in the domatar WAR).
+# Legacy: you can still set DefaultApps=key here; see DomatarConfig.getDefaultApps().
+
+# Initial password for the provider administrator account (<PrvId>@<PrvId>).
+# MUST be changed immediately after first login.
+AdminPassword=admin
+
+# ============================================================
+# Phase 2+ security keys
+# ============================================================
+
+# AES-256 master key (Base64Encoder, 43 chars) used to seal account
+# ownership private keys in the act.OwnPrvKey column (formerly RootPrvKey).
+# Generate once per provider with:
+#   openssl rand -base64 32 | tr '+/' '-~' | tr -d '='
+# REQUIRED for Phase 2+.  No default.
+# MasterKey=<your-base64-aes-key>
+
+# ============================================================
+# OwnIds (Spec-OwnIds.txt / Update-OwnIds.txt)
+# ============================================================
+# act.OwnPrvKey holds the sealed OWNERSHIP private key (not genesis).
+# The genesis private key is NEVER stored on the server; it is user-held
+# (sim: GenesisVaultPath file). GenesisPubKey / OwnPubKey / Binding*
+# columns on act carry the public binding only.
+#
+# Filesystem path of the sim/test genesis-key vault (tab-separated lines).
+# Default: mySQL/dev-keys/genesis-vault.txt
+# Override: DOMATAR_GENESIS_VAULT_PATH / GenesisVaultPath
+# GenesisVaultPath=mySQL/dev-keys/genesis-vault.txt
+
+# Filesystem path to the provider operational Ed25519 private key seed file.
+# Created automatically on first bootstrap if missing.
+# Example: /opt/domatar/provider.opkey
+# ProviderKeyPath=/opt/domatar/provider.opkey
+
+# ============================================================
+# Phase 3+ directory-trust keys
+# ============================================================
+
+# Ed25519 public key of the global directory root (Base64Encoder, 43 chars).
+# Required on EVERY provider node for hst record signature verification.
+# Generate the keypair on the directory node (see Spec-Security.txt PART 5.3):
+#   DevKeysetGen --directory-root-keygen  (or openssl + manual conversion)
+# Then distribute the PUBLIC key to all providers; keep the PRIVATE key only
+# on the directory server.
+# DirectoryRootPubKey=<43-char-base64-ed25519-pubkey>
+
+# Ed25519 private key seed of the global directory root (Base64Encoder, 43 chars).
+# Set ONLY on the provider node that acts as the global directory server.
+# DO NOT copy this to other nodes.
+# DirectoryRootPrivKey=<43-char-base64-ed25519-privkey>
+
+# ============================================================
+# Phase 4+ delegation
+# ============================================================
+
+# Delegation TTL in milliseconds (default: 3600000 = 1 hour).
+# Controls how long a delegation certificate is valid before it is refreshed.
+# DelegTtlMs=3600000
+
+# Maximum allowed clock skew for incoming messages in milliseconds
+# (default: 120000 = 2 minutes).  Messages with a timestamp outside this
+# window are rejected as stale or future-dated.
+# MsgSkewMs=120000
+
+# ============================================================
+# Multi-provider Login membership (Spec-Login-Multiple)
+# ============================================================
+# No new provider.config keys are required. Membership reuses:
+#   getPrvId / DOMATAR_HSTID, getDomain / DOMATAR_DOMAIN,
+#   getDirectory / DOMATAR_DIRECTORY, getDelegTtlMs / DelegTtlMs.
+
+# ============================================================
+# Phase 6+ TLS wire confidentiality (Q3)
+# ============================================================
+
+# Inter-provider wire scheme: "https" (default, production) or "http" (dev only).
+# Set to "http" ONLY in a local same-host simulation where TLS certificates are
+# not available.  "http" in production is INSECURE.
+# WireScheme=https
+
+# Filesystem path to a JKS or PKCS12 trust store for outbound HTTPS connections.
+# Provider certificates must chain to an entry in this store.
+# When absent, the JVM default CA trust store is used (standard CA-signed certs work).
+# For self-signed dev certs, add them with:
+#   keytool -importcert -file provider.cert.pem -alias <PrvId> \
+#       -keystore truststore.jks -storepass <password>
+# TrustStorePath=/opt/domatar/truststore.jks
+# TrustStorePassword=<truststore-password>
+
+# Filesystem path to a JKS or PKCS12 key store containing this provider's TLS
+# client identity for mTLS directory writes (UpdateHst).
+# Generate with:
+#   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
+#       -keyout provider.key.pem -out provider.cert.pem -days 3650 -nodes \
+#       -subj "/CN=<PrvId>"
+#   openssl pkcs12 -export -in provider.cert.pem -inkey provider.key.pem \
+#       -out provider-keystore.p12 -name provider
+# The directory node's trust store must contain this provider's cert (or a shared CA).
+# KeyStorePath=/opt/domatar/provider-keystore.p12
+# KeyStorePassword=<keystore-password>
+
+# Whether mutual TLS is required for directory write operations (UpdateHst).
+# Defaults to "true" when WireScheme=https; set to "false" during a TLS
+# transition period where some providers have not yet obtained client certs.
+# MtlsRequired=true

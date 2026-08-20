@@ -1,0 +1,6 @@
+AppId=bookstore
+AppName=Bookstore
+AppDesc=Buy and sell books
+Version=1.0
+DependsOn=navigator,login,desktop
+ProviderHosts=

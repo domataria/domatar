@@ -1,0 +1,200 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>News Feed</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+  var allQuips = [];
+
+  window.getNews = function getNews()
+  {
+    var dataString = 'Action=GetFollows';
+
+    allQuips.length = 0;
+
+	$.ajax({
+        type: "POST",
+        cache: false,
+        url: "Wui/FollowsWui",
+		crossDomain: false,
+		data: dataString,
+		timeout: 10000000,
+        success: function(json) { processFollows(JSON.parse(json)); },
+		error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+      });
+
+    // Always include the current user's own top-level quips in the feed.
+    getOwnQuips();
+  }
+
+  function getNews() { window.getNews(); }
+
+  function processFollows(follows)
+  {
+    if (follows && follows.Body && follows.Body.Error === "Failure")
+    {
+      alert("GetFollows failed: " + (follows.Body.ErrorMsg || "Unknown error"));
+      return;
+    }
+
+    var prvMap = follows.Attrs && follows.Attrs.PrvIds;
+
+    if (!prvMap)
+      return;
+
+    for (var prvId in prvMap)
+    {
+      var acts = {Acts : prvMap[prvId]};
+
+      getPrvNews(prvId, acts);
+    }
+  }
+
+  function getPrvNews(prvId, acts)
+  {
+    var dataString = 'Action=GetNews&PrvId=' + prvId + '&Acts=' + encodeURIComponent(JSON.stringify(acts));
+
+	$.ajax({
+        type: "POST",
+        cache: false,
+        url: "Wui/NewsWui",
+		crossDomain: false,
+		data: dataString,
+		timeout: 10000000,
+        success: function(json) { addQuips(JSON.parse(json)); },
+		error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+      });
+  }
+
+  function getOwnQuips()
+  {
+    $.ajax({
+             type: "POST",
+             cache: false,
+             url: "Wui/QuipsWui",
+             crossDomain: false,
+             data: 'Action=GetQuips',
+             timeout: 10000000,
+             success: function(json) { addQuips(JSON.parse(json)); },
+             error: function(jqXHR, textStatus, errorThrown) { alert(textStatus + " : " + errorThrown); }
+           });
+  }
+
+  function addQuips(retObj)
+  {
+    if (!retObj || !retObj.Attrs || !retObj.Attrs.Quips) return;
+
+    // Only top-level quips (replies have a ParentId) belong in the feed.
+    var incoming = retObj.Attrs.Quips.filter(function(q) { return !q.ParentId; });
+
+    allQuips = allQuips.concat(incoming);
+    allQuips.sort(function(a, b) { return a.QuipId < b.QuipId ? 1 : -1; });
+
+    // Deduplicate by DomId in case a followed user is also the current user.
+    var seen = {};
+    allQuips = allQuips.filter(function(q) {
+      if (seen[q.DomId]) return false;
+      seen[q.DomId] = true;
+      return true;
+    });
+
+	displayQuips();
+  }
+
+  function displayQuips()
+  {
+	var text =
+	'<label for="text">New quip</label>' +
+	'<textarea id="text" name="text" rows="6" cols="50" style="border:2px ridge;background-color:#e5eecc;padding:4px;"></textarea><br /><br />' +
+	'<button type="button" name="Quip" id="Quip">Quip</button>' +
+	'<br/>';
+
+    text += '<table>';
+
+    var quipArray = allQuips;
+
+	for (var i = 0; i < quipArray.length; i++)
+    {
+	  text += quipHtml(quipArray[i]);
+    }
+
+    text += '</table>';
+
+    $("#quips").html(text);
+	$("#Quip").click(function() { submitForm(); });
+
+  };
+
+  function submitForm()
+  {
+    var raw = $("textarea#text").val();
+
+    if (!raw || !raw.trim())
+    {
+      alert("Enter some text");
+      return;
+    }
+
+    var text       = encodeURIComponent(raw);
+    var dataString = 'Text=' + text + '&Action=AddQuip';
+    var urlString  = 'Wui/QuipsWui';
+
+	$.ajax({
+             type: "POST",
+             cache: false,
+             url: urlString,
+			 crossDomain: false,
+			 data: dataString,
+			 timeout: 10000000,
+             success: function(json) {formSubmitted(JSON.parse(json));},
+			 error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+           });
+  };
+
+  function formSubmitted(val)
+  {
+    if (val && val.Body && val.Body.Error === "Failure")
+    {
+      alert("AddQuip failed: " + (val.Body.ErrorMsg || "Unknown error"));
+      return;
+    }
+
+    $("textarea#text").val("");
+
+    window.getNews();
+  }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>News</h1>
+  <p class="subtitle">Latest from the people you follow.</p>
+
+  <div class="card" id="quips"></div>
+</div>
+
+<script type="text/javascript">
+$(window.getNews());
+</script>
+
+</body>
+</html>

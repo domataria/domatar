@@ -1,0 +1,7 @@
+AppId: login
+Version: 1.0
+InstallClass: com.login.install.LoginInstall
+AssetDirectory: login/assets
+Handler: login, accounts, com.login.objimpl.LoginAccountsImpl
+Handler: login, membership, com.login.objimpl.MembershipImpl
+Wui:     AccountsWui,     com.login.webui.AccountsWui

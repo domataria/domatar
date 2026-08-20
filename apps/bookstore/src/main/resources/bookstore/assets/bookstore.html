@@ -1,0 +1,335 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bookstore</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .bs-actions { display: flex; gap: 10px; margin-bottom: 20px; }
+        .section-title { font-size: 1.1em; font-weight: 600; margin-bottom: 10px; }
+        table.bs-table { width: 100%; border-collapse: collapse; }
+        table.bs-table th,
+        table.bs-table td { text-align: left; padding: 6px 10px; }
+        table.bs-table th { font-size: 0.85em; font-weight: 600;
+                            color: var(--page-muted); border-bottom: 1px solid var(--border); }
+        table.bs-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        .empty-msg { color: var(--page-muted); font-style: italic; }
+        .price-cell { cursor: pointer; }
+        .price-cell:hover { background: var(--surface); }
+        .price-cell input.price-input { width: 72px; box-sizing: border-box; padding: 2px 4px; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    // ---- For Sale -----------------------------------------------------------
+
+    function getForSale()
+    {
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ForSaleWui',
+            data: 'Action=GetForSale',
+            cache: false,
+            timeout: 10000000,
+            success: function(json) { renderForSale(JSON.parse(json)); },
+            error: function(jqXHR, textStatus, errorThrown) {
+                $('#forsale-body').html('<tr><td colspan="5">Error loading listings: ' + textStatus + '</td></tr>');
+            }
+        });
+    }
+
+    function renderForSale(ret)
+    {
+        var listings = (ret.Attrs && ret.Attrs.Listings) ? ret.Attrs.Listings : [];
+
+        if (listings.length === 0)
+        {
+            $('#forsale-body').html('<tr><td colspan="5" class="empty-msg">You have no active listings.</td></tr>');
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < listings.length; i++)
+        {
+            var l = listings[i];
+            var listingId = l.ListingId || '';
+            html +=
+                '<tr>' +
+                '<td>' + esc(l.Title)     + '</td>' +
+                '<td>' + esc(l.Author)    + '</td>' +
+                '<td class="price-cell" data-listing-id="' + esc(listingId) + '" title="Click to edit price">' +
+                    esc(fmtPrice(l.Price)) + '</td>' +
+                '<td>' + esc(l.Condition) + '</td>' +
+                '<td><button type="button" onclick="delistBook(' + "'" + listingId + "'" + ')">Delist</button></td>' +
+                '</tr>';
+        }
+        $('#forsale-body').html(html);
+        $('#forsale-body').off('click', '.price-cell').on('click', '.price-cell', function() {
+            startPriceEdit($(this));
+        });
+    }
+
+    function startPriceEdit($cell)
+    {
+        if ($cell.find('input').length)
+            return;
+
+        var listingId = $cell.data('listing-id');
+        var original  = $.trim($cell.text());
+
+        var $input = $('<input type="text" class="price-input">').val(original);
+        $cell.empty().append($input);
+        $input.focus().select();
+
+        function finish(revert)
+        {
+            $input.off('keydown blur');
+            if (revert)
+            {
+                $cell.text(original);
+                return;
+            }
+
+            var newPrice = $.trim($input.val());
+            if (newPrice === original)
+            {
+                $cell.text(original);
+                return;
+            }
+
+            if (!newPrice || isNaN(parseFloat(newPrice)) || parseFloat(newPrice) <= 0)
+            {
+                alert('Please enter a valid price greater than zero.');
+                $cell.text(original);
+                return;
+            }
+
+            var formatted = parseFloat(newPrice).toFixed(2);
+            if (formatted === original)
+            {
+                $cell.text(original);
+                return;
+            }
+
+            updateListingPrice(listingId, formatted, original, $cell);
+        }
+
+        $input.on('keydown', function(e) {
+            if (e.key === 'Enter')  { e.preventDefault(); finish(false); }
+            if (e.key === 'Escape') { e.preventDefault(); finish(true);  }
+        });
+        $input.on('blur', function() { finish(false); });
+    }
+
+    function updateListingPrice(listingId, price, original, $cell)
+    {
+        $cell.text('Saving\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ForSaleWui',
+            data: 'Action=UpdatePrice&ListingId=' + encodeURIComponent(listingId) +
+                  '&Price=' + encodeURIComponent(price),
+            cache: false,
+            timeout: 10000000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    alert('Update failed: ' + (ret.ErrorMsg || 'Unknown error'));
+                    $cell.text(original);
+                }
+                else
+                    $cell.text(fmtPrice(price));
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert('Error: ' + textStatus + ' — ' + errorThrown);
+                $cell.text(original);
+            }
+        });
+    }
+
+    function delistBook(listingId)
+    {
+        if (!confirm('Remove this listing from your For Sale and from the catalog?'))
+            return;
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ForSaleWui',
+            data: 'Action=DelistBook&ListingId=' + encodeURIComponent(listingId),
+            cache: false,
+            timeout: 10000000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                    alert('Delist failed: ' + (ret.ErrorMsg || 'Unknown error'));
+                else
+                    getForSale();
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert('Error: ' + textStatus + ' — ' + errorThrown);
+            }
+        });
+    }
+
+    // ---- Library ------------------------------------------------------------
+
+    function getLibrary()
+    {
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/LibraryWui',
+            data: 'Action=GetLibrary',
+            cache: false,
+            timeout: 10000000,
+            success: function(json) { renderLibrary(JSON.parse(json)); },
+            error: function(jqXHR, textStatus, errorThrown) {
+                $('#library-body').html('<tr><td colspan="5">Error loading library: ' + textStatus + '</td></tr>');
+            }
+        });
+    }
+
+    function renderLibrary(ret)
+    {
+        var books = (ret.Attrs && ret.Attrs.Books) ? ret.Attrs.Books : [];
+
+        if (books.length === 0)
+        {
+            $('#library-body').html('<tr><td colspan="6" class="empty-msg">Your library is empty.</td></tr>');
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < books.length; i++)
+        {
+            var b   = books[i];
+            var bid = esc(b.BookId || '');
+            html +=
+                '<tr>' +
+                '<td>' + esc(b.Title)                + '</td>' +
+                '<td>' + esc(b.Author)               + '</td>' +
+                '<td>' + esc(b.Price)                + '</td>' +
+                '<td>' + esc(b.SellerName)           + '</td>' +
+                '<td>' + esc(fmtDate(b.PurchasedAt)) + '</td>' +
+                '<td><button type="button" onclick="deleteBook(\'' + bid + '\')">Delete</button></td>' +
+                '</tr>';
+        }
+        $('#library-body').html(html);
+    }
+
+    function deleteBook(bookId)
+    {
+        if (!confirm('Remove this book from your library?'))
+            return;
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/LibraryWui',
+            data: 'Action=RemoveBook&BookId=' + encodeURIComponent(bookId),
+            cache: false,
+            timeout: 30000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                    alert('Delete failed: ' + (ret.ErrorMsg || 'Unknown error'));
+                else
+                    getLibrary();
+            },
+            error: function(jqXHR, textStatus) { alert('Error: ' + textStatus); }
+        });
+    }
+
+    // ---- Helpers ------------------------------------------------------------
+
+    function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+
+    function fmtPrice(s)
+    {
+        if (s === null || s === undefined || s === '') return '';
+        var n = parseFloat(String(s));
+        return isNaN(n) ? String(s) : n.toFixed(2);
+    }
+
+    function fmtDate(iso)
+    {
+        if (!iso) return '';
+        try { return new Date(iso).toLocaleDateString(); } catch(e) { return iso; }
+    }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+    <h1>Bookstore</h1>
+    <p class="subtitle">Buy and sell books with other Domatar users.</p>
+
+    <div class="bs-actions">
+        <button type="button" onclick="window.location.href='/domatar/bookstore/newListing.html'">&#43; List a Book</button>
+        <button type="button" onclick="window.location.href='/domatar/bookstore/catalog.html'"
+                style="background:var(--surface);color:var(--text);border:1px solid var(--border);">Browse Catalog</button>
+        <button type="button" onclick="window.location.href='/domatar/bookstore/cart.html'"
+                style="background:var(--surface);color:var(--text);border:1px solid var(--border);">&#x1F6D2; My Shopping Cart</button>
+    </div>
+
+    <!-- For Sale -->
+    <div class="card">
+        <div class="section-title">My Listings</div>
+        <table class="bs-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Price</th>
+                    <th>Condition</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="forsale-body">
+                <tr><td colspan="5" class="empty-msg">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Library -->
+    <div class="card">
+        <div class="section-title">My Library</div>
+        <table class="bs-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Price Paid</th>
+                    <th>Seller</th>
+                    <th>Purchased</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="library-body">
+                <tr><td colspan="6" class="empty-msg">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+    getForSale();
+    getLibrary();
+</script>
+
+</body>
+</html>

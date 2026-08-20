@@ -1,0 +1,15 @@
+AppId: money
+Version: 1.0
+InstallClass: com.money.install.MoneyInstall
+AssetDirectory: money/assets
+Handler: money, app,        com.money.objimpl.MoneyAppImpl
+Handler: money, profile,    com.money.objimpl.ProfileImpl
+Handler: money, bank,       com.money.objimpl.BankImpl
+Handler: money, accounts,   com.money.objimpl.AccountsImpl
+Handler: money, account,    com.money.objimpl.AccountImpl
+Handler: money, myaccounts, com.money.objimpl.MyAccountsImpl
+Wui: MoneyProfileWui,       com.money.webui.MoneyProfileWui
+Wui: MoneyBankWui,          com.money.webui.MoneyBankWui
+Wui: MoneyAccountsWui,      com.money.webui.MoneyAccountsWui
+Wui: MoneyAccountWui,       com.money.webui.MoneyAccountWui
+Wui: MoneyMyAccountsWui,    com.money.webui.MoneyMyAccountsWui

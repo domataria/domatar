@@ -1,0 +1,931 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>App Store</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .app-icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, 120px);
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        .app-tile {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .app-tile:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+            z-index: 20;
+        }
+
+        .app-tile .icon {
+            width: 120px;
+            height: 120px;
+            border-radius: 22px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .app-tile .icon img {
+            width: 68px;
+            height: 68px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .app-tile .overlay {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 190px;
+            background: rgba(15, 15, 20, 0.92);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 5px;
+            padding: 14px 12px 12px;
+            opacity: 0;
+            transition: opacity 0.18s ease;
+            pointer-events: none;
+            z-index: 30;
+        }
+
+        .app-tile:hover .overlay {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .overlay .ov-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .overlay .ov-desc {
+            font-size: 11px;
+            color: rgba(255,255,255,0.65);
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.12s, opacity 0.12s;
+            color: #1f2937;
+        }
+
+        .overlay .btn {
+            margin-top: 6px;
+            padding: 5px 14px;
+            font-size: 11px;
+        }
+
+        .btn-install {
+            background: var(--primary);
+            color: #fff;
+        }
+        .btn-install:hover   { background: var(--primary-h); }
+        .btn-install:disabled { opacity: 0.5; cursor: default; }
+
+        .btn-uninstall {
+            background: rgba(255,255,255,0.12);
+            color: #fca5a5;
+            border: 1px solid rgba(252,165,165,0.45);
+        }
+        .btn-uninstall:hover { background: rgba(252,165,165,0.18); }
+
+        .btn-coming-soon {
+            background: rgba(255,255,255,0.07);
+            color: rgba(255,255,255,0.35);
+            border: 1px solid rgba(255,255,255,0.12);
+            cursor: default;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #1f2937;
+            border: 1px solid #cbd5e1;
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+        .btn-secondary:hover { background: #cbd5e1; }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+        .btn-primary:hover { background: var(--primary-h); }
+        .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--page-text);
+            margin: 28px 0 10px;
+        }
+
+        .empty-note {
+            color: var(--page-muted);
+            font-size: 13px;
+            padding: 12px 0;
+        }
+
+        .signout-btn {
+            position: fixed;
+            top: 14px;
+            right: 20px;
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 13px;
+            box-shadow: var(--shadow);
+        }
+
+        #status-msg {
+            display: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        #status-msg.success { background: #f0fdf4; color: var(--success); border: 1px solid #86efac; }
+        #status-msg.error   { background: #fef2f2; color: var(--danger);  border: 1px solid #fca5a5; }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin: 18px 0 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #1f2937;
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .tab-btn:hover { background: #e2e8f0; }
+        .tab-btn.active {
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+        }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .search-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            align-items: center;
+        }
+        .search-row input[type="text"] {
+            flex: 1;
+            max-width: 360px;
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            color: #1f2937;
+            background: var(--card);
+        }
+
+        .listing-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            overflow: hidden;
+        }
+        .listing-list li {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            color: #1f2937;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .listing-list li:last-child { border-bottom: none; }
+        .listing-list li:hover { background: #f1f5f9; }
+        .listing-list .listing-icon {
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f8fafc;
+        }
+        .listing-list .listing-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        .listing-list .listing-body { flex: 1; min-width: 0; }
+        .listing-list .meta {
+            font-size: 12px;
+            color: var(--page-muted);
+            margin-top: 3px;
+        }
+
+        .listing-detail {
+            margin-top: 18px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            color: #1f2937;
+        }
+        .listing-detail h2 {
+            margin: 0 0 6px;
+            font-size: 18px;
+        }
+        .listing-detail .desc {
+            color: var(--page-muted);
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .offer-list {
+            list-style: none;
+            margin: 0 0 12px;
+            padding: 0;
+        }
+        .offer-list li {
+            padding: 8px 0;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 13px;
+        }
+        .offer-list li:first-child { border-top: none; }
+        .offer-list label { cursor: pointer; flex: 1; }
+        .offer-list .offer-meta { color: var(--page-muted); font-size: 12px; }
+        .offer-list .offer-hint { color: var(--page-muted); font-size: 12px;
+            font-style: italic; margin-top: 2px; }
+
+        .provider-panel {
+            margin-top: 24px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+        }
+        .provider-panel h3 {
+            margin: 0 0 10px;
+            font-size: 15px;
+            color: #1f2937;
+        }
+        .provider-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .provider-row input[type="text"] {
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            color: #1f2937;
+            min-width: 160px;
+        }
+    </style>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../asset-paths.js"></script>
+<script type="text/javascript" src="../user-apps-events.js"></script>
+
+<script type="text/javascript">
+
+    var siteRole = { IsProvider: "False", PrvId: "", Domain: "", PublicDomain: "" };
+    var selectedListing = null;
+    var loginHomePrvIds = null;
+
+    function pageAssets()
+    {
+        return AssetPaths.fromSiteRole(siteRole);
+    }
+
+    function launcherIconUrl(appId, domain, publicDomain)
+    {
+        var localDomain = siteRole.Domain || "";
+        var localPublic = siteRole.PublicDomain || "";
+        var isLocal = (!domain && !publicDomain)
+            || (domain && (domain === localDomain || domain === localPublic))
+            || (publicDomain && (publicDomain === localPublic || publicDomain === localDomain));
+
+        if (isLocal)
+            return pageAssets().launcher(appId);
+
+        return AssetPaths.fromHosts(domain, publicDomain).launcher(appId);
+    }
+
+    function iconFallback(img)
+    {
+        var assets = pageAssets();
+
+        if (assets.isDefaultGlyph(img.src))
+            return;
+        img.onerror = null;
+        img.src = assets.defaultGlyph();
+    }
+
+    /** First active offer's wire Domain + PublicDomain for icon/install. */
+    function firstActiveOfferHosts(L)
+    {
+        var offers = L.OffersPreview || L.Offers || [];
+        for (var i = 0; i < offers.length; i++)
+        {
+            var o = offers[i];
+            if ((o.Status || "Active") !== "Active")
+                continue;
+            if (o.Domain || o.PublicDomain)
+                return {
+                    domain: o.Domain || "",
+                    publicDomain: o.PublicDomain || ""
+                };
+        }
+        return { domain: "", publicDomain: "" };
+    }
+
+    function loadMembershipPrvIds(cb)
+    {
+        if (loginHomePrvIds)
+        {
+            if (cb) cb();
+            return;
+        }
+
+        $.ajax({
+            type: "POST", cache: false,
+            url: "/domatar/domatar/Wui/UserSubstrateWui",
+            data: { Action: "ListMembership" },
+            timeout: 60000,
+            success: function(json) {
+                var ret;
+                try { ret = (typeof json === "string") ? JSON.parse(json) : json; }
+                catch (e) { loginHomePrvIds = {}; if (cb) cb(); return; }
+                loginHomePrvIds = {};
+                if (!isFailure(ret))
+                {
+                    var peers = attrsOf(ret).Peers || [];
+                    for (var i = 0; i < peers.length; i++)
+                    {
+                        var row = peers[i];
+                        if (!row || !row.PrvId) continue;
+                        if (row.IsLoginHome !== "False")
+                            loginHomePrvIds[row.PrvId] = true;
+                    }
+                }
+                if (cb) cb();
+            },
+            error: function() {
+                loginHomePrvIds = {};
+                if (cb) cb();
+            }
+        });
+    }
+
+    function offerHostHint(prvId)
+    {
+        if (loginHomePrvIds && prvId && loginHomePrvIds[prvId])
+            return "You can sign in here";
+        return "Will host the app only";
+    }
+
+    function callWui(action, params, ok, err)
+    {
+        var data = "Action=" + encodeURIComponent(action);
+        if (params)
+        {
+            for (var k in params)
+            {
+                if (!Object.prototype.hasOwnProperty.call(params, k)) continue;
+                if (params[k] == null || params[k] === "") continue;
+                data += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+            }
+        }
+
+        $.ajax({
+            type: "POST", cache: false,
+            url: "Wui/AppstoreWui",
+            crossDomain: false,
+            data: data,
+            timeout: 60000,
+            success: function(json) {
+                var ret;
+                try { ret = (typeof json === "string") ? JSON.parse(json) : json; }
+                catch (e) { if (err) err("Bad response"); return; }
+                if (isFailure(ret))
+                {
+                    if (err) err(errorMsg(ret));
+                    return;
+                }
+                if (ok) ok(ret);
+            },
+            error: function(jqXHR, ts) {
+                if (err) err(ts || "Request failed");
+            }
+        });
+    }
+
+    function isFailure(ret)
+    {
+        if (!ret) return true;
+        if (ret.Error === "Failure") return true;
+        if (ret.Body && ret.Body.Error === "Failure") return true;
+        return false;
+    }
+
+    function errorMsg(ret)
+    {
+        if (!ret) return "Unknown error";
+        if (ret.ErrorMsg) return ret.ErrorMsg;
+        if (ret.Body && ret.Body.ErrorMsg) return ret.Body.ErrorMsg;
+        return "Unknown error";
+    }
+
+    function attrsOf(ret)
+    {
+        if (!ret) return {};
+        if (ret.Attrs) return ret.Attrs;
+        if (ret.Body && ret.Body.Attrs) return ret.Body.Attrs;
+        return {};
+    }
+
+    function showTab(name)
+    {
+        $(".tab-btn").removeClass("active");
+        $('.tab-btn[data-tab="' + name + '"]').addClass("active");
+        $(".panel").removeClass("active");
+        $("#panel-" + name).addClass("active");
+
+        if (name === "local")
+            getApps();
+        else if (name === "market")
+            searchApps();
+    }
+
+    function loadSiteRole()
+    {
+        callWui("SiteRole", null, function(ret) {
+            siteRole = attrsOf(ret);
+            if (siteRole.IsProvider === "True")
+            {
+                $("#provider-panel").show();
+                $("#provider-prvid").text(siteRole.PrvId || "");
+            }
+            else
+                $("#provider-panel").hide();
+        }, function(msg) {
+            $("#provider-panel").hide();
+            showError("Could not determine site role: " + msg);
+        });
+    }
+
+    function searchApps()
+    {
+        var q = $("#search-query").val() || "";
+        callWui("SearchApps", { Query: q }, function(ret) {
+            renderSearch(attrsOf(ret).Listings || []);
+        }, function(msg) {
+            $("#listing-list").html('<li class="empty-note">Search failed: ' +
+                escText(msg) + '</li>');
+        });
+    }
+
+    function renderSearch(listings)
+    {
+        selectedListing = null;
+        $("#listing-detail").hide().empty();
+
+        if (!listings.length)
+        {
+            $("#listing-list").html('<li class="empty-note">No marketplace listings with active offers.</li>');
+            return;
+        }
+
+        var html = "";
+        for (var i = 0; i < listings.length; i++)
+        {
+            var L = listings[i];
+            var preview = "";
+            var offers = L.OffersPreview || [];
+            for (var j = 0; j < offers.length; j++)
+            {
+                if (j) preview += ", ";
+                preview += (offers[j].PrvId || "") +
+                    (offers[j].PublicDomain || offers[j].Domain
+                        ? " (" + (offers[j].PublicDomain || offers[j].Domain) + ")"
+                        : "");
+            }
+            var hosts = firstActiveOfferHosts(L);
+            var iconSrc = launcherIconUrl(L.AppId, hosts.domain, hosts.publicDomain);
+            html += '<li data-appid="' + escAttr(L.AppId) + '" onclick="openListing(\'' +
+                    escAttr(L.AppId) + '\')">' +
+                    '<div class="listing-icon"><img src="' + escAttr(iconSrc) +
+                    '" alt="" onerror="iconFallback(this)"/></div>' +
+                    '<div class="listing-body">' +
+                    '<strong>' + escText(L.AppName || L.AppId) + '</strong>' +
+                    '<div class="meta">' + escText(L.AppDesc || "") +
+                    ' · ' + escText(String(L.OfferCount || offers.length)) +
+                    ' offer(s)' +
+                    (preview ? ' · ' + escText(preview) : '') +
+                    '</div></div></li>';
+        }
+        $("#listing-list").html(html);
+    }
+
+    function openListing(appId)
+    {
+        callWui("GetListing", { AppId: appId }, function(ret) {
+            selectedListing = attrsOf(ret);
+            loadMembershipPrvIds(function() {
+                renderListingDetail(selectedListing);
+            });
+        }, function(msg) {
+            showError("GetListing failed: " + msg);
+        });
+    }
+
+    function renderListingDetail(L)
+    {
+        if (!L || !L.AppId)
+        {
+            $("#listing-detail").hide().empty();
+            return;
+        }
+
+        var offers = L.Offers || [];
+        var active = [];
+        for (var i = 0; i < offers.length; i++)
+            if ((offers[i].Status || "Active") === "Active")
+                active.push(offers[i]);
+
+        var hosts = firstActiveOfferHosts(L);
+        var html = '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">' +
+                   '<div class="listing-icon"><img src="' +
+                   escAttr(launcherIconUrl(L.AppId, hosts.domain, hosts.publicDomain)) +
+                   '" alt="" onerror="iconFallback(this)"/></div>' +
+                   '<div><h2 style="margin:0">' + escText(L.AppName || L.AppId) + '</h2>' +
+                   '<div class="desc" style="margin:4px 0 0">' + escText(L.AppDesc || "") +
+                   (L.Version ? ' · v' + escText(L.Version) : '') + '</div></div></div>';
+
+        if (!active.length)
+        {
+            html += '<div class="empty-note">No active offers for this app.</div>';
+        }
+        else
+        {
+            html += '<div class="section-title" style="margin-top:8px">Install from provider</div><ul class="offer-list">';
+            for (var i = 0; i < active.length; i++)
+            {
+                var o = active[i];
+                var id = "offer-" + i;
+                var checked = (i === 0) ? ' checked' : '';
+                var hostLabel = o.PublicDomain || o.Domain || "";
+                html += '<li><input type="radio" name="offerPrv" id="' + id +
+                        '" value="' + escAttr(o.PrvId) + '"' + checked + '/>' +
+                        '<label for="' + id + '"><strong>' + escText(o.PrvId) + '</strong>' +
+                        '<div class="offer-meta">' + escText(hostLabel) +
+                        (o.AppVersion ? ' · v' + escText(o.AppVersion) : '') +
+                        '</div>' +
+                        '<div class="offer-hint">' + escText(offerHostHint(o.PrvId)) +
+                        '</div></label></li>';
+            }
+            html += '</ul>' +
+                    '<button class="btn btn-primary" id="market-install-btn" ' +
+                    'onclick="doMarketInstall()">Install</button>';
+        }
+
+        $("#listing-detail").html(html).show();
+    }
+
+    function doMarketInstall()
+    {
+        if (!selectedListing || !selectedListing.AppId)
+            return;
+
+        var prvId = $('input[name="offerPrv"]:checked').val();
+        if (!prvId)
+        {
+            showError("Select a provider.");
+            return;
+        }
+
+        var domain = "";
+        var publicDomain = "";
+        var prvActId = "";
+        var offers = selectedListing.Offers || [];
+        for (var i = 0; i < offers.length; i++)
+        {
+            if (offers[i].PrvId === prvId && (offers[i].Status || "Active") === "Active")
+            {
+                domain = offers[i].Domain || "";
+                publicDomain = offers[i].PublicDomain || "";
+                prvActId = offers[i].PrvActId || "";
+                break;
+            }
+        }
+
+        var btn = document.getElementById("market-install-btn");
+        if (btn) { btn.disabled = true; btn.textContent = "Installing\u2026"; }
+
+        var installParams = {
+                AppId: selectedListing.AppId,
+                PrvId: prvId,
+                Domain: domain,
+                PrvActId: prvActId
+            };
+        if (publicDomain)
+            installParams.PublicDomain = publicDomain;
+
+        callWui("InstallApp", installParams,
+            function() {
+                showSuccess(selectedListing.AppId + " installed on " + prvId + ".");
+                if (btn) { btn.disabled = false; btn.textContent = "Install"; }
+                UserAppsEvents.notify();
+            },
+            function(msg) {
+                showError("Install failed: " + msg);
+                if (btn) { btn.disabled = false; btn.textContent = "Install"; }
+            });
+    }
+
+    function getApps()
+    {
+        callWui("GetApps", null, function(ret) {
+            renderApps(attrsOf(ret));
+        }, function(msg) {
+            showError("Failed to load apps: " + msg);
+        });
+    }
+
+    function renderApps(attrs)
+    {
+        var installed = attrs.InstalledApps || [];
+        var available = attrs.AvailableApps || [];
+
+        var instHtml = '';
+        if (installed.length === 0)
+            instHtml = '<div class="empty-note">No apps installed yet.</div>';
+        else
+            for (var i = 0; i < installed.length; i++)
+                instHtml += appTile(installed[i], true);
+
+        var availHtml = '';
+        if (available.length === 0)
+            availHtml = '<div class="empty-note">No additional apps available from this provider.</div>';
+        else
+            for (var i = 0; i < available.length; i++)
+                availHtml += appTile(available[i], false);
+
+        $("#installed-grid").html(instHtml);
+        $("#available-grid").html(availHtml);
+    }
+
+    function appTile(app, isInstalled)
+    {
+        var isCore       = (app.IsCore       === "True");
+        var isComingSoon = (app.IsComingSoon  === "True");
+        var iconSrc  = launcherIconUrl(
+            app.AppId,
+            app.Domain || siteRole.Domain || "",
+            app.PublicDomain || siteRole.PublicDomain || "");
+        var btnHtml  = '';
+
+        if (isInstalled && !isCore)
+            btnHtml = '<button class="btn btn-uninstall" onclick="doUninstall(\'' +
+                      escAttr(app.AppId) + '\', this)">Uninstall</button>';
+        else if (!isInstalled && !isComingSoon)
+            btnHtml = '<button class="btn btn-install" onclick="doInstall(\'' +
+                      escAttr(app.AppId) + '\', this)">Install</button>';
+        else if (isComingSoon)
+            btnHtml = '<button class="btn btn-coming-soon" disabled>Coming Soon</button>';
+
+        return '<div class="app-tile">' +
+               '<div class="icon"><img src="' + escAttr(iconSrc) +
+               '" alt="' + escAttr(app.AppName) +
+               '" onerror="iconFallback(this)"/></div>' +
+               '<div class="overlay">' +
+               '<div class="ov-name">'  + escText(app.AppName) + '</div>' +
+               '<div class="ov-desc">'  + escText(app.AppDesc) + '</div>' +
+               btnHtml +
+               '</div>' +
+               '</div>';
+    }
+
+    function doInstall(appId, btn)
+    {
+        btn.disabled = true;
+        btn.textContent = 'Installing\u2026';
+
+        var params = { AppId: appId };
+        if (siteRole.PrvId)
+            params.PrvId = siteRole.PrvId;
+
+        callWui("InstallApp", params, function() {
+            showSuccess(appId + " installed successfully.");
+            getApps();
+            UserAppsEvents.notify();
+        }, function(msg) {
+            showError("Install failed: " + msg);
+            btn.disabled = false;
+            btn.textContent = 'Install';
+        });
+    }
+
+    function doUninstall(appId, btn)
+    {
+        if (!confirm("Uninstall " + appId + "? Your data will be preserved."))
+            return;
+
+        btn.disabled = true;
+        btn.textContent = 'Removing\u2026';
+
+        callWui("UninstallApp", { AppId: appId }, function() {
+            showSuccess(appId + " removed from your account.");
+            getApps();
+            UserAppsEvents.notify();
+        }, function(msg) {
+            showError("Uninstall failed: " + msg);
+            btn.disabled = false;
+            btn.textContent = 'Uninstall';
+        });
+    }
+
+    function doRegisterOffer()
+    {
+        var appId = ($("#provider-appid").val() || "").trim();
+        if (!appId) { showError("Enter an AppId."); return; }
+        callWui("RegisterOffer", { AppId: appId }, function() {
+            showSuccess("Registered offer for " + appId + ".");
+            if ($("#panel-market").hasClass("active"))
+                searchApps();
+        }, function(msg) {
+            showError("RegisterOffer failed: " + msg);
+        });
+    }
+
+    function doWithdrawOffer()
+    {
+        var appId = ($("#provider-appid").val() || "").trim();
+        if (!appId) { showError("Enter an AppId."); return; }
+        callWui("WithdrawOffer", { AppId: appId }, function() {
+            showSuccess("Withdrew offer for " + appId + ".");
+            if ($("#panel-market").hasClass("active"))
+                searchApps();
+        }, function(msg) {
+            showError("WithdrawOffer failed: " + msg);
+        });
+    }
+
+    function showSuccess(msg)
+    {
+        var el = document.getElementById("status-msg");
+        el.className = "success";
+        el.textContent = msg;
+        el.style.display = "block";
+        setTimeout(function() { el.style.display = "none"; }, 4000);
+    }
+
+    function showError(msg)
+    {
+        var el = document.getElementById("status-msg");
+        el.className = "error";
+        el.textContent = msg;
+        el.style.display = "block";
+    }
+
+    function escText(s)
+    {
+        if (s == null) return "";
+        return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function escAttr(s)
+    {
+        if (s == null) return "";
+        return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+    }
+
+    function signOut()
+    {
+        document.cookie = "usrId=; path=/; max-age=0";
+        document.cookie = "token=; path=/; max-age=0";
+        document.cookie = "usrName=; path=/; max-age=0";
+        window.location.href = "/domatar/login/login.html";
+    }
+
+</script>
+
+<button class="signout-btn" onclick="signOut()">Sign out</button>
+
+<div class="page">
+    <h1>App Store</h1>
+    <p class="subtitle">Browse marketplace offers or manage apps on this provider.</p>
+
+    <div id="status-msg"></div>
+
+    <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="market"
+                onclick="showTab('market')">Marketplace</button>
+        <button type="button" class="tab-btn" data-tab="local"
+                onclick="showTab('local')">On this provider</button>
+    </div>
+
+    <div id="panel-market" class="panel active">
+        <div class="search-row">
+            <input id="search-query" type="text" placeholder="Search apps…"
+                   onkeydown="if (event.key==='Enter') searchApps();"/>
+            <button type="button" class="btn btn-secondary" onclick="searchApps()">Search</button>
+        </div>
+        <ul id="listing-list" class="listing-list">
+            <li class="empty-note">Loading&hellip;</li>
+        </ul>
+        <div id="listing-detail" class="listing-detail" style="display:none"></div>
+    </div>
+
+    <div id="panel-local" class="panel">
+        <div class="section-title">Installed Apps</div>
+        <div id="installed-grid" class="app-icon-grid">
+            <div class="empty-note">Loading&hellip;</div>
+        </div>
+
+        <div class="section-title">Available Apps</div>
+        <div id="available-grid" class="app-icon-grid">
+            <div class="empty-note">Loading&hellip;</div>
+        </div>
+    </div>
+
+    <div id="provider-panel" class="provider-panel" style="display:none">
+        <h3>Provider offers <span style="font-weight:400;color:var(--page-muted)">(<span id="provider-prvid"></span>)</span></h3>
+        <div class="provider-row">
+            <input id="provider-appid" type="text" placeholder="AppId (e.g. bookstore)" value="bookstore"/>
+            <button type="button" class="btn btn-primary" onclick="doRegisterOffer()">Register</button>
+            <button type="button" class="btn btn-secondary" onclick="doWithdrawOffer()">Withdraw</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    $(function() {
+        loadSiteRole();
+        searchApps();
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Shopping Cart</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .cart-actions { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+        table.cart-table { width: 100%; border-collapse: collapse; }
+        table.cart-table th,
+        table.cart-table td { text-align: left; padding: 6px 10px; }
+        table.cart-table th { font-size: 0.85em; font-weight: 600;
+                              color: var(--page-muted); border-bottom: 1px solid var(--border); }
+        table.cart-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        .empty-msg { color: var(--page-muted); font-style: italic; }
+        #banner { display: none; padding: 10px 14px; border-radius: var(--radius);
+                  margin-bottom: 14px; font-weight: 600; }
+        #banner.success { background: #d1fae5; color: #065f46; }
+        #banner.error   { background: #fee2e2; color: #991b1b; }
+        .listing-ref { font-size: 0.75em; color: var(--page-muted); word-break: break-all; }
+        #total-row { font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var cartItems = [];
+
+    // ---- Load cart ----------------------------------------------------------
+
+    function getCart()
+    {
+        $('#cart-body').html('<tr><td colspan="7" class="empty-msg">Loading\u2026</td></tr>');
+
+        $.ajax({
+            type: 'POST', url: 'Wui/CartWui',
+            data: 'Action=GetCart',
+            cache: false, timeout: 30000,
+            success: function(json) {
+                var ret = (typeof json === 'string') ? JSON.parse(json) : json;
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#cart-body').html('<tr><td colspan="7">Error loading cart: ' +
+                        esc(ret.ErrorMsg || 'Unknown error') + '</td></tr>');
+                    return;
+                }
+                renderCart(ret);
+            },
+            error: function(jqXHR, textStatus) {
+                var detail = (jqXHR && jqXHR.responseText) ? jqXHR.responseText.substring(0, 200) : textStatus;
+                $('#cart-body').html('<tr><td colspan="7">Error loading cart: ' + esc(textStatus) +
+                    (detail ? ' — ' + esc(detail) : '') + '</td></tr>');
+            }
+        });
+    }
+
+    function renderCart(ret)
+    {
+        cartItems = (ret.Attrs && ret.Attrs.Items) ? ret.Attrs.Items : [];
+
+        if (cartItems.length === 0)
+        {
+            $('#cart-body').html('<tr><td colspan="7" class="empty-msg">Your shopping cart is empty.</td></tr>');
+            $('#buy-selected-btn').prop('disabled', true);
+            updateTotal();
+            return;
+        }
+
+        $('#buy-selected-btn').prop('disabled', false);
+
+        var html = '';
+        for (var i = 0; i < cartItems.length; i++)
+        {
+            var it  = cartItems[i];
+            var lid = esc(it.ListingDomId || '');
+            var unavailable = it.Available === 'false';
+            var offline     = it.Available === 'unknown';
+            var statusTag   = unavailable
+                ? ' <span style="color:#991b1b;font-size:0.8em;">(no longer available)</span>'
+                : offline
+                    ? ' <span style="color:var(--page-muted);font-size:0.8em;">(offline)</span>'
+                    : '';
+
+            html +=
+                '<tr>' +
+                '<td><input type="checkbox" class="item-check" value="' + lid + '"' +
+                    (unavailable ? '' : ' checked') +
+                    ' onchange="updateTotal()"' + (unavailable ? ' disabled' : '') + '/></td>' +
+                '<td>' + esc(it.Title) + statusTag + '</td>' +
+                '<td>' + esc(it.Author)                        + '</td>' +
+                '<td>' + esc(fmtPrice(it.Price))                + '</td>' +
+                '<td>' + esc(it.Condition)                     + '</td>' +
+                '<td>' + esc(it.SellerName || it.SellerActId)  + '</td>' +
+                '<td><button type="button" onclick="removeItem(\'' + lid + '\')">Remove</button></td>' +
+                '</tr>';
+        }
+        $('#cart-body').html(html);
+        updateTotal();
+    }
+
+    // ---- Total --------------------------------------------------------------
+
+    function updateTotal()
+    {
+        var total = 0;
+        var count = 0;
+        $('.item-check:checked').each(function() {
+            var id = $(this).val();
+            for (var i = 0; i < cartItems.length; i++)
+            {
+                if (cartItems[i].ListingDomId === id)
+                {
+                    var p = parseFloat(cartItems[i].Price);
+                    if (!isNaN(p)) total += p;
+                    count++;
+                    break;
+                }
+            }
+        });
+        $('#selected-count').text(count);
+        $('#selected-total').text(total.toFixed(2));
+    }
+
+    // ---- Remove item --------------------------------------------------------
+
+    function removeItem(listingDomId)
+    {
+        $.ajax({
+            type: 'POST', url: 'Wui/CartWui',
+            data: 'Action=RemoveFromCart&ListingDomId=' + encodeURIComponent(listingDomId),
+            cache: false, timeout: 30000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                    showBanner('Remove failed: ' + (ret.ErrorMsg || 'Unknown error'), false);
+                else
+                    getCart();
+            },
+            error: function(jqXHR, textStatus) { showBanner('Error: ' + textStatus, false); }
+        });
+    }
+
+    // ---- Buy selected -------------------------------------------------------
+
+    function buySelected()
+    {
+        var checked = [];
+        $('.item-check:checked').each(function() { checked.push($(this).val()); });
+
+        if (checked.length === 0) { alert('Select at least one item to buy.'); return; }
+
+        var total = 0;
+        var titles = [];
+        for (var i = 0; i < cartItems.length; i++)
+        {
+            if (checked.indexOf(cartItems[i].ListingDomId) >= 0)
+            {
+                titles.push('"' + cartItems[i].Title + '"');
+                var p = parseFloat(cartItems[i].Price);
+                if (!isNaN(p)) total += p;
+            }
+        }
+
+        var confirmMsg = 'Buy ' + titles.join(', ') +
+                         ' for a total of ' + total.toFixed(2) + '?';
+        if (!confirm(confirmMsg)) return;
+
+        $.ajax({
+            type: 'POST', url: 'Wui/CartWui',
+            data: 'Action=BuyCartItems&ListingDomIds=' + encodeURIComponent(checked.join(',')),
+            cache: false, timeout: 30000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    showBanner('Purchase failed: ' + (ret.ErrorMsg || 'Unknown error'), false);
+                }
+                else
+                {
+                    var bought = (ret.Attrs && ret.Attrs.Bought) ? ret.Attrs.Bought : '0';
+                    var errs   = (ret.Attrs && ret.Attrs.Errors) ? ret.Attrs.Errors : '';
+                    if (errs)
+                        showBanner('\u2713 ' + bought + ' book(s) bought. Errors: ' + errs,
+                                   parseInt(bought) > 0);
+                    else
+                        showBanner('\u2713 ' + bought + ' book(s) added to your library!', true);
+                    getCart();
+                }
+            },
+            error: function(jqXHR, textStatus) { showBanner('Error: ' + textStatus, false); }
+        });
+    }
+
+    // ---- Helpers ------------------------------------------------------------
+
+    function showBanner(msg, success)
+    {
+        var el = document.getElementById('banner');
+        el.textContent = msg;
+        el.className = success ? 'success' : 'error';
+        el.style.display = 'block';
+        setTimeout(function() { el.style.display = 'none'; }, 6000);
+    }
+
+    function esc(s)
+    {
+        return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    }
+
+    function fmtPrice(s)
+    {
+        if (s === null || s === undefined || s === '') return '';
+        var n = parseFloat(String(s));
+        return isNaN(n) ? String(s) : n.toFixed(2);
+    }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+    <h1>My Shopping Cart</h1>
+    <p class="subtitle">Books you have saved for purchase.</p>
+
+    <div class="cart-actions">
+        <button type="button"
+                onclick="window.location.href='/domatar/bookstore/bookstore.html'"
+                style="background:var(--surface);color:var(--text);border:1px solid var(--border);"
+                >&larr; My Bookstore</button>
+        <button type="button"
+                onclick="window.location.href='/domatar/bookstore/catalog.html'"
+                style="background:var(--surface);color:var(--text);border:1px solid var(--border);"
+                >Browse Catalog</button>
+        <button type="button" onclick="getCart()">&#8635; Refresh</button>
+        <button type="button" id="buy-selected-btn" onclick="buySelected()" disabled
+                >Buy Selected</button>
+        <span style="margin-left:auto;color:var(--page-muted);font-size:0.9em;">
+            <span id="selected-count">0</span> selected &mdash;
+            Total: <span id="selected-total">0.00</span>
+        </span>
+    </div>
+
+    <div id="banner"></div>
+
+    <div class="card">
+        <table class="cart-table">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="check-all" title="Select all" checked
+                               onclick="$('.item-check').prop('checked',this.checked);updateTotal();"/></th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Price</th>
+                    <th>Condition</th>
+                    <th>Seller</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="cart-body">
+                <tr><td colspan="7" class="empty-msg">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+    getCart();
+</script>
+
+</body>
+</html>

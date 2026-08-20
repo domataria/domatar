@@ -1,0 +1,5 @@
+AppId: chat
+Version: 0.1
+InstallClass: com.chat.install.ChatInstall
+AssetDirectory: chat/assets
+Handler: chat, app, com.chat.objimpl.ChatAppImpl

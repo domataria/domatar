@@ -1,0 +1,275 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
+:root {
+    --bg:           #000000;
+    --page-text:    #ffffff;
+    --page-muted:   #9ca3af;
+    --card:         #ffffff;
+    --surface:      #eef2f7;
+    --input-bg:     #f1f5f9;
+    --border:       #cbd5e1;
+    --text:         #1f2937;
+    --muted:        #6b7280;
+    --primary:      #2563eb;
+    --primary-h:    #1d4ed8;
+    --primary-d:    #1e40af;
+    --danger:       #dc2626;
+    --success:      #15803d;
+    --radius:       10px;
+    --shadow:       0 8px 28px rgba(0, 0, 0, 0.45),
+                    0 1px 2px  rgba(0, 0, 0, 0.30);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--page-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+a         { color: var(--primary); text-decoration: none; }
+a:hover   { text-decoration: underline; }
+a:visited { color: var(--primary-d); }
+
+/* Page shell + cards (used by per-page wrappers) */
+.page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 24px 40px;
+}
+.page h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+}
+.page .subtitle {
+    margin: 0 0 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+}
+
+.card {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-bottom: 18px;
+}
+
+/* Form controls */
+input, textarea, select {
+    width: 100%;
+    max-width: 480px;
+    padding: 9px 11px;
+    font: inherit;
+    color: var(--text);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:focus, textarea:focus, select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+textarea {
+    min-height: 110px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+/* Field labels: a "Label: <input>" row should stack nicely */
+label { display: inline-block; color: var(--muted); font-size: 12px; font-weight: 500; margin-right: 6px; }
+
+button,
+input[type="submit"],
+input[type="button"] {
+    display: inline-block;
+    width: auto;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--primary);
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+}
+button:hover, input[type="submit"]:hover, input[type="button"]:hover { background: var(--primary-h); }
+button:active, input[type="submit"]:active, input[type="button"]:active { background: var(--primary-d); transform: translateY(1px); }
+button[disabled] { opacity: 0.6; cursor: progress; }
+
+/*
+ * The small inline action buttons created by quip.js (Add/Get/Share/
+ * Quote/Rem/Block) are emitted with class="tooltip" and inline styles.
+ * Use !important to override the inline styles so they look like
+ * subtle secondary buttons instead of bright blue primaries.
+ */
+button.tooltip {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    font-weight: 500 !important;
+    height: auto !important;
+    width: auto !important;
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+    margin-right: 4px;
+}
+button.tooltip:hover { background: #e2e8f0 !important; }
+
+/*
+ * Tables -- styles every existing <table>/<th>/<td>, INCLUDING the
+ * ones built by quip.js with inline color/background. !important wins
+ * the cascade against those inline styles so we don't have to edit
+ * quip.js to clean up the markup.
+ */
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--card);
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 12px 0;
+}
+th, td {
+    padding: 10px 12px !important;
+    text-align: left;
+    font-size: 13px !important;
+    color: var(--text) !important;
+    background: var(--card) !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+    vertical-align: top;
+}
+th {
+    background: var(--surface) !important;
+    font-weight: 600;
+    color: var(--muted) !important;
+    text-transform: uppercase;
+    font-size: 11px !important;
+    letter-spacing: 0.04em;
+}
+tr:last-child td { border-bottom: 0 !important; }
+
+blockquote {
+    margin: 6px 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--primary);
+    background: transparent;
+    border-radius: 0 6px 6px 0;
+    white-space: pre-wrap;
+}
+
+/*
+ * The side-menu overlay is rendered into the page from sideMenu.js.
+ * The .overlay rules and .closebtn are unchanged in spirit from the
+ * old domatar.css so the menu keeps working exactly as before.
+ */
+.overlay {
+    height: 100%;
+    width: 0;
+    position: fixed;
+    z-index: 1000;
+    top: 0;
+    left: 0;
+    color: white;
+    background-color: rgba(0,0,0, 0.92);
+    overflow-x: hidden;
+    transition: 0.3s;
+}
+.overlay-content {
+    position: relative;
+    top: 25%;
+    width: 100%;
+    text-align: center;
+    margin-top: 30px;
+}
+.overlay a {
+    padding: 8px;
+    text-decoration: none;
+    font-size: 28px;
+    color: #cfd3da;
+    display: block;
+    transition: 0.2s;
+}
+.overlay a:hover, .overlay a:focus {
+    color: #ffffff;
+    text-decoration: none;
+}
+.overlay .closebtn {
+    color: white;
+    text-decoration: none;
+    font-weight: normal;
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    font-size: 30px;
+    cursor: pointer;
+}
+
+/* Hamburger-button container injected by sideMenu.js */
+#OpenDiv {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px;
+    padding: 4px 10px;
+    margin: 12px;
+    box-shadow: var(--shadow);
+}
+#OpenDiv span { color: var(--text) !important; font-size: 22px !important; }
+
+/* Tooltips -- kept for compatibility with quip.js */
+.tooltip {
+    position: relative;
+    display: inline-block;
+}
+.tooltip .tooltiptext {
+    visibility: hidden;
+    background-color: #111827;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 4px 8px;
+    position: absolute;
+    z-index: 1;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 0.95;
+}
+
+/* Status messages reusable across pages */
+.msg {
+    display: none;
+    margin-top: 12px;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+}
+.msg.error   { display: block; background: #fef2f2; color: var(--danger);  border: 1px solid #fecaca; }
+.msg.success { display: block; background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }

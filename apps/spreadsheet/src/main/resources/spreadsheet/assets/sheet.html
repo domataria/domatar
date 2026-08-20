@@ -1,0 +1,582 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sheet</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        /* ---- Top bar -------------------------------------------------------- */
+        .sheet-topbar   { display: flex; align-items: center; gap: 12px;
+                          margin-bottom: 16px; flex-wrap: wrap; }
+        .sheet-topbar h2 { margin: 0; flex: 1 1 auto; }
+        .sheet-name-display { cursor: pointer; border-bottom: 2px dashed transparent; }
+        .sheet-name-display:hover { border-bottom-color: var(--accent, #4f46e5); }
+        .sheet-name-input   { font-size: 1.3em; font-weight: 700;
+                              border: none; border-bottom: 2px solid var(--accent, #4f46e5);
+                              outline: none; background: transparent;
+                              padding: 0 2px; width: 100%; }
+
+        /* ---- Grid ----------------------------------------------------------- */
+        /* domatar.css sets  border: 0 !important  on all th/td, so every
+           grid rule that touches borders must also use !important.          */
+        .sheet-scroll   { overflow-x: auto; margin-top: 8px; }
+        table.grid      { border-collapse: collapse !important;
+                          border: 2px solid #888 !important;
+                          border-spacing: 0 !important; }
+        table.grid th,
+        table.grid td   { border: 1px solid #aaa !important;
+                          padding: 0 !important; min-width: 90px; }
+        table.grid th   { background: #e8e8ea !important;
+                          font-size: 0.8em !important; font-weight: 600;
+                          color: #555 !important;
+                          text-align: center !important; padding: 3px 6px !important;
+                          white-space: nowrap;
+                          border-color: #888 !important; }
+        table.grid td   { position: relative; }
+        table.grid td.row-hdr { min-width: 36px; text-align: center !important;
+                                font-size: 0.8em !important; font-weight: 600;
+                                color: #555 !important;
+                                background: #e8e8ea !important;
+                                border-color: #888 !important; }
+        table.grid td input.cell-input
+        {
+            width: 100%; height: 100%; min-height: 28px; box-sizing: border-box;
+            border: none; outline: none; background: transparent;
+            padding: 4px 6px; font-size: 0.9em; font-family: inherit;
+        }
+        table.grid td input.cell-input:focus
+        {
+            background: #eef2ff;
+            box-shadow: inset 0 0 0 2px var(--accent, #4f46e5);
+        }
+        table.grid td input.cell-input.error
+        {
+            color: var(--danger, #dc2626);
+        }
+
+        /* ---- Modals --------------------------------------------------------- */
+        .modal-backdrop { display: none; position: fixed; inset: 0;
+                          background: rgba(0,0,0,0.4); z-index: 100; }
+        .modal-backdrop.open { display: flex; align-items: center; justify-content: center; }
+        .modal-box      { background: var(--page-bg); border-radius: var(--radius);
+                          padding: 24px 28px; min-width: 300px; max-width: 440px; width: 100%;
+                          box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+        .modal-box h3   { margin: 0 0 14px; }
+        .modal-field    { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+        .modal-field label { font-size: 0.85em; font-weight: 600; color: var(--page-muted); }
+        .modal-field input { padding: 7px 10px; border: 1px solid var(--border);
+                             border-radius: var(--radius); font-size: 1em;
+                             width: 100%; box-sizing: border-box; }
+        .modal-btns     { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+        .modal-warn     { color: var(--danger, #dc2626); font-size: 0.85em; margin-top: 4px; }
+        .modal-err      { color: var(--danger, #dc2626); font-size: 0.9em; margin-top: 6px; min-height: 1.2em; }
+        #status         { font-size: 0.85em; color: var(--page-muted); min-height: 1.2em;
+                          margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+
+    var sheetId    = null;
+    var sheetMeta  = { Name: '', Cols: 5, Rows: 10, ColLabels: [] };
+    var cellData   = {};    // cellRef -> { Raw, Value }
+    var pendingSet = null;  // cell that just lost focus — keep ref to abort if another fires
+
+    // -------------------------------------------------------------------------
+    // Init
+    // -------------------------------------------------------------------------
+
+    function init()
+    {
+        var params = new URLSearchParams(window.location.search);
+        sheetId    = params.get('SheetId');
+
+        if (!sheetId)
+        {
+            setStatus('Missing SheetId in URL.');
+            return;
+        }
+
+        loadSheet();
+    }
+
+    // -------------------------------------------------------------------------
+    // Load sheet (GetSheet)
+    // -------------------------------------------------------------------------
+
+    function loadSheet()
+    {
+        setStatus('Loading\u2026');
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/SheetWui',
+            data: 'Action=GetSheet&SheetId=' + encodeURIComponent(sheetId),
+            cache: false,
+            timeout: 30000,
+            success: function(json) { applySheet(JSON.parse(json)); },
+            error: function(jqXHR, textStatus) { setStatus('Error loading sheet: ' + textStatus); }
+        });
+    }
+
+    function applySheet(ret)
+    {
+        if (!ret || ret.Error === 'Failure')
+        {
+            setStatus('Error: ' + (ret && ret.ErrorMsg ? ret.ErrorMsg : 'Unknown'));
+            return;
+        }
+
+        var a = ret.Attrs || {};
+
+        sheetMeta.Name      = a.Name      || '';
+        sheetMeta.Cols      = parseInt(a.Cols, 10) || 5;
+        sheetMeta.Rows      = parseInt(a.Rows, 10) || 10;
+        sheetMeta.ColLabels = a.ColLabels ? a.ColLabels.split(',') : [];
+
+        // Rebuild cellData from the flat list.
+        cellData = {};
+        var cells = a.Cells || [];
+        for (var i = 0; i < cells.length; i++)
+        {
+            var c = cells[i];
+            cellData[c.CellRef] = { Raw: c.Raw || '', Value: c.Value || '' };
+        }
+
+        document.title = sheetMeta.Name || 'Sheet';
+        renderTitle();
+        renderGrid();
+        setStatus('');
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse (ParseSheet)
+    // -------------------------------------------------------------------------
+
+    function parseSheet()
+    {
+        setStatus('Parsing\u2026');
+        $('#btn-parse').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SheetWui',
+            data: 'Action=ParseSheet&SheetId=' + encodeURIComponent(sheetId),
+            cache: false,
+            timeout: 60000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure') { setStatus('Parse error: ' + (ret.ErrorMsg || ret.Error)); return; }
+
+                // Update cellData and refresh grid inputs with new Values.
+                var cells = (ret && ret.Attrs && ret.Attrs.Cells) || [];
+                for (var i = 0; i < cells.length; i++)
+                {
+                    var c = cells[i];
+                    if (!cellData[c.CellRef])
+                        cellData[c.CellRef] = { Raw: c.Raw || '', Value: c.Value || '' };
+                    else
+                    {
+                        cellData[c.CellRef].Raw   = c.Raw   || '';
+                        cellData[c.CellRef].Value  = c.Value || '';
+                    }
+                }
+
+                // Refresh all unfocused inputs.
+                $('input.cell-input').each(function()
+                {
+                    if (document.activeElement !== this)
+                    {
+                        var ref  = $(this).data('ref');
+                        var cd   = cellData[ref];
+                        var disp = cd ? cd.Value : '';
+                        $(this).val(disp);
+                        setCellStyle($(this), cd);
+                    }
+                });
+
+                setStatus('Parsed.');
+            },
+            error: function(jqXHR, textStatus) { setStatus('Parse error: ' + textStatus); },
+            complete: function() { $('#btn-parse').prop('disabled', false); }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // SetCell (on blur)
+    // -------------------------------------------------------------------------
+
+    function onCellBlur(input)
+    {
+        var $inp = $(input);
+        var ref  = $inp.data('ref');
+        var raw  = $inp.val();
+
+        // Revert to showing Value while we wait.
+        var cd = cellData[ref] || { Raw: '', Value: '' };
+
+        // If raw hasn't changed, just restore the display value.
+        if (raw === cd.Raw)
+        {
+            $inp.val(cd.Value);
+            setCellStyle($inp, cd);
+            return;
+        }
+
+        // Optimistically update Raw.
+        cd.Raw = raw;
+        cellData[ref] = cd;
+
+        setStatus('Saving\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SheetWui',
+            data: 'Action=SetCell&SheetId=' + encodeURIComponent(sheetId) +
+                  '&CellRef=' + encodeURIComponent(ref) +
+                  '&Raw=' + encodeURIComponent(raw),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure') { setStatus('Error: ' + (ret.ErrorMsg || ret.Error)); return; }
+
+                // Apply all recalculated cells (dependents included).
+                var updated = ret && ret.Attrs && ret.Attrs.UpdatedCells;
+                if (updated && updated.length)
+                {
+                    for (var i = 0; i < updated.length; i++)
+                        applyCellUpdate(updated[i].CellRef, updated[i].Raw, updated[i].Value);
+                }
+                else
+                {
+                    // Fallback: only the saved cell was returned.
+                    var val = (ret && ret.Attrs && ret.Attrs.Value !== undefined)
+                              ? ret.Attrs.Value : '';
+                    applyCellUpdate(ref, raw, val);
+                }
+                setStatus('');
+            },
+            error: function(jqXHR, textStatus) { setStatus('Save error: ' + textStatus); }
+        });
+    }
+
+    function applyCellUpdate(cellRef, newRaw, newVal)
+    {
+        var entry = cellData[cellRef] || { Raw: '', Value: '' };
+        entry.Value = newVal;
+        if (newRaw !== undefined) entry.Raw = newRaw;
+        cellData[cellRef] = entry;
+
+        var $cur = $('input.cell-input[data-ref="' + cellRef + '"]');
+        if ($cur.length && document.activeElement !== $cur[0])
+        {
+            $cur.val(newVal);
+            setCellStyle($cur, entry);
+        }
+    }
+
+    function onCellFocus(input)
+    {
+        var $inp = $(input);
+        var ref  = $inp.data('ref');
+        var cd   = cellData[ref];
+        // Show Raw when focused.
+        $inp.val(cd ? cd.Raw : '');
+        $inp.removeClass('error');
+    }
+
+    // -------------------------------------------------------------------------
+    // Render
+    // -------------------------------------------------------------------------
+
+    var ERROR_TOKENS = ['#CIRC', '#REF', '#N/A', '#VALUE', '#DIV0', '#ERR'];
+
+    function setCellStyle($inp, cd)
+    {
+        var val = cd ? cd.Value : '';
+        var isErr = val && ERROR_TOKENS.indexOf(val) >= 0;
+        $inp.toggleClass('error', !!isErr);
+    }
+
+    function renderTitle()
+    {
+        $('#sheet-name-display').text(sheetMeta.Name);
+        $('#sheet-name-input').val(sheetMeta.Name);
+        document.title = sheetMeta.Name || 'Sheet';
+    }
+
+    function renderGrid()
+    {
+        var cols      = sheetMeta.Cols;
+        var rows      = sheetMeta.Rows;
+        var colLabels = sheetMeta.ColLabels;
+
+        // Ensure colLabels array is long enough.
+        while (colLabels.length < cols)
+            colLabels.push(colLabelFromIndex(colLabels.length + 1));
+
+        // Header row.
+        var header = '<tr><th></th>';
+        for (var c = 0; c < cols; c++)
+            header += '<th>' + escHtml(colLabels[c]) + '</th>';
+        header += '</tr>';
+
+        // Data rows.
+        var bodyHtml = '';
+        for (var r = 1; r <= rows; r++)
+        {
+            bodyHtml += '<tr><td class="row-hdr">' + r + '</td>';
+            for (var c = 0; c < cols; c++)
+            {
+                var ref = colLabels[c] + r;
+                var cd  = cellData[ref] || { Raw: '', Value: '' };
+                var disp = escHtml(cd.Value);
+                var isErr = cd.Value && ERROR_TOKENS.indexOf(cd.Value) >= 0;
+                bodyHtml += '<td><input type="text" class="cell-input' +
+                            (isErr ? ' error' : '') + '"' +
+                            ' data-ref="' + escAttr(ref) + '"' +
+                            ' value="' + escAttr(cd.Value) + '"' +
+                            ' onfocus="onCellFocus(this)"' +
+                            ' onblur="onCellBlur(this)"' +
+                            ' onkeydown="if(event.key===\'Enter\')this.blur()"' +
+                            '/></td>';
+            }
+            bodyHtml += '</tr>';
+        }
+
+        $('#grid-head').html(header);
+        $('#grid-body').html(bodyHtml);
+    }
+
+    // -------------------------------------------------------------------------
+    // Sheet name editing
+    // -------------------------------------------------------------------------
+
+    function startRename()
+    {
+        $('#sheet-name-display').hide();
+        var $inp = $('#sheet-name-input');
+        $inp.show().val(sheetMeta.Name).focus();
+    }
+
+    function commitRename()
+    {
+        var newName = $.trim($('#sheet-name-input').val());
+        if (!newName) newName = sheetMeta.Name; // revert if empty
+
+        $('#sheet-name-input').hide();
+        sheetMeta.Name = newName;
+        $('#sheet-name-display').text(newName).show();
+        document.title = newName;
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SheetWui',
+            data: 'Action=EditSheet&SheetId=' + encodeURIComponent(sheetId) +
+                  '&Name=' + encodeURIComponent(newName),
+            cache: false,
+            timeout: 30000,
+            error: function(jqXHR, textStatus) { setStatus('Rename error: ' + textStatus); }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Resize modal
+    // -------------------------------------------------------------------------
+
+    function openResizeModal()
+    {
+        $('#resize-cols').val(sheetMeta.Cols);
+        $('#resize-rows').val(sheetMeta.Rows);
+        $('#resize-warn').text('');
+        $('#resize-err').text('');
+        $('#resize-modal').addClass('open');
+    }
+
+    function closeResizeModal()
+    {
+        $('#resize-modal').removeClass('open');
+    }
+
+    function onResizeDimChange()
+    {
+        var newCols = parseInt($('#resize-cols').val(), 10);
+        var newRows = parseInt($('#resize-rows').val(), 10);
+        var warn = '';
+        if (!isNaN(newCols) && newCols < sheetMeta.Cols)
+            warn += 'Reducing columns will delete data in the removed columns. ';
+        if (!isNaN(newRows) && newRows < sheetMeta.Rows)
+            warn += 'Reducing rows will delete data in the removed rows.';
+        $('#resize-warn').text(warn);
+    }
+
+    function submitResize()
+    {
+        var newCols = parseInt($('#resize-cols').val(), 10);
+        var newRows = parseInt($('#resize-rows').val(), 10);
+
+        if (isNaN(newCols) || newCols < 1 || newCols > 26)
+            { $('#resize-err').text('Columns must be 1\u201326.'); return; }
+        if (isNaN(newRows) || newRows < 1 || newRows > 500)
+            { $('#resize-err').text('Rows must be 1\u2013500.'); return; }
+
+        $('#btn-resize-ok').prop('disabled', true).text('Saving\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SheetWui',
+            data: 'Action=EditSheet&SheetId=' + encodeURIComponent(sheetId) +
+                  '&Cols=' + newCols + '&Rows=' + newRows,
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#resize-err').text(ret.ErrorMsg || ret.Error);
+                    $('#btn-resize-ok').prop('disabled', false).text('Apply');
+                    return;
+                }
+                closeResizeModal();
+                sheetMeta.Cols = newCols;
+                sheetMeta.Rows = newRows;
+                renderGrid();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#resize-err').text('Error: ' + textStatus);
+                $('#btn-resize-ok').prop('disabled', false).text('Apply');
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilities
+    // -------------------------------------------------------------------------
+
+    function setStatus(msg)
+    {
+        $('#status').text(msg);
+    }
+
+    function escHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escAttr(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function colLabelFromIndex(n)
+    {
+        var s = '';
+        while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+        return s;
+    }
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
+
+    $(document).ready(function()
+    {
+        init();
+
+        // Close resize modal on backdrop click.
+        $('#resize-modal').on('click', function(e) { if (e.target === this) closeResizeModal(); });
+
+        // Commit rename on Enter or blur.
+        $('#sheet-name-input')
+            .on('blur', commitRename)
+            .on('keydown', function(e)
+            {
+                if (e.key === 'Enter')  { this.blur(); }
+                if (e.key === 'Escape') { $(this).val(sheetMeta.Name); this.blur(); }
+            });
+
+        // Resize dim fields — show warning on change.
+        $('#resize-cols, #resize-rows').on('input', onResizeDimChange);
+    });
+
+</script>
+
+<!-- Resize modal -->
+<div class="modal-backdrop" id="resize-modal">
+    <div class="modal-box">
+        <h3>Resize Spreadsheet</h3>
+        <div class="modal-field">
+            <label for="resize-cols">Columns (1–26)</label>
+            <input type="number" id="resize-cols" min="1" max="26"/>
+        </div>
+        <div class="modal-field">
+            <label for="resize-rows">Rows (1–500)</label>
+            <input type="number" id="resize-rows" min="1" max="500"/>
+        </div>
+        <div class="modal-warn" id="resize-warn"></div>
+        <div class="modal-err"  id="resize-err"></div>
+        <div class="modal-btns">
+            <button type="button" onclick="closeResizeModal()">Cancel</button>
+            <button type="button" id="btn-resize-ok" onclick="submitResize()">Apply</button>
+        </div>
+    </div>
+</div>
+
+<!-- Page body -->
+<div class="page">
+    <div class="page-content">
+
+        <!-- Top bar -->
+        <div class="sheet-topbar">
+            <button type="button" onclick="window.location.href='/domatar/spreadsheet/spreadsheet.html'">
+                &larr; My Spreadsheets
+            </button>
+            <h2>
+                <span id="sheet-name-display" class="sheet-name-display"
+                      onclick="startRename()" title="Click to rename"></span>
+                <input type="text" id="sheet-name-input" class="sheet-name-input"
+                       style="display:none" maxlength="120"/>
+            </h2>
+            <button type="button" id="btn-parse" onclick="parseSheet()">&#x27F3; Parse</button>
+            <button type="button" onclick="openResizeModal()">Resize</button>
+        </div>
+
+        <div id="status"></div>
+
+        <!-- Grid -->
+        <div class="sheet-scroll">
+            <table class="grid">
+                <thead id="grid-head"></thead>
+                <tbody id="grid-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

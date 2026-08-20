@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Money role profile: person silhouette with a coin badge -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Money Profile">
+  <!-- Head -->
+  <circle cx="8" cy="5" r="2.5" fill="#ca8a04"/>
+  <!-- Shoulders -->
+  <path d="M2 14 C2 10 5 8.5 8 8.5 C11 8.5 14 10 14 14"
+        fill="#ca8a04" opacity="0.75"/>
+  <!-- Small coin (role indicator) -->
+  <circle cx="13" cy="3" r="2" fill="#ca8a04"/>
+  <text x="13" y="4.5" text-anchor="middle"
+        font-size="3" font-family="sans-serif"
+        fill="#fff" font-weight="bold">$</text>
+</svg>

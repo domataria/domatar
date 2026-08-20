@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shopping cart -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Shopping Cart">
+  <!-- Cart body -->
+  <path d="M1 2h1.5l1.8 7h7.4l1.3-5H4.5" fill="none" stroke="#0d9488" stroke-width="1.4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Wheel left -->
+  <circle cx="6" cy="13.5" r="1" fill="#0d9488"/>
+  <!-- Wheel right -->
+  <circle cx="11" cy="13.5" r="1" fill="#0d9488"/>
+</svg>

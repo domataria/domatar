@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Money bank: classical bank building with columns -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Bank">
+  <!-- Roof / pediment -->
+  <polygon points="1,6 8,1 15,6" fill="#ca8a04"/>
+  <!-- Three columns -->
+  <rect x="2.5" y="6" width="2" height="7" fill="#ca8a04" opacity="0.85"/>
+  <rect x="7"   y="6" width="2" height="7" fill="#ca8a04" opacity="0.85"/>
+  <rect x="11.5" y="6" width="2" height="7" fill="#ca8a04" opacity="0.85"/>
+  <!-- Base -->
+  <rect x="1" y="13" width="14" height="2" rx="0.5" fill="#ca8a04"/>
+</svg>

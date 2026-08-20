@@ -1,0 +1,13 @@
+AppId: bookstore
+Version: 1.0
+InstallClass: com.bookstore.install.BookstoreInstall
+AssetDirectory: bookstore/assets
+Handler: bookstore, app,     com.bookstore.objimpl.BookstoreAppImpl
+Handler: bookstore, catalog, com.bookstore.objimpl.CatalogImpl
+Handler: bookstore, forsale, com.bookstore.objimpl.ForSaleImpl
+Handler: bookstore, library, com.bookstore.objimpl.LibraryImpl
+Handler: bookstore, cart,    com.bookstore.objimpl.CartImpl
+Wui: CatalogWui,             com.bookstore.webui.CatalogWui
+Wui: ForSaleWui,             com.bookstore.webui.ForSaleWui
+Wui: LibraryWui,             com.bookstore.webui.LibraryWui
+Wui: CartWui,                com.bookstore.webui.CartWui

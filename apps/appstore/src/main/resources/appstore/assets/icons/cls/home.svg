@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- App Store home: 2x2 grid of small app tiles -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="App Store Home">
+  <rect x="1"  y="1"  width="6" height="6" rx="1.5" fill="#7c3aed"/>
+  <rect x="9"  y="1"  width="6" height="6" rx="1.5" fill="#7c3aed" opacity=".75"/>
+  <rect x="1"  y="9"  width="6" height="6" rx="1.5" fill="#7c3aed" opacity=".75"/>
+  <rect x="9"  y="9"  width="6" height="6" rx="1.5" fill="#7c3aed" opacity=".5"/>
+</svg>

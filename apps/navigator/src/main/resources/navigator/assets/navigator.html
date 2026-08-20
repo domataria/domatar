@@ -1,0 +1,756 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Navigator</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        /*
+         * Navigator-specific overrides.
+         * The page occupies the full viewport with a toolbar + two-pane
+         * split (Spec-Navigator.txt PART 6.2).  The domatar.css .page
+         * wrapper is intentionally not used here; Navigator needs custom
+         * full-height layout instead of the standard centred card.
+         */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .nav-wrap {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* ---- Toolbar ---- */
+        .nav-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            flex-shrink: 0;
+            min-height: 44px;
+        }
+
+        .nav-toolbar h1 {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-right: 12px;
+        }
+
+        .nav-toolbar button {
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 13px;
+            transition: background .1s;
+        }
+
+        .nav-toolbar button:hover { background: var(--page-bg); }
+
+        .nav-toolbar .spacer { flex: 1; }
+
+        /* ---- Two-pane split ---- */
+        .nav-split {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ---- Tree pane ---- */
+        #tree-pane {
+            width: 300px;
+            min-width: 150px;
+            overflow-y: auto;
+            border-right: 1px solid var(--border);
+            padding: 6px 0;
+            flex-shrink: 0;
+            background: #000000;
+            --text:       #e2e8f0;
+            --page-muted: #94a3b8;
+        }
+
+        .tree-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .tree-list .tree-list {
+            padding-left: 18px;
+            display: none;
+        }
+
+        .tree-list .tree-list.open {
+            display: block;
+        }
+
+        .tree-node {
+            margin: 0;
+            padding: 0;
+        }
+
+        .tree-row {
+            display: flex;
+            align-items: center;
+            padding: 3px 6px;
+            cursor: default;
+            border-radius: 3px;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .tree-row:hover { background: var(--accent-hover, rgba(0,0,0,.05)); }
+
+        .tree-row.selected { background: #2563eb; color: #ffffff; }
+
+        .tree-expander {
+            display: inline-block;
+            width: 14px;
+            text-align: center;
+            font-size: 10px;
+            cursor: pointer;
+            flex-shrink: 0;
+            color: var(--page-muted);
+            font-family: monospace;
+            line-height: 1;
+        }
+
+        .tree-expander:hover { color: var(--text); }
+
+        .tree-icon {
+            width: 14px;
+            height: 14px;
+            margin: 0 4px 0 2px;
+            flex-shrink: 0;
+            vertical-align: middle;
+            opacity: .85;
+        }
+
+        .tree-label {
+            font-size: 13px;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tree-stub {
+            font-size: 12px;
+            color: var(--page-muted);
+            font-style: italic;
+        }
+
+        .tree-stub-err { color: #c0392b; }
+
+        /* ---- Detail pane ---- */
+        #detail-pane {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+            background: #000000;
+            --text:       #e2e8f0;
+            --page-muted: #94a3b8;
+        }
+
+        .detail-empty {
+            color: var(--page-muted);
+            font-style: italic;
+            margin-top: 8px;
+        }
+
+        .detail-section {
+            margin-bottom: 12px;
+        }
+
+        .detail-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .04em;
+            color: var(--page-muted);
+            margin-bottom: 2px;
+        }
+
+        .detail-sub {
+            margin-left: 12px;
+        }
+
+        .detail-value {
+            font-size: 14px;
+            color: var(--text);
+            word-break: break-all;
+        }
+
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../asset-paths.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    /* ----------------------------------------------------------------
+     * State
+     * ---------------------------------------------------------------- */
+
+    var selectedLi = null;   // the currently selected <li> element
+    var rootLi     = null;   // the root <li> (never removed)
+
+    /* ----------------------------------------------------------------
+     * Boot
+     * ---------------------------------------------------------------- */
+
+    function init()
+    {
+        var usrId = getCookie("usrId") || "";
+
+        // Do NOT compute the root DomId from the cookie.
+        // The cookie stores the usrId (e.g. "david@quippin") which can
+        // differ from the actId (e.g. "dave@quippin") embedded in DomIds.
+        // NavWui defaults to the caller's real navigator root when DomId
+        // is absent, so we leave it empty here and fill it in from the
+        // Open response (onOpenSuccess updates d.domId from attrs.DomId).
+        rootLi = buildLi("", null, usrId || "Root", "navigator", "root", null, null);
+
+        var $ul = $('<ul class="tree-list open"></ul>');
+
+        $ul.append(rootLi);
+        $("#tree-pane").append($ul);
+
+        // Immediately open the root - spec PART 13 step 2.
+        openNode($(rootLi), true);
+    }
+
+    /* ----------------------------------------------------------------
+     * Build a tree node <li>
+     *
+     * domIdStr   : dotted DomId string
+     * lnk        : the parent lnk object (null for root)
+     * label      : display text (best-effort; updated after Open)
+     * clsAppId / clsId : class hint for the icon
+     * assetOrigin : optional {scheme}://{domain} from ancestor Open
+     * ---------------------------------------------------------------- */
+
+    function buildLi(domIdStr, lnk, label, clsAppId, clsId, assetOrigin, assetContextPath)
+    {
+        var $li  = $('<li class="tree-node"></li>');
+        var $row = $('<div class="tree-row"></div>');
+
+        var $exp = $('<span class="tree-expander">+</span>');
+
+        $exp.on("click", function(e) {
+            e.stopPropagation();
+            toggleExpand($li);
+        });
+
+        var $icon = $('<img class="tree-icon" alt="">')
+            .attr("src", classIconUrl(clsAppId, clsId, assetOrigin, assetContextPath))
+            .on("error", function() { iconFallback(this); });
+
+        var $label = $('<span class="tree-label"></span>').text(label || domIdStr);
+
+        $row.on("click", function(e) { selectNode($li); });
+
+        $row.append($exp).append($icon).append($label);
+
+        var $childUl = $('<ul class="tree-list"></ul>');
+
+        $li.append($row).append($childUl);
+
+        $li.data("sov", {
+            domId            : domIdStr,
+            cls              : { appId: clsAppId, clsId: clsId },
+            assetOrigin      : assetOrigin || null,
+            assetContextPath : (assetContextPath !== undefined && assetContextPath !== null)
+                ? assetContextPath : null,
+            cache            : null   // null = not yet fetched
+        });
+
+        return $li[0];
+    }
+
+    /* ----------------------------------------------------------------
+     * Expand / collapse
+     * ---------------------------------------------------------------- */
+
+    function toggleExpand($li)
+    {
+        var d = $li.data("sov");
+
+        if (!d) return;
+
+        var isOpen = $li.children("ul.tree-list").hasClass("open");
+
+        if (d.cache !== null)
+        {
+            // Already fetched: just flip visibility (no network).
+            if (isOpen)
+                collapse($li);
+            else
+                expand($li);
+        }
+        else
+        {
+            // First open: fetch, cache, then expand.
+            openNode($li, true);
+        }
+    }
+
+    function expand($li)
+    {
+        $li.children("ul.tree-list").addClass("open");
+        $li.children(".tree-row").find(".tree-expander").first().text("-");
+    }
+
+    function collapse($li)
+    {
+        $li.children("ul.tree-list").removeClass("open");
+        $li.children(".tree-row").find(".tree-expander").first().text("+");
+    }
+
+    /* ----------------------------------------------------------------
+     * Select a node (update right pane)
+     * ---------------------------------------------------------------- */
+
+    function selectNode($li)
+    {
+        if (selectedLi)
+            $(selectedLi).children(".tree-row").removeClass("selected");
+
+        selectedLi = $li.is ? $li[0] : $li;
+
+        $(selectedLi).children(".tree-row").addClass("selected");
+
+        var d = $(selectedLi).data("sov");
+
+        if (d && d.cache !== null)
+            renderDetail(d.cache);
+        else
+            openNode($(selectedLi), false);
+    }
+
+    /* ----------------------------------------------------------------
+     * AJAX Open call (Spec-Navigator.txt PART 3.2 / PART 7)
+     *
+     * doExpand  true  -> expand and show children after success
+     *           false -> update detail pane only, no expand
+     * ---------------------------------------------------------------- */
+
+    function openNode($li, doExpand)
+    {
+        var d = $li.data("sov");
+
+        if (!d) return;
+
+        // Omit DomId when empty: NavWui defaults to navigator~<actId>...root.
+        var dataStr = d.domId
+            ? "Action=GetLnks&DomId=" + encodeURIComponent(d.domId)
+            : "Action=GetLnks";
+
+        $.ajax({
+            type       : "POST",
+            cache      : false,
+            url        : "Wui/NavWui",
+            crossDomain: false,
+            data       : dataStr,
+            timeout    : 30000,
+            success    : function(json) {
+                var resp = null;
+
+                try { resp = JSON.parse(json); } catch (e) {}
+
+                if (resp)
+                    onOpenSuccess($li, resp, doExpand);
+                else
+                    onOpenError($li, "Parse error", doExpand);
+            },
+            error : function(jqXHR, textStatus, errorThrown) {
+                onOpenError($li, textStatus + ": " + errorThrown, doExpand);
+            }
+        });
+    }
+
+    function onOpenSuccess($li, resp, doExpand)
+    {
+        // Server-side error (Spec-Navigator.txt PART 6.4)
+        if (resp && resp.Error === "Failure")
+        {
+            var em = resp.ErrorMsg || "error";
+
+            if (em.indexOf("Not authorized") >= 0 || em.indexOf("Not Logged in") >= 0)
+            {
+                renderAuthStub($li, em, doExpand);
+            }
+            else
+            {
+                onOpenError($li, em, doExpand);
+            }
+
+            return;
+        }
+
+        var attrs = resp && resp.Attrs;
+
+        if (!attrs)
+        {
+            onOpenError($li, "Empty response", doExpand);
+            return;
+        }
+
+        // Cache the Open response on the node.
+        var d = $li.data("sov");
+
+        d.cache = attrs;
+        d.assetOrigin = attrs.AssetOrigin || d.assetOrigin || null;
+        if (attrs.AssetContextPath !== undefined && attrs.AssetContextPath !== null)
+            d.assetContextPath = attrs.AssetContextPath;
+        else if (d.assetContextPath === undefined)
+            d.assetContextPath = null;
+
+        // Authoritative DomId comes from the server response.  For the
+        // root node this fills in the empty placeholder we set at init()
+        // so that Refresh node and child opens use the correct DomId.
+        if (attrs.DomId && !d.domId)
+            d.domId = attrs.DomId;
+
+        $li.data("sov", d);
+
+        // Update the node's label and icon from the authoritative obj data.
+        var objName  = attrs.ObjName  || d.domId;
+        var clsAppId = attrs.ClsAppId || (d.cls && d.cls.appId) || "";
+        var clsId    = attrs.ClsId    || (d.cls && d.cls.clsId) || "";
+
+        $li.children(".tree-row").find(".tree-label").text(objName);
+        $li.children(".tree-row").find(".tree-icon")
+            .off("error")
+            .on("error", function() { iconFallback(this); })
+            .attr("src", classIconUrl(clsAppId, clsId, d.assetOrigin, d.assetContextPath));
+
+        // Render children from the lnks list.
+        var lnks     = attrs.Lnks || [];
+        var $childUl = $li.children("ul.tree-list");
+
+        $childUl.empty();
+
+        if (lnks.length === 0)
+        {
+            // Leaf: remove the expander glyph (Spec PART 4.4).
+            $li.children(".tree-row").find(".tree-expander").text("\u00a0");
+        }
+        else
+        {
+            for (var i = 0; i < lnks.length; i++)
+            {
+                var lnk    = lnks[i];
+                var childLi = buildLi(
+                    lnk.DomId,
+                    lnk,
+                    lnk.ObjName || lnk.DomId,
+                    lnk.ClsAppId,
+                    lnk.ClsId,
+                    d.assetOrigin,
+                    d.assetContextPath
+                );
+                $childUl.append(childLi);
+            }
+
+            if (doExpand)
+                expand($li);
+        }
+
+        // Select root on first load; otherwise refresh the detail pane
+        // if this node is already selected.
+        if (!selectedLi)
+            selectNode($li);
+        else if (selectedLi === ($li.is ? $li[0] : $li))
+            renderDetail(attrs);
+    }
+
+    function onOpenError($li, errMsg, doExpand)
+    {
+        var $childUl = $li.children("ul.tree-list");
+
+        $childUl.empty();
+
+        var $stub = buildStubLi("(error: " + errMsg + ")", "tree-stub-err");
+
+        $childUl.append($stub);
+
+        if (doExpand)
+            expand($li);
+
+        // Transport errors are NOT cached (Spec PART 6.4) so the next
+        // '+' click re-fetches.
+    }
+
+    function renderAuthStub($li, errMsg, doExpand)
+    {
+        var d        = $li.data("sov");
+        var $childUl = $li.children("ul.tree-list");
+
+        $childUl.empty();
+
+        var $stub = buildStubLi("(not authorized)", "");
+
+        $stub.find(".tree-stub").attr("title", (d && d.domId) || "");
+        $childUl.append($stub);
+
+        // Cache the negative result so re-clicking does not re-fetch.
+        if (d)
+        {
+            d.cache = { Lnks: [], _stub: true };
+            $li.data("sov", d);
+        }
+
+        if (doExpand)
+            expand($li);
+    }
+
+    function buildStubLi(text, extraClass)
+    {
+        var $li   = $('<li class="tree-node"></li>');
+        var $row  = $('<div class="tree-row"></div>');
+        var $span = $('<span class="tree-stub ' + extraClass + '"></span>').text(text);
+
+        $row.append($('<span class="tree-expander">\u00a0</span>'));
+        $row.append($span);
+        $li.append($row);
+
+        return $li;
+    }
+
+    /* ----------------------------------------------------------------
+     * Detail pane (right pane)  Spec-Navigator.txt PART 6.6
+     * ---------------------------------------------------------------- */
+
+    function renderDetail(attrs)
+    {
+        if (!attrs)
+        {
+            $("#detail-pane").html('<p class="detail-empty">Select a node to see details.</p>');
+            return;
+        }
+
+        var html = "";
+
+        html += df("DomId", attrs.DomId);
+
+        if (attrs.DomId)
+        {
+            var parts = attrs.DomId.split(".");
+            if (parts.length === 4)
+            {
+                html += dfSub("HstId", parts[0]);
+                html += dfSub("AppId", parts[1]);
+                html += dfSub("ActId", parts[2]);
+                html += dfSub("ObjId", parts[3]);
+            }
+        }
+
+        html += df("PrvId",    attrs.PrvId);
+        html += df("ClsAppId", attrs.ClsAppId);
+        html += df("ClsId",    attrs.ClsId);
+        html += df("ObjName",  attrs.ObjName);
+        html += df("ObjDesc",  attrs.ObjDesc);
+
+        var attrsMap = attrs.Attrs;
+
+        if (attrsMap && typeof attrsMap === "object")
+        {
+            var keys = Object.keys(attrsMap);
+
+            if (keys.length > 0)
+            {
+                html += '<div class="detail-section"><div class="detail-label">Attrs</div></div>';
+
+                for (var i = 0; i < keys.length; i++)
+                {
+                    var k = keys[i];
+                    var v = attrsMap[k];
+                    var vStr = (v !== null && typeof v === "object")
+                               ? JSON.stringify(v, null, 2)
+                               : (v != null ? String(v) : "");
+                    html += '<div class="detail-section detail-sub">' +
+                            '<div class="detail-label">' + esc(k) + '</div>' +
+                            '<div class="detail-value">' + esc(vStr) + '</div>' +
+                            '</div>';
+                }
+            }
+        }
+
+        if (!html)
+            html = '<p class="detail-empty">No details available.</p>';
+
+        $("#detail-pane").html(html);
+    }
+
+    function df(label, value)
+    {
+        if (!value && value !== 0) return "";
+
+        return '<div class="detail-section">' +
+               '<div class="detail-label">' + esc(label) + '</div>' +
+               '<div class="detail-value">' + esc(String(value)) + '</div>' +
+               '</div>';
+    }
+
+    function dfSub(label, value)
+    {
+        if (!value && value !== 0) return "";
+
+        return '<div class="detail-section detail-sub">' +
+               '<div class="detail-label">' + esc(label) + '</div>' +
+               '<div class="detail-value">' + esc(String(value)) + '</div>' +
+               '</div>';
+    }
+
+    /* ----------------------------------------------------------------
+     * Toolbar actions  (Spec-Navigator.txt PART 6.5)
+     * ---------------------------------------------------------------- */
+
+    function refreshRoot()
+    {
+        if (!rootLi) return;
+
+        var $root = $(rootLi);
+
+        clearSubtree($root);
+        selectedLi = null;
+        openNode($root, true);
+    }
+
+    function refreshNode()
+    {
+        if (!selectedLi)
+        {
+            alert("Select a node first.");
+            return;
+        }
+
+        var $sel = $(selectedLi);
+
+        clearSubtree($sel);
+        openNode($sel, true);
+    }
+
+    function signOut()
+    {
+        document.cookie = "usrId=; path=/; max-age=0";
+        document.cookie = "token=; path=/; max-age=0";
+        window.location.href = "/domatar/login/login.html";
+    }
+
+    /**
+     * Clear the cached Open response on $li and recursively on all its
+     * rendered descendants.  Removes child rows and resets the expander.
+     */
+    function clearSubtree($li)
+    {
+        var d = $li.data("sov");
+
+        // Reset cache but keep the domId so subsequent opens still route
+        // correctly. For the root, also clear the domId back to "" so
+        // NavWui re-derives it from the verified session (in case the
+        // session user changed, though that is unusual in v1).
+        if (d) { d.cache = null; $li.data("sov", d); }
+
+        $li.children("ul.tree-list").children(".tree-node").each(function() {
+            clearSubtree($(this));
+        });
+
+        $li.children("ul.tree-list").empty().removeClass("open");
+        $li.children(".tree-row").find(".tree-expander").text("+");
+    }
+
+    /* ----------------------------------------------------------------
+     * Icon resolution  (AssetPaths; Spec-Icons.txt PART 7.3)
+     * ---------------------------------------------------------------- */
+
+    function classIconUrl(clsAppId, clsId, assetOrigin, assetContextPath)
+    {
+        var ctx = (assetContextPath === undefined || assetContextPath === null)
+            ? null : assetContextPath;
+
+        return new AssetPaths(assetOrigin || "", ctx).cls(clsAppId, clsId);
+    }
+
+    function iconFallback(img)
+    {
+        var assets = new AssetPaths("", null);
+
+        if (assets.isDefaultGlyph(img.src))
+            return;
+
+        img.onerror = null;
+        img.src = assets.defaultGlyph();
+    }
+
+    /* ----------------------------------------------------------------
+     * Utilities
+     * ---------------------------------------------------------------- */
+
+    function esc(s)
+    {
+        if (s == null) return "";
+
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+</script>
+
+<!--
+  No Quippin side menu - Navigator is a standalone Domatar app,
+  not a Quippin page (Spec-Navigator.txt PART 6.1).
+-->
+
+<div class="nav-wrap">
+
+  <div class="nav-toolbar">
+    <h1>Navigator</h1>
+    <button onclick="refreshRoot()">Refresh root</button>
+    <button onclick="refreshNode()">Refresh node</button>
+    <span class="spacer"></span>
+    <button onclick="signOut()">Sign out</button>
+  </div>
+
+  <div class="nav-split">
+
+    <div id="tree-pane"></div>
+
+    <div id="detail-pane">
+      <p class="detail-empty">Loading&hellip;</p>
+    </div>
+
+  </div>
+
+</div>
+
+<script type="text/javascript">
+    $(init);
+</script>
+
+</body>
+</html>

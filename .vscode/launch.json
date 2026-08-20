@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Attach to Tomcat 1 (port 15005)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 15005,
+      "projectName": "quippin"
+    },
+    {
+      "type": "java",
+      "name": "Attach to Tomcat 2 (port 15006)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 15006,
+      "projectName": "quippin"
+    }
+  ]
+}

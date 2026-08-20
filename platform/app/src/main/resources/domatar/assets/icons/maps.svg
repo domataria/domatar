@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"
+     width="64" height="64" role="img" aria-label="Maps">
+  <defs>
+    <linearGradient id="mapbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" ry="14" fill="url(#mapbg)"/>
+  <!-- Map pin teardrop -->
+  <ellipse cx="32" cy="24" rx="11" ry="11" fill="#ffffff"/>
+  <!-- Pin hole -->
+  <circle cx="32" cy="24" r="4.5" fill="#16a34a"/>
+  <!-- Pin tail -->
+  <path d="M26 31 Q32 48 32 48 Q32 48 38 31 Z" fill="#ffffff"/>
+</svg>

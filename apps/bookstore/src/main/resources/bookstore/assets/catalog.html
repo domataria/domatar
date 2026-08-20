@@ -1,0 +1,238 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Book Catalog</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .cat-actions { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+        table.cat-table { width: 100%; border-collapse: collapse; }
+        table.cat-table th,
+        table.cat-table td { text-align: left; padding: 6px 10px; }
+        table.cat-table th { font-size: 0.85em; font-weight: 600;
+                             color: var(--page-muted); border-bottom: 1px solid var(--border); }
+        table.cat-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        .empty-msg { color: var(--page-muted); font-style: italic; }
+        #banner { display: none; padding: 10px 14px; background: #d1fae5;
+                  color: #065f46; border-radius: var(--radius); margin-bottom: 14px;
+                  font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var myActId = null;     // filled from GetCatalog response
+    var catalogItems = [];  // indexed by row so onclick can look up safely
+
+    function getCatalog()
+    {
+        $('#cat-body').html('<tr><td colspan="6" class="empty-msg">Loading\u2026</td></tr>');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/CatalogWui',
+            data: 'Action=GetCatalog',
+            cache: false,
+            timeout: 10000000,
+            success: function(json) { renderCatalog(JSON.parse(json)); },
+            error: function(jqXHR, textStatus, errorThrown) {
+                $('#cat-body').html('<tr><td colspan="6">Error loading catalog: ' + textStatus + '</td></tr>');
+            }
+        });
+    }
+
+    function renderCatalog(ret)
+    {
+        if (ret && ret.Attrs)
+        {
+            myActId = ret.Attrs.MyActId || null;
+        }
+
+        var listings = (ret.Attrs && ret.Attrs.Listings) ? ret.Attrs.Listings : [];
+
+        // Filter out listings with Available==="unknown" only if they have no title
+        var available = listings.filter(function(l) { return l.Available !== 'false'; });
+
+        if (available.length === 0)
+        {
+            $('#cat-body').html('<tr><td colspan="6" class="empty-msg">No books available right now.</td></tr>');
+            return;
+        }
+
+        catalogItems = available; // store for indexed onclick lookup
+
+        var html = '';
+        for (var i = 0; i < available.length; i++)
+        {
+            var l = available[i];
+            var isOwn = myActId && l.SellerActId === myActId;
+
+            var buyCell = isOwn
+                ? '<span style="color:var(--page-muted);font-size:0.85em;">(yours)</span>'
+                : '<button type="button" onclick="buyBook(' + i + ')">Buy</button>' +
+                  '&nbsp;<button type="button" onclick="addToCart(' + i + ')"' +
+                  ' style="background:var(--surface);color:var(--text);border:1px solid var(--border);"' +
+                  '>+ Cart</button>';
+
+            var availTag = l.Available === 'unknown'
+                ? ' <span style="color:var(--page-muted);font-size:0.8em;">(offline)</span>'
+                : '';
+
+            html +=
+                '<tr>' +
+                '<td>' + esc(l.Title)      + availTag + '</td>' +
+                '<td>' + esc(l.Author)     + '</td>' +
+                '<td>' + esc(l.Price)      + '</td>' +
+                '<td>' + esc(l.Condition)  + '</td>' +
+                '<td>' + esc(l.SellerName || l.SellerActId) + '</td>' +
+                '<td>' + buyCell           + '</td>' +
+                '</tr>';
+        }
+        $('#cat-body').html(html);
+    }
+
+    function buyBook(idx)
+    {
+        var listing = catalogItems[idx];
+        if (!listing) { alert('Listing not found'); return; }
+
+        var title  = listing.Title  || '(unknown)';
+        var price  = listing.Price  || '';
+        var seller = listing.SellerName || listing.SellerActId || '';
+
+        if (!confirm('Buy "' + title + '" for ' + (price ? '$' + price : 'listed price') + ' from ' + seller + '?'))
+            return;
+
+        var data = 'Action=BuyBook' +
+                   '&ListingDomId='  + encodeURIComponent(listing.DomId       || '') +
+                   '&Title='         + encodeURIComponent(listing.Title        || '') +
+                   '&Author='        + encodeURIComponent(listing.Author       || '') +
+                   '&ISBN='          + encodeURIComponent(listing.ISBN         || '') +
+                   '&Price='         + encodeURIComponent(listing.Price        || '') +
+                   '&Condition='     + encodeURIComponent(listing.Condition    || '') +
+                   '&Description='   + encodeURIComponent(listing.Description  || '') +
+                   '&SellerActId='   + encodeURIComponent(listing.SellerActId  || '') +
+                   '&SellerName='    + encodeURIComponent(listing.SellerName   || '');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/LibraryWui',
+            data: data,
+            cache: false,
+            timeout: 10000000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    alert('Purchase failed: ' + (ret.ErrorMsg || 'Unknown error'));
+                }
+                else
+                {
+                    showBanner('\u2713 "' + title + '" added to your library!');
+                    getCatalog();
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert('Error: ' + textStatus + ' — ' + errorThrown);
+            }
+        });
+    }
+
+    function addToCart(idx)
+    {
+        var listing = catalogItems[idx];
+        if (!listing) { alert('Listing not found'); return; }
+
+        var data = 'Action=AddToCart' +
+                   '&ListingDomId='  + encodeURIComponent(listing.DomId       || '') +
+                   '&Title='         + encodeURIComponent(listing.Title        || '') +
+                   '&Author='        + encodeURIComponent(listing.Author       || '') +
+                   '&ISBN='          + encodeURIComponent(listing.ISBN         || '') +
+                   '&Price='         + encodeURIComponent(listing.Price        || '') +
+                   '&Condition='     + encodeURIComponent(listing.Condition    || '') +
+                   '&Description='   + encodeURIComponent(listing.Description  || '') +
+                   '&SellerActId='   + encodeURIComponent(listing.SellerActId  || '') +
+                   '&SellerName='    + encodeURIComponent(listing.SellerName   || '');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/CartWui',
+            data: data,
+            cache: false,
+            timeout: 10000000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                    showBanner('\u26a0 ' + (ret.ErrorMsg || 'Could not add to cart'));
+                else
+                    showBanner('\u2713 "' + (listing.Title || '') + '" added to your cart!');
+            },
+            error: function(jqXHR, textStatus) {
+                alert('Error: ' + textStatus);
+            }
+        });
+    }
+
+    function showBanner(msg)
+    {
+        var el = document.getElementById('banner');
+        el.textContent = msg;
+        el.style.display = 'block';
+        setTimeout(function() { el.style.display = 'none'; }, 5000);
+    }
+
+    function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+    <h1>Book Catalog</h1>
+    <p class="subtitle">Books available for purchase from all Domatar users.</p>
+
+    <div class="cat-actions">
+        <button type="button" onclick="window.location.href='/domatar/bookstore/bookstore.html'"
+                style="background:var(--surface);color:var(--text);border:1px solid var(--border);">&larr; My Bookstore</button>
+        <button type="button" onclick="getCatalog()">&#8635; Refresh</button>
+    </div>
+
+    <div id="banner"></div>
+
+    <div class="card">
+        <table class="cat-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Price</th>
+                    <th>Condition</th>
+                    <th>Seller</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="cat-body">
+                <tr><td colspan="6" class="empty-msg">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+    getCatalog();
+</script>
+
+</body>
+</html>

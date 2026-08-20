@@ -1,0 +1,545 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html><head>
+<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+
+<title>Network</title>
+
+	
+<script type="text/javascript" src="jquery-1.12.0.min.js"></script>
+<script type="text/javascript" src="jquery-migrate-1.2.1.min.js"></script>
+
+
+
+<style type="text/css">
+A:link { COLOR: black; TEXT-DECORATION: none; font-weight: normal }
+A:visited { COLOR: black; TEXT-DECORATION: none; font-weight: normal }
+A:active { COLOR: black; TEXT-DECORATION: none }
+A:hover { COLOR: blue; TEXT-DECORATION: none; font-weight: none }
+
+div, textarea { 
+	-webkit-box-sizing: border-box; /* Safari/Chrome, other WebKit */
+	-moz-box-sizing: border-box;    /* Firefox, other Gecko */
+	box-sizing: border-box;         /* IE 8+ */
+	font-size:10pt;
+	font-family: Arial, Helvetica, sans-serif
+}
+
+body, html {
+  height: 95%;
+  width: 99.2%;
+}
+
+body {
+  -moz-box-align: stretch;
+  -webkit-box-align: stretch;
+  -ms-flex-align: stretch;
+  -webkit-align-items: stretch;
+  align-items: stretch;
+}
+
+button.accordion {
+    background-color: #eee;
+    color: #444;
+    cursor: pointer;
+    padding: 18px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 15px;
+    transition: 0.4s;
+}
+
+button.accordion.active, button.accordion:hover {
+    background-color: #ddd; 
+}
+
+div.panel {
+    padding: 0 18px;
+    display: none;
+    background-color: #ddd;
+}
+
+</style>
+</head>
+<body>
+
+<script type="text/javascript">
+  var beepAudio = new Audio("beep.mp3"); 
+
+  var isMuted = false;
+
+  function beep() 
+  {
+    if (!isMuted)
+      beepAudio.play();
+  }
+  
+  function mute() 
+  {
+    isMuted = true;
+	
+	setChatTitle(chatFriendName);
+  }
+
+  function unMute() 
+  {
+    isMuted = false;
+	
+	setChatTitle(chatFriendName);
+  }
+  
+  function setChatTitle(name)
+  {
+	if (name == "")
+	{
+		$("#AllChat").html("");
+	
+		if (isMuted)
+			$("#ChatTitleDiv").html('(<a href="#" onclick="unMute()"><u>Unmute</u></a>)');
+		else
+			$("#ChatTitleDiv").html('(<a href="#" onclick="mute()"><u>Mute</u></a>)');
+		
+		$("#ChatAccordionDiv").hide();
+	}
+	else
+	{
+		if (isMuted)
+		{
+			$("#ChatTitleDiv").html('(<a href="#" onclick="unMute()"><u>Unmute</u></a>)');
+		  $("#ChatButton").html('Chat with ' + name);
+		}
+		else
+		{
+			$("#ChatTitleDiv").html('(<a href="#" onclick="mute()"><u>Mute</u></a>)');
+		  $("#ChatButton").html('Chat with ' + name);
+	  }
+		
+	  $("#ChatAccordionDiv").show();
+	}
+  }
+
+  function getCookie (name) 
+  {
+    var prefix = name + '=';
+    var c = document.cookie;
+    var nullstring = '';
+    var cookieStartIndex = c.indexOf(" " + prefix);
+	
+    if (cookieStartIndex == -1)
+	{
+      if(c.indexOf(prefix) == 0)
+	    cookieStartIndex = 0;
+	  else
+        return nullstring;
+	}
+	else
+	  cookieStartIndex++;
+	  
+    var cookieEndIndex = c.indexOf(";", cookieStartIndex + prefix.length);
+	
+    if (cookieEndIndex == -1)
+      cookieEndIndex = c.length;
+	  
+	var cookie = c.substring(cookieStartIndex + prefix.length, cookieEndIndex );
+	
+	if (cookie.charAt(0) == '"' && cookie.charAt(cookie.length - 1) == '"')
+      cookie = cookie.substring(1, cookie.length - 1);	
+		
+    return unescape(cookie);
+  };
+    
+  function getParam(name)
+  {
+    name = name.replace(/[\[]/,"\\\[").replace(/[\]]/,"\\\]");
+    var regexS = "[\\?&]" + name + "=([^&#]*)";
+    var regex = new RegExp(regexS);
+    var results = regex.exec(window.location.href);
+	
+    // alert("name: " + name + " href: " + window.location.href + " results: " + results); 
+	
+    if(results == null)    
+	  return "";  
+	  
+	return results[1];
+  }  
+
+  $(getAll());
+  
+  function getAll()
+  {
+    getNewsFeed("", "All", "All");
+	getFriends();
+  }
+  
+  $(setChatTimer());
+  
+  function setChatTimer()
+  {
+    setInterval(function(){getChat();}, 3000);  
+    setInterval(function(){getFriends();}, 12000);  
+  }  
+  
+  chatFriendName = "";
+  chatHostId = "";
+  chatAcctId = "";
+  
+  blogId = getParam("blogId");
+  blogHostId = getParam("hostId");
+  
+  function sendChat()
+  {
+    // alert("chatFriendName = " + chatFriendName + " chatHostId = " + chatHostId + " chatAcctId = " + chatAcctId);
+	
+    if (chatFriendName == "" || chatHostId == "" || chatAcctId == "")
+	  return;
+	  
+	if (chatHostId == "All" || chatAcctId == "All")
+	  return;	
+	  
+	var msg = $("textarea#ChatTextarea").val();  
+	
+	var myName = getCookie(blogHostId + "#AuthorName");
+	  
+    var dataString = 'blogHostId=' + blogHostId + '&blogId=' + blogId + '&hostId=' + chatHostId + '&acctId=' + chatAcctId + '&friendName=' + encodeURIComponent(chatFriendName) + '&myName=' + encodeURIComponent(myName) + 
+	                 '&msg=' + encodeURIComponent(msg) + '&Action=SendChat';  	
+	
+	// alert("dataString = " + dataString);
+	
+	$.ajax({  
+             type: "POST",
+             cache: false,		 
+             url: "sov/~..SocialChat", 
+			 crossDomain: true,
+			 data: dataString,
+			 timeout: 10000000,
+             success: function(json) {	var jsonPosts=eval('('+json+')'); setChat(jsonPosts);},
+			 error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " " + errorThrown);}
+           });
+	
+	$("#ChatTextarea").val("");	
+  }
+  
+  function getChat()
+  {
+	// alert("In getChat");
+  
+    if (chatFriendName == "" || chatHostId == "" || chatAcctId == "")
+	  return;
+	  
+	if (chatHostId == "All" || chatAcctId == "All")
+	  return;
+	  
+	var myName = getCookie(blogHostId + "#AuthorName");
+	  
+    var dataString = 'hostId=' + chatHostId + '&acctId=' + chatAcctId + '&friendName=' + encodeURIComponent(chatFriendName) + '&myName=' + encodeURIComponent(myName) + 
+	                 '&Action=GetChat';  	
+	
+	// alert(dataString);
+	 
+	$.ajax({  
+             type: "POST",
+             cache: false,		 
+             url: "sov/~..SocialChat", 
+			 crossDomain: true,
+			 data: dataString,
+			 timeout: 10000000,
+             success: function(json) {	var jsonPosts=eval('('+json+')'); setChat(jsonPosts);},
+			 error: function(jqXHR, textStatus, errorThrown) {/*alert(textStatus + " " + errorThrown);*/}
+           });
+	
+  }
+  
+  oldLength = 0;
+  oldMsg = "";
+  
+  function setChat(postArray)
+  {
+	// alert("In setChat");
+  
+    if (chatFriendName == "" || chatHostId == "" || chatAcctId == "")
+	{
+	  oldLength = 0;
+	  oldMsg = "";
+	  return;
+	}
+	  
+	if (chatHostId == "All" || chatAcctId == "All")
+	{
+	  oldLength = 0;
+	  oldMsg = "";
+	  return;
+	}
+	  
+    var text = '<table style="text-align:left;width:100%;">';
+	
+    for (var i = 0; i<postArray.length; i++)
+    {
+	  var postDate = new Date(parseInt(postArray[i].time));
+	  
+      text += '<tr style="width:100%;max-width:100%;"><td style="font-size:100%;border:2px ridge;background-color:#e5eecc;width:100%;max-width:100%;">' + 
+	          postArray[i].name + ': ' + postArray[i].msg + '<br/><span style="font-size:65%;float:right;">' + postDate.toLocaleString() + '</span> ' + '</td></tr>';
+    }
+	
+    text += '</table>';
+			
+    $("#AllChat").html(text);
+
+	if (postArray.length > 0 && postArray[0].msg != "" && postArray[0].msg != oldMsg)			
+	{
+		beep();
+		oldMsg = postArray[0].msg;
+	}
+
+	oldLength = postArray.length;
+	
+	// alert("table: " + text);
+  }
+
+  function getNewsFeed(name, hostId, acctId)
+  {
+	// alert("In getNewsFeed");
+	
+	chatFriendName = name;
+	chatHostId = hostId;
+	chatAcctId = acctId;
+		   
+    var dataString = 'hostId=' + hostId + '&acctId=' + acctId + '&Action=GetNewsFeed';  	
+	
+	$.ajax({  
+             type: "POST",
+             cache: false,		 
+             url: "sov/~..SocialCommentTop", 
+			 crossDomain: true,
+			 data: dataString,
+			 timeout: 10000000,
+             success: function(json) {	var jsonPosts=eval('('+json+')'); insertComments(jsonPosts);},
+			 error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " " + errorThrown);}
+           });
+		   
+	setChatTitle(name);
+
+	getChat();
+	getFriends();
+  }
+  
+  function insertComments(postArray)
+  {
+	// alert("In insertComments");
+    var text = '<table style="text-align:left;width:100%;">';
+	
+    for (var i = 0; i<postArray.length; i++)
+    {
+	  var postDate = new Date(parseInt(postArray[i].time));	
+	  var postUrl = postArray[i].parentUrl;
+	  
+	  if (postUrl.indexOf("http") != 0)
+	     postUrl = "http://" + postUrl;
+	  
+      text += '<tr><td style="font-size:100%;border:2px ridge;background-color:#e5eecc;">' +
+              '<a href="' + postUrl + '" target="_blank"><u>' + postArray[i].name + '</u> <u>said</u></a>: ' +
+              '<blockquote>' + postArray[i].comment + '</blockquote>' +
+			  '<span style="font-size:65%;float:right;">' + postDate.toLocaleString() + '</span> ' +
+              '</td></tr>';
+    }
+	
+    text += '</table>';
+	
+    $("#AllComments").html(text);
+
+	// alert("table: " + text);
+  };
+  
+  function unFriend(name, hostId, acctId)
+  {
+    var dataString = 'hostId=' + hostId + '&acctId=' + acctId + '&Action=UnFriend';  	
+		   
+    // alert("In unFriend, hostId = " + hostId + " acctId = " + acctId + " dataString = " + dataString);
+	
+	$.ajax({  
+             type: "POST",
+             cache: false,		 
+             url: "sov/~..SocialAllFriends", 
+			 crossDomain: true,
+			 data: dataString,
+			 timeout: 10000000,
+             success: function(json) {	var jsonPosts=eval('('+json+')'); insertFriends(jsonPosts); getNewsFeed(name, hostId, acctId);},
+			 error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " " + errorThrown);}
+           });
+		   
+  }  
+
+  function getFriends()
+  {
+	// alert("In getFriends");
+		   
+	$.ajax({  
+             type: "POST",
+             cache: false,		 
+             url: "sov/~..SocialAllFriends", 
+			 crossDomain: true,
+			 timeout: 10000000,
+             success: function(json) {	var jsonPosts=eval('('+json+')'); insertFriends(jsonPosts);},
+			 error: function(jqXHR, textStatus, errorThrown) {/*alert(textStatus + " " + errorThrown);*/}
+           });
+		   
+  }
+  
+  function addFriend(name, hostId, acctId)
+  {
+    var dataString = 'hostId=' + hostId + '&acctId=' + acctId + '&Action=AddFriend';  	
+		   
+    // alert("In addFriend, hostId = " + hostId + " acctId = " + acctId + " dataString = " + dataString);
+	
+	$.ajax({  
+             type: "POST",
+             cache: false,		 
+             url: "sov/~..SocialAllFriends", 
+			 crossDomain: true,
+			 data: dataString,
+			 timeout: 10000000,
+             success: function(json) {	var jsonPosts=eval('('+json+')'); insertFriends(jsonPosts); getNewsFeed(name, hostId, acctId);},
+			 error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " " + errorThrown);}
+           });
+		   
+  }  
+  
+  function insertFriends(postArray)
+  {
+	// alert("In insertFriends");
+  
+    var text = '';
+	var ringBell = false;
+	
+    for (var i = 0; i<postArray.length; i++)
+	{
+	  var postLoggedIn = postArray[i].loggedIn;
+	  
+	  if (postLoggedIn == "LoggedIn")
+		postLoggedIn = '<img src="loggedIn.png" title="On line" height="10" width="10"> ';
+	  else
+	    postLoggedIn = '';	  
+		
+	  var postHasNewMsg = postArray[i].hasNewMsg;
+	  
+	  if (postHasNewMsg == "NewMsg")
+	  {
+		postHasNewMsg = '<img src="bell.png" title="New Messages" height="10" width="10"> ';
+		ringBell = true;
+	  }
+	  else
+	    postHasNewMsg = '';	  
+		
+      var name = postArray[i].name;
+		
+	  var unFriendStr;
+	  
+	  if (name == "Me")
+	    unFriendStr = "";
+	  else
+	  {
+	    var friendType = postArray[i].friendType;
+		
+	    if (friendType == "mutual") 
+	      unFriendStr = '(<a href="#" onclick="unFriend(\'' + name + '\', \'' + postArray[i].hostId + '\', \'' + postArray[i].acctId + '\')">Unfriend</a>)';
+	    else if (friendType == "follow") 
+	      unFriendStr = '(<a href="#" onclick="unFriend(\'' + name + '\',\'' + postArray[i].hostId + '\', \'' + postArray[i].acctId + '\')">Cancel Request</a>)';
+	    else if (friendType == "requested") 
+	      unFriendStr = '(<a href="#" onclick="addFriend(\'' + name + '\',\'' + postArray[i].hostId + '\', \'' + postArray[i].acctId + '\')">Accept Friend</a>)';
+		else
+		  unFriendStr = "";
+      }
+	
+	  text += '<a href="#" onclick="getNewsFeed(\'' + name + '\', \'' +
+	          postArray[i].hostId + '\', \'' + postArray[i].acctId + '\')">' + name + '</a> <span style="font-size: 8pt;">' + postHasNewMsg + postLoggedIn +
+	          unFriendStr + '</span><br>';
+			  	  
+	}
+	
+    $("#AllFriends").html(text);
+	
+	if (ringBell)
+	  beep();
+  };
+
+</script>
+
+
+<button class="accordion">Friends</button>
+<div class="panel">
+    <div id="AllFriends" style="border: 1px solid black; padding: 5px; height: 100%; min-height: 100%; background-color: white; overflow-y: auto;">
+    </div>  
+</div>
+
+<div id="ChatAccordionDiv" style="display:none;">
+
+<button id="ChatButton" class="accordion">Chat</button>
+<div class="panel" style="padding: 0 0;">
+    <div style="padding: 0 18px; min-height: 100%; min-width:100%; height: 100%; width:100%; background-color: #ddd; float: left;">
+    <br/>
+    <div id="ChatTitleDiv" ><a href="#" onclick="mute()">(<u>Mute</u>)</a></div>
+    <div id="ChatDiv" style="border: 1px solid black; padding: 0px; height: 20%; min-height: 20%; width:100%; min-width:100%; background-color: white; float: left">
+      <textarea id="ChatTextarea" style="background-color: white; width: 100%; height: 100%; min-width: 100%; min-height: 100%; overflow-y: auto;"></textarea> 
+    </div>
+    <div id="AllChat" style="border: 1px solid black; padding: 5px; min-height: 80%; min-width:100%; height: 80%; width:100%; background-color: rgb(204, 225, 125); float: left; overflow-y: auto;">
+    </div>
+    <br/>
+    </div>
+</div>
+
+</div>
+
+<button class="accordion">News Feed</button>
+<div class="panel">
+  <a href="#" onclick='getNewsFeed("", "All", "All")'><u>Show All</u></a>
+    <div id="AllComments" style="border: 1px solid black; padding: 5px; height: 100%; min-height: 100%; background-color: rgb(204, 225, 125); overflow-y: auto;">
+    </div>
+</div>
+
+<button class="accordion">Social Venues</button>
+<div class="panel">
+    <div id="AllVenues" style="border: 1px solid black; padding: 5px; min-height: 100%; background-color: white; overflow-y: auto;">
+      <a href="http://www.rishon-rishon.com" target="_blank">Rishon Rishon</a> <br>
+      <a href="http://www.social-app.com/" target="_blank">IsraellyCool</a> <br>
+      <a href="http://phillips.blogs.com/" target="_blank">Pro Commerce</a> <br>
+    </div>
+    <br>
+    <br>
+</div>
+
+<script>
+var acc = document.getElementsByClassName("accordion");
+var i;
+
+for (i = 0; i < acc.length; i++) {
+    acc[i].onclick = function(){
+        this.classList.toggle("active");
+        var panel = this.nextElementSibling;
+        if (panel.style.display === "block") {
+            panel.style.display = "none";
+        } else {
+            panel.style.display = "block";
+        }
+    }
+}
+</script>
+
+
+
+<script type="text/javascript">
+	
+	$('textarea#ChatTextarea').keydown(function (e) 
+								{
+									var keyCode = e.keyCode || e.which;
+  
+									if (keyCode == 13 || keyCode == 10) 
+									{
+										sendChat();
+										return false;
+									}
+								}
+							  );  
+							
+
+</script>
+</body></html>

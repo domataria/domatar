@@ -1,0 +1,8 @@
+AppId: appstore
+Version: 1.0
+InstallClass: com.appstore.install.AppstoreInstall
+AssetDirectory: appstore/assets
+Handler: appstore, app,      com.appstore.objimpl.AppstoreAppImpl
+Handler: appstore, home,     com.appstore.objimpl.AppstoreImpl
+Handler: appstore, registry, com.appstore.objimpl.AppstoreRegistryImpl
+Wui:     AppstoreWui,        com.appstore.webui.AppstoreWui

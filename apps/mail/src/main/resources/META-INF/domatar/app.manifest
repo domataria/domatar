@@ -1,0 +1,5 @@
+AppId: mail
+Version: 0.1
+InstallClass: com.mail.install.MailInstall
+AssetDirectory: mail/assets
+Handler: mail, app, com.mail.objimpl.MailAppImpl

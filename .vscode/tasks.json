@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Bound to Ctrl+Alt+R via user keybindings.json (per-machine).
+      "label": "Redeploy",
+      "type": "shell",
+      "command": "mvn compile war:exploded && docker compose -f deploy/docker-compose.sim.yml restart tomcat1 tomcat2",
+      "options": {
+        "shell": { "executable": "cmd.exe", "args": ["/c"] }
+      },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}

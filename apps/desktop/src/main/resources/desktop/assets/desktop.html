@@ -1,0 +1,958 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Desktop</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        /*
+         * Desktop-only overrides. Spec-Desktop.txt PART 4: a grid of
+         * square icons. Cells are uniform; the icon is the centred
+         * SVG; the DisplayName sits below the icon as a separate label
+         * (per the icon-asset rule in PART 8).
+         */
+        .desktop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 18px;
+        }
+
+        .desktop-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 18px 10px;
+            background: var(--card);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            text-decoration: none;
+            transition: transform .12s ease, box-shadow .12s ease;
+        }
+        .desktop-tile:hover {
+            transform: translateY(-2px);
+            text-decoration: none;
+        }
+        .desktop-tile:visited { color: var(--text); }
+        .desktop-tile[draggable="true"] { cursor: grab; }
+        .desktop-tile.dragging {
+            opacity: 0.45;
+            cursor: grabbing;
+        }
+        .desktop-tile.drag-over {
+            outline: 2px dashed var(--border);
+            outline-offset: 2px;
+        }
+
+        .desktop-tile .icon {
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .desktop-tile .icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .desktop-tile .label {
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            color: var(--text);
+        }
+
+        #empty {
+            color: var(--page-muted);
+            text-align: center;
+            padding: 24px 0;
+        }
+
+        .signout-btn {
+            position: fixed;
+            top: 14px;
+            right: 20px;
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 13px;
+            box-shadow: var(--shadow);
+        }
+    </style>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../asset-paths.js"></script>
+<script type="text/javascript" src="../user-apps-events.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    // Fingerprint of the last rendered tile set so a post-reconcile
+    // refresh only re-paints when something actually changed (PART 7.1).
+    var lastAppsKey = null;
+    // Shells (Account / Desktop / App Store / Navigator) paint in the same grid as apps.
+    var cachedShells = [];
+    var cachedApps = [];
+    // Desktop-owned layout (CSV AppIds). null until GetTileOrder returns.
+    var cachedTileOrder = null;
+    var cachedOrderedApps = [];
+    var tileOrderReady = false;
+    var tileOrderWaiters = null;
+    var shellsSettled = false;
+    var appsSettled = false;
+    var dragMoved = false;
+
+    /** True when both inventory fetches have finished (ok or err). */
+    function inventorySettled()
+    {
+        return shellsSettled && appsSettled;
+    }
+
+    /** DomatarServlet may put Error at top-level or under Body. */
+    function responseFailure(retObj)
+    {
+        if (!retObj) return null;
+
+        if (retObj.Error === "Failure")
+            return retObj.ErrorMsg || "Failed";
+
+        if (retObj.Body && retObj.Body.Error === "Failure")
+            return retObj.Body.ErrorMsg || "Failed";
+
+        return null;
+    }
+
+    /** Order-sensitive fingerprint (layout + inventory versions). */
+    function appsKey(apps)
+    {
+        var parts = [];
+
+        for (var i = 0; i < apps.length; i++)
+        {
+            var a = apps[i];
+
+            parts.push((a.AppId || "") + "@" + (a.TileVersion || a.Version || ""));
+        }
+
+        return parts.join("|");
+    }
+
+    function parseAppIdsCsv(csv)
+    {
+        if (!csv) return [];
+
+        var out = [];
+        var seen = {};
+        var parts = String(csv).split(",");
+
+        for (var i = 0; i < parts.length; i++)
+        {
+            var id = parts[i].replace(/^\s+|\s+$/g, "");
+
+            if (!id || seen[id]) continue;
+            seen[id] = true;
+            out.push(id);
+        }
+
+        return out;
+    }
+
+    function toAppIdsCsv(ids)
+    {
+        return (ids || []).join(",");
+    }
+
+    /** Stable secondary order for newcomers (and empty TileOrder). */
+    function secondaryCmp(a, b)
+    {
+        var pa = parseInt(a.Position, 10); if (isNaN(pa)) pa = 1e9;
+        var pb = parseInt(b.Position, 10); if (isNaN(pb)) pb = 1e9;
+
+        if (pa !== pb) return pa - pb;
+        return String(a.AppId || "").localeCompare(String(b.AppId || ""));
+    }
+
+    /**
+     * Merge saved layout with live inventory: keep relative order of
+     * still-installed AppIds, append missing at end (secondaryCmp).
+     */
+    function orderAppsByLayout(apps, savedIds)
+    {
+        var byId = {};
+        var i;
+
+        for (i = 0; i < (apps || []).length; i++)
+        {
+            var a = apps[i];
+
+            if (a && a.AppId)
+                byId[a.AppId] = a;
+        }
+
+        var ordered = [];
+        var used = {};
+
+        for (i = 0; i < (savedIds || []).length; i++)
+        {
+            var id = savedIds[i];
+
+            if (!byId[id] || used[id]) continue;
+            used[id] = true;
+            ordered.push(byId[id]);
+        }
+
+        var newcomers = [];
+
+        for (i = 0; i < (apps || []).length; i++)
+        {
+            var app = apps[i];
+
+            if (!app || !app.AppId || used[app.AppId]) continue;
+            newcomers.push(app);
+        }
+
+        newcomers.sort(secondaryCmp);
+
+        for (i = 0; i < newcomers.length; i++)
+            ordered.push(newcomers[i]);
+
+        var ids = [];
+
+        for (i = 0; i < ordered.length; i++)
+            ids.push(ordered[i].AppId);
+
+        return { apps: ordered, csv: toAppIdsCsv(ids) };
+    }
+
+    function fetchTileOrder(ok, err)
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/AppsWui",
+            crossDomain: false,
+            data: "Action=GetTileOrder",
+            timeout: 10000000,
+            success: function(json)
+            {
+                var retObj;
+
+                try { retObj = JSON.parse(json); }
+                catch (e) { if (err) err("bad response"); return; }
+
+                var fail = responseFailure(retObj);
+
+                if (fail)
+                {
+                    if (err) err(fail);
+                    return;
+                }
+
+                var appIds = (retObj && retObj.Attrs && retObj.Attrs.AppIds) || "";
+
+                ok(appIds);
+            },
+            error: function(jqXHR, textStatus, errorThrown)
+            {
+                if (err) err(textStatus + " : " + errorThrown);
+            }
+        });
+    }
+
+    function setTileOrder(csv, ok, err)
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/AppsWui",
+            crossDomain: false,
+            data: "Action=SetTileOrder&AppIds=" + encodeURIComponent(csv || ""),
+            timeout: 10000000,
+            success: function(json)
+            {
+                var retObj;
+
+                try { retObj = JSON.parse(json); }
+                catch (e) { if (err) err("bad response"); return; }
+
+                var fail = responseFailure(retObj);
+
+                if (fail)
+                {
+                    if (err) err(fail);
+                    return;
+                }
+
+                var saved = (retObj && retObj.Attrs && retObj.Attrs.AppIds);
+
+                if (saved == null) saved = csv || "";
+                cachedTileOrder = saved;
+                if (ok) ok(saved);
+            },
+            error: function(jqXHR, textStatus, errorThrown)
+            {
+                if (err) err(textStatus + " : " + errorThrown);
+            }
+        });
+    }
+
+    function parseAppsResponse(json)
+    {
+        var retObj;
+
+        try { retObj = JSON.parse(json); }
+        catch (e) { return { error: "Desktop: bad response" }; }
+
+        var fail = responseFailure(retObj);
+
+        if (fail)
+            return { error: "Desktop: " + fail, retObj: retObj };
+
+        var apps = (retObj && retObj.Attrs && retObj.Attrs.Apps) || [];
+
+        return { retObj: retObj, apps: apps };
+    }
+
+    /** Preferred launcher source: domatar userApps registry. */
+    function fetchUserApps(ok, err)
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/AppsWui",
+            crossDomain: false,
+            data: "Action=GetUserApps",
+            timeout: 10000000,
+            success: function(json)
+            {
+                var parsed = parseAppsResponse(json);
+
+                if (parsed.error)
+                {
+                    if (err) err(parsed.error);
+                    else alert(parsed.error);
+                    return;
+                }
+
+                ok(parsed.apps, parsed.retObj);
+            },
+            error: function(jqXHR, textStatus, errorThrown)
+            {
+                if (err) err(textStatus + " : " + errorThrown);
+                else alert(textStatus + " : " + errorThrown);
+            }
+        });
+    }
+
+    /** Legacy Desktop tile catalog (fallback when userApps empty). */
+    function fetchLegacyApps(ok, err)
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/AppsWui",
+            crossDomain: false,
+            data: "Action=GetApps",
+            timeout: 10000000,
+            success: function(json)
+            {
+                var parsed = parseAppsResponse(json);
+
+                if (parsed.error)
+                {
+                    if (err) err(parsed.error);
+                    else alert(parsed.error);
+                    return;
+                }
+
+                ok(parsed.apps, parsed.retObj);
+            },
+            error: function(jqXHR, textStatus, errorThrown)
+            {
+                if (err) err(textStatus + " : " + errorThrown);
+                else alert(textStatus + " : " + errorThrown);
+            }
+        });
+    }
+
+    function paintMerged(force)
+    {
+        function paint()
+        {
+            // Wait for shells + apps so we never eager-save an empty
+            // TileOrder over a real layout (race on first paint).
+            if (!inventorySettled())
+                return;
+
+            var inv = mergeShellsAndApps(cachedShells, cachedApps);
+            var merged = orderAppsByLayout(inv, parseAppIdsCsv(cachedTileOrder));
+            var key = appsKey(merged.apps);
+
+            if (inv.length > 0 && merged.csv !== (cachedTileOrder || ""))
+            {
+                cachedTileOrder = merged.csv;
+                setTileOrder(merged.csv, null, function() { /* keep local */ });
+            }
+
+            if (force || lastAppsKey === null || key !== lastAppsKey)
+            {
+                lastAppsKey = key;
+                cachedOrderedApps = merged.apps;
+                renderApps(null, merged.apps);
+            }
+        }
+
+        if (tileOrderReady)
+        {
+            paint();
+            return;
+        }
+
+        if (tileOrderWaiters)
+        {
+            tileOrderWaiters.push(paint);
+            return;
+        }
+
+        tileOrderWaiters = [paint];
+
+        fetchTileOrder(
+            function(csv)
+            {
+                cachedTileOrder = csv || "";
+                tileOrderReady = true;
+                var waiters = tileOrderWaiters;
+                tileOrderWaiters = null;
+
+                for (var i = 0; i < waiters.length; i++)
+                    waiters[i]();
+            },
+            function()
+            {
+                cachedTileOrder = "";
+                tileOrderReady = true;
+                var waiters = tileOrderWaiters;
+                tileOrderWaiters = null;
+
+                for (var i = 0; i < waiters.length; i++)
+                    waiters[i]();
+            });
+    }
+
+    /**
+     * Prefer GetUserApps; fall back to GetApps when the registry is
+     * empty or unavailable. Shells paint as ordinary grid tiles.
+     * Layout comes from GetTileOrder (Desktop-owned).
+     */
+    function loadLauncher(opts)
+    {
+        opts = opts || {};
+        tileOrderReady = false;
+        cachedTileOrder = null;
+        tileOrderWaiters = null;
+        shellsSettled = false;
+        appsSettled = false;
+        lastAppsKey = null;
+
+        fetchShells(
+            function(shells)
+            {
+                cachedShells = shells || [];
+                shellsSettled = true;
+                paintMerged(opts.force);
+            },
+            function()
+            {
+                cachedShells = [];
+                shellsSettled = true;
+                paintMerged(opts.force);
+            });
+
+        fetchUserApps(
+            function(apps, retObj)
+            {
+                if (apps && apps.length > 0)
+                {
+                    cachedApps = filterShellApps(apps);
+                    appsSettled = true;
+                    paintMerged(opts.force);
+                    if (opts.thenReconcile)
+                        reconcileUserApps();
+                    return;
+                }
+
+                fetchLegacyApps(
+                    function(legacyApps, legacyRet)
+                    {
+                        cachedApps = filterShellApps(legacyApps);
+                        appsSettled = true;
+                        paintMerged(opts.force);
+                        if (opts.thenReconcile)
+                            reconcileApps();
+                    },
+                    function(msg)
+                    {
+                        cachedApps = [];
+                        appsSettled = true;
+                        paintMerged(opts.force);
+                        alert(msg);
+                    });
+            },
+            function(msg)
+            {
+                fetchLegacyApps(
+                    function(legacyApps, legacyRet)
+                    {
+                        cachedApps = filterShellApps(legacyApps);
+                        appsSettled = true;
+                        paintMerged(opts.force);
+                        if (opts.thenReconcile)
+                            reconcileApps();
+                    },
+                    function(msg2)
+                    {
+                        cachedApps = [];
+                        appsSettled = true;
+                        paintMerged(opts.force);
+                        alert(msg || msg2);
+                    });
+            });
+    }
+
+    /** Shell role chrome: Account / Desktop / App Store / Navigator from GetShells. */
+    function fetchShells(ok, err)
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "/domatar/domatar/Wui/UserSubstrateWui",
+            crossDomain: false,
+            data: "Action=GetShells",
+            timeout: 10000000,
+            success: function(json)
+            {
+                var retObj;
+
+                try { retObj = JSON.parse(json); }
+                catch (e) { if (err) err("bad response"); return; }
+
+                var fail = responseFailure(retObj);
+
+                if (fail)
+                {
+                    if (err) err(fail);
+                    return;
+                }
+
+                var shells = (retObj && retObj.Attrs && retObj.Attrs.Shells) || [];
+                ok(shells);
+            },
+            error: function(jqXHR, textStatus, errorThrown)
+            {
+                if (err) err(textStatus + " : " + errorThrown);
+            }
+        });
+    }
+
+    function shellRoleLabel(roleId)
+    {
+        if (roleId === "login") return "Account";
+        if (roleId === "desktop") return "Desktop";
+        if (roleId === "navigator") return "Navigator";
+        if (roleId === "appstore") return "App Store";
+        if (!roleId) return "Shell";
+        return roleId.charAt(0).toUpperCase() + roleId.slice(1);
+    }
+
+    /** Convert GetShells rows into the same shape as GetUserApps tiles. */
+    function shellsAsTiles(shells)
+    {
+        if (!shells || !shells.length) return [];
+
+        var order = { login: 0, desktop: 1, appstore: 2, navigator: 3 };
+        var sorted = shells.slice().sort(function(a, b) {
+            var oa = order[a.RoleId];
+            var ob = order[b.RoleId];
+            if (oa == null) oa = 99;
+            if (ob == null) ob = 99;
+            if (oa !== ob) return oa - ob;
+            return String(a.RoleId || "").localeCompare(String(b.RoleId || ""));
+        });
+
+        var tiles = [];
+
+        for (var i = 0; i < sorted.length; i++)
+        {
+            var s = sorted[i];
+            var role = s.RoleId || ("shell" + i);
+
+            tiles.push({
+                AppId: s.AppId || role,
+                DisplayName: shellRoleLabel(role),
+                IconPath: s.IconPath || pageAssets().defaultGlyph(),
+                LaunchPath: s.LaunchPath || "#",
+                Position: String(i),
+                Version: s.Version || ""
+            });
+        }
+
+        return tiles;
+    }
+
+    function mergeShellsAndApps(shells, apps)
+    {
+        return shellsAsTiles(shells).concat(apps || []);
+    }
+
+    /** Drop shell AppIds from the apps list so GetShells owns those tiles. */
+    function filterShellApps(apps)
+    {
+        if (!apps || !apps.length) return apps || [];
+
+        var out = [];
+
+        for (var i = 0; i < apps.length; i++)
+        {
+            var id = apps[i].AppId;
+
+            if (id === "login" || id === "desktop" || id === "navigator"
+                    || id === "appstore")
+                continue;
+
+            out.push(apps[i]);
+        }
+
+        return out;
+    }
+
+    // Best-effort userApps peer stub (Phase 1 ReconcileUserApps is a no-op).
+    function reconcileUserApps()
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/AppsWui",
+            crossDomain: false,
+            data: "Action=ReconcileUserApps",
+            timeout: 10000000,
+            success: function()
+            {
+                fetchUserApps(
+                    function(apps, retObj)
+                    {
+                        if (apps && apps.length > 0)
+                        {
+                            cachedApps = filterShellApps(apps);
+                            paintMerged(false);
+                        }
+                    },
+                    function() { /* ignore */ });
+            },
+            error: function() { /* ignore */ }
+        });
+    }
+
+    // Display-time Desktop tile pull (PART 7.1) — used on legacy fallback.
+    function reconcileApps()
+    {
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/AppsWui",
+            crossDomain: false,
+            data: "Action=ReconcileApps",
+            timeout: 10000000,
+            success: function()
+            {
+                fetchLegacyApps(
+                    function(apps, retObj)
+                    {
+                        cachedApps = filterShellApps(apps);
+                        paintMerged(false);
+                    },
+                    function() { /* ignore */ });
+            },
+            error: function()
+            {
+                fetchLegacyApps(
+                    function(apps, retObj)
+                    {
+                        cachedApps = filterShellApps(apps);
+                        paintMerged(false);
+                    },
+                    function() { /* ignore */ });
+            }
+        });
+    }
+
+    function renderApps(retObj, apps)
+    {
+        if (apps == null)
+            apps = (retObj && retObj.Attrs && retObj.Attrs.Apps) || [];
+
+        // Order comes from Desktop TileOrder merge — do not re-sort by Position.
+
+        if (apps.length === 0)
+        {
+            var emptyMsg = "No apps installed.";
+
+            try
+            {
+                if (typeof getCookie === "function" && !getCookie("token"))
+                    emptyMsg = "Sign in to see your apps.";
+            }
+            catch (e) { /* ignore */ }
+
+            $("#grid").html('<div id="empty">' + emptyMsg + '</div>');
+            return;
+        }
+
+        var html = '';
+
+        for (var i = 0; i < apps.length; i++)
+        {
+            var app = apps[i];
+
+            // target="_blank" opens the app in a new browser tab so
+            // the Desktop stays available in the original one. The
+            // "noopener" rel keeps the new tab from getting a handle
+            // back to window.opener (standard hardening for any
+            // _blank link, even same-origin - it also lets the
+            // browser run the new tab in its own process).
+            html +=
+                '<a class="desktop-tile" draggable="true" target="_blank" rel="noopener"' +
+                                      ' data-app-id="' + escapeAttr(app.AppId) + '"' +
+                                      ' href="' + escapeAttr(app.LaunchPath) + '">' +
+                  '<div class="icon"><img src="' + escapeAttr(app.IconPath) +
+                                          '" alt="' + escapeAttr(app.DisplayName) +
+                                          '" onerror="iconFallback(this)"/></div>' +
+                  '<div class="label">' + escapeText(app.DisplayName) + '</div>' +
+                '</a>';
+        }
+
+        $("#grid").html(html);
+        bindTileDrag($("#grid")[0]);
+    }
+
+    function collectDomAppIds(grid)
+    {
+        var ids = [];
+        var tiles = grid.querySelectorAll(".desktop-tile");
+
+        for (var i = 0; i < tiles.length; i++)
+        {
+            var id = tiles[i].getAttribute("data-app-id");
+
+            if (id) ids.push(id);
+        }
+
+        return ids;
+    }
+
+    function bindTileDrag(grid)
+    {
+        if (!grid) return;
+
+        var dragEl = null;
+
+        grid.ondragstart = function(e)
+        {
+            var tile = e.target && e.target.closest
+                ? e.target.closest(".desktop-tile") : null;
+
+            if (!tile || !grid.contains(tile)) return;
+
+            dragEl = tile;
+            dragMoved = false;
+            tile.classList.add("dragging");
+
+            try
+            {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", tile.getAttribute("data-app-id") || "");
+            }
+            catch (ex) { /* IE */ }
+        };
+
+        grid.ondragover = function(e)
+        {
+            e.preventDefault();
+
+            if (!dragEl) return;
+
+            var over = e.target && e.target.closest
+                ? e.target.closest(".desktop-tile") : null;
+
+            if (!over || over === dragEl || !grid.contains(over)) return;
+
+            dragMoved = true;
+
+            var rect = over.getBoundingClientRect();
+            var before = (e.clientY - rect.top) < rect.height / 2
+                || (e.clientX - rect.left) < rect.width / 2;
+
+            if (before)
+                grid.insertBefore(dragEl, over);
+            else if (over.nextSibling)
+                grid.insertBefore(dragEl, over.nextSibling);
+            else
+                grid.appendChild(dragEl);
+        };
+
+        grid.ondrop = function(e)
+        {
+            e.preventDefault();
+        };
+
+        grid.ondragend = function(e)
+        {
+            var tile = dragEl;
+
+            dragEl = null;
+
+            if (tile) tile.classList.remove("dragging");
+
+            $(".desktop-tile.drag-over").removeClass("drag-over");
+
+            if (!dragMoved) return;
+
+            var ids = collectDomAppIds(grid);
+            var csv = toAppIdsCsv(ids);
+            var prevApps = cachedOrderedApps.slice();
+            var prevCsv = cachedTileOrder || "";
+
+            cachedTileOrder = csv;
+            lastAppsKey = null;
+
+            // Rebuild cachedOrderedApps from DOM order + inventory map.
+            var byId = {};
+            var inv = mergeShellsAndApps(cachedShells, cachedApps);
+            var i;
+
+            for (i = 0; i < inv.length; i++)
+                if (inv[i].AppId) byId[inv[i].AppId] = inv[i];
+
+            var next = [];
+
+            for (i = 0; i < ids.length; i++)
+                if (byId[ids[i]]) next.push(byId[ids[i]]);
+
+            cachedOrderedApps = next;
+            lastAppsKey = appsKey(next);
+
+            setTileOrder(csv,
+                function() { /* ok */ },
+                function(msg)
+                {
+                    cachedTileOrder = prevCsv;
+                    cachedOrderedApps = prevApps;
+                    lastAppsKey = null;
+                    renderApps(null, prevApps);
+                    alert("Could not save tile order: " + (msg || "error"));
+                });
+        };
+
+        grid.onclick = function(e)
+        {
+            if (!dragMoved) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+            dragMoved = false;
+        };
+    }
+
+    function pageAssets()
+    {
+        return new AssetPaths("", null);
+    }
+
+    /** On 404 (or other load failure), swap to the generic object glyph once. */
+    function iconFallback(img)
+    {
+        var assets = pageAssets();
+
+        if (assets.isDefaultGlyph(img.src))
+            return;
+        img.onerror = null;
+        img.src = assets.defaultGlyph();
+    }
+
+    function escapeText(s)
+    {
+        if (s == null) return "";
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function escapeAttr(s)
+    {
+        if (s == null) return "";
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function signOut()
+    {
+        document.cookie = "usrId=; path=/; max-age=0";
+        document.cookie = "token=; path=/; max-age=0";
+        document.cookie = "usrName=; path=/; max-age=0";
+        window.location.href = "/domatar/login/login.html";
+    }
+
+</script>
+
+<!--
+  No Quippin side menu here. Desktop is the Domatar home screen
+  (Spec-Desktop.txt PART 1), not a Quippin page; navigation to
+  Quippin / Account / etc. happens by clicking the icons in the
+  grid below, each of which opens its app in its own tab.
+-->
+
+<button class="signout-btn" onclick="signOut()">Sign out</button>
+
+<div class="page">
+  <h1>Desktop</h1>
+  <p class="subtitle">Your Domatar apps.</p>
+
+  <div class="card">
+    <div id="grid" class="desktop-grid">
+      <div id="empty">Loading&hellip;</div>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+    // Prefer GetUserApps; fall back to GetApps. Reconcile runs after paint.
+    $(function() {
+        loadLauncher({ force: true, thenReconcile: true });
+        UserAppsEvents.listen(function() {
+            loadLauncher({ force: true });
+        });
+    });
+</script>
+
+</body>
+</html>

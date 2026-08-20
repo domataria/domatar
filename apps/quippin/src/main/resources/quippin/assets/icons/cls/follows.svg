@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Follows container: two people -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Follows">
+  <!-- Left person -->
+  <circle cx="5" cy="4" r="2" fill="#16a34a"/>
+  <path d="M1 13 C1 10 3 8.5 5 8.5 C7 8.5 9 10 9 13 Z" fill="#16a34a"/>
+  <!-- Right person -->
+  <circle cx="11" cy="4" r="2" fill="#16a34a" opacity=".65"/>
+  <path d="M7 13 C7 10 9 8.5 11 8.5 C13 8.5 15 10 15 13 Z" fill="#16a34a" opacity=".65"/>
+</svg>

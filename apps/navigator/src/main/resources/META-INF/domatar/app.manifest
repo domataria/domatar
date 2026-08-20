@@ -1,0 +1,6 @@
+AppId: navigator
+Version: 1.0
+InstallClass: com.navigator.install.NavigatorInstall
+AssetDirectory: navigator/assets
+Handler: navigator, root, com.navigator.objimpl.NavRootImpl
+Wui:     NavWui,          com.navigator.webui.NavWui

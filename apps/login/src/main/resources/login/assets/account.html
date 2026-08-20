@@ -1,0 +1,954 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+
+<style>
+  .row { display: flex; align-items: center; gap: 12px;
+         padding: 10px 0; border-bottom: 1px solid #eee; }
+  .row:last-child { border-bottom: 0; }
+  .row .who { flex: 1; }
+  .row .root { display: inline-block; padding: 1px 6px; margin-left: 6px;
+               font-size: 11px; border-radius: 999px; background: #eef2ff; color: #3730a3; }
+  .row button { margin-left: 6px; padding: 4px 10px; font-size: 12px;
+                border: 1px solid #cbd5e1; background: #f8fafc; color: #1f2937;
+                border-radius: 6px; cursor: pointer; }
+  .row button:hover { background: #e2e8f0; color: #1f2937; }
+  .modal-bg { display: none; position: fixed; inset: 0;
+              background: rgba(0,0,0,0.5); align-items: center; justify-content: center;
+              z-index: 100; }
+  .modal-bg.active { display: flex; }
+  .modal {
+    background: #fff; color: #1f2937; padding: 20px 22px; border-radius: 10px;
+    width: 100%; max-width: 360px;
+  }
+  .modal h2 { margin: 0 0 14px; font-size: 18px; }
+  .modal label { display: block; font-size: 12px; color: #6b7280;
+                 margin-top: 8px; margin-bottom: 4px; }
+  .modal input, .modal select {
+    width: 100%; padding: 8px 10px; font-size: 14px;
+    border: 1px solid #cbd5e1; border-radius: 6px; background: #f1f5f9;
+  }
+  .modal .actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .modal .actions button { padding: 6px 14px; font-size: 13px; border-radius: 6px;
+                           cursor: pointer; }
+  .modal .actions .cancel { background: #e5e7eb; color: #1f2937; border: 0; }
+  .modal .actions .ok     { background: #2563eb; color: #fff; border: 0; }
+  .modal .actions .danger { background: #dc2626; color: #fff; border: 0; }
+  .modal .err { color: #dc2626; font-size: 12px; margin-top: 8px; min-height: 16px; }
+
+  .toolbar { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar button { padding: 6px 12px; font-size: 13px; border: 1px solid #cbd5e1;
+                    background: #f8fafc; color: #1f2937; border-radius: 6px;
+                    cursor: pointer; }
+  .toolbar button:hover { background: #e2e8f0; color: #1f2937; }
+
+  #siteConfigCard .card h3 { margin: 16px 0 8px; font-size: 15px; }
+  #siteConfigCard .req { display: inline-block; padding: 1px 6px; margin-left: 6px;
+                         font-size: 11px; border-radius: 999px; background: #eef2ff;
+                         color: #3730a3; }
+  #siteConfigCard .row label { flex: 1; cursor: pointer; }
+  #siteConfigCard .row input[type="checkbox"] { margin: 0; }
+  #siteConfigCard .row select.shellRolePick { margin-left: 8px; min-width: 140px; }
+  #siteConfigCard .locked-note { color: #6b7280; font-size: 0.9em; margin: 8px 0; }
+  #siteConfigCard .err { color: #dc2626; font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #hostOnlyList h3 { margin: 16px 0 8px; font-size: 15px; }
+  #hostOnlyList .row .who { color: #6b7280; }
+</style>
+</head>
+
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<!--
+  No Quippin side menu here. The Account page belongs to the Login
+  app (Spec-LoginApp.txt), not Quippin, so it does not link out to
+  News / Follows / etc. Account is reached from Desktop, which opens
+  it in its own tab; closing the tab returns the user to Desktop.
+-->
+
+<div class="page">
+  <h1>Account</h1>
+  <p class="subtitle">Manage your Domatar identity and linked logins.</p>
+
+  <div class="card">
+    <h2>This login</h2>
+    <p>
+      You are signed in as
+      <strong id="meLabel"></strong>.
+    </p>
+    <div class="toolbar">
+      <button type="button" id="changeMyPwdBtn">Change password</button>
+      <button type="button" id="signOutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Linked logins / providers</h2>
+    <p style="color:#6b7280;font-size:0.9em;margin-top:0">
+      Membership directory on this provider (local replica).
+    </p>
+    <div id="loginsList"></div>
+    <div id="hostOnlyList"></div>
+
+    <div class="toolbar">
+      <button type="button" id="addLoginBtn">Add login</button>
+      <button type="button" id="importLoginBtn">Import existing login</button>
+      <button type="button" id="attachProviderBtn">Attach a provider</button>
+    </div>
+  </div>
+
+  <div id="siteConfigCard"></div>
+</div>
+
+<!-- ====== Modals ====== -->
+
+<div id="renameModal" class="modal-bg">
+  <div class="modal">
+    <h2>Rename usrId</h2>
+    <p>Renaming <span id="renameOld"></span>.</p>
+    <label>New handle (no @ - the app's domain is preserved)</label>
+    <input id="renameNew" />
+    <div class="err" id="renameErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="ok"     id="renameOk">Rename</button>
+    </div>
+  </div>
+</div>
+
+<div id="usrNameModal" class="modal-bg">
+  <div class="modal">
+    <h2>Change display name</h2>
+    <p>Updating <span id="usrNameOld"></span>.</p>
+    <label>New display name</label>
+    <input id="usrNameNew" />
+    <div class="err" id="usrNameErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="ok"     id="usrNameOk">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="changePwdModal" class="modal-bg">
+  <div class="modal">
+    <h2>Change password</h2>
+    <p>For login <span id="pwdOld"></span>.</p>
+    <label>Old password</label>
+    <input id="pwdOldVal" type="password" />
+    <label>New password</label>
+    <input id="pwdNewVal" type="password" />
+    <label>Repeat new password</label>
+    <input id="pwdNew2Val" type="password" />
+    <div class="err" id="pwdErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="ok"     id="pwdOk">Change</button>
+    </div>
+  </div>
+</div>
+
+<div id="addLoginModal" class="modal-bg">
+  <div class="modal">
+    <h2>Add another login</h2>
+    <label>App</label>
+    <select id="addAppId">
+      <option value="login">Login (identity hub)</option>
+      <option value="quippin">Quippin</option>
+    </select>
+    <label>Handle</label>
+    <input id="addLocalname" />
+    <label>Display name (optional)</label>
+    <input id="addUsrName" />
+    <label>Password</label>
+    <input id="addPwd" type="password" />
+    <div class="err" id="addErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="ok"     id="addOk">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="importLoginModal" class="modal-bg">
+  <div class="modal">
+    <h2>Import existing login</h2>
+    <p>Add a login you already have at another app to this account.</p>
+    <label>UsrId (e.g. dave@quippin)</label>
+    <input id="impUsrId" />
+    <label>Password</label>
+    <input id="impPwd" type="password" />
+    <div class="err" id="impErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="ok"     id="impOk">Import</button>
+    </div>
+  </div>
+</div>
+
+<div id="removeModal" class="modal-bg">
+  <div class="modal">
+    <h2>Remove login</h2>
+    <p>Permanently remove <span id="removeWho"></span>?
+    The act row at that app's central host will be deleted.</p>
+    <div class="err" id="removeErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="danger" id="removeOk">Remove</button>
+    </div>
+  </div>
+</div>
+
+<div id="attachModal" class="modal-bg">
+  <div class="modal" style="max-width:400px">
+    <h2>Attach a provider</h2>
+    <p style="font-size:12px;color:#6b7280">Copy this account onto another
+    provider. Re-enter your password to confirm.</p>
+    <label>New provider id (e.g. prv2)</label>
+    <input id="attNewPrvId" value="prv2" />
+    <label>New provider domain (e.g. tomcat2:8080)</label>
+    <input id="attNewDomain" value="tomcat2:8080" />
+    <label>App on N (login suffix)</label>
+    <select id="attNewAppId">
+      <option value="login" selected>login</option>
+      <option value="quippin">quippin</option>
+    </select>
+    <label>New handle on N</label>
+    <input id="attLocalname" />
+    <label>Display name (optional)</label>
+    <input id="attUsrName" />
+    <label>Password for the new login on N</label>
+    <input id="attPwd" type="password" />
+    <label>Re-verify password (this account)</label>
+    <input id="attReverifyPwd" type="password" />
+    <label>Signing provider?</label>
+    <select id="attIsSigning">
+      <option value="True" selected>Yes (store ownership key on N)</option>
+      <option value="False">No (object-only)</option>
+    </select>
+    <div class="err" id="attErr"></div>
+    <div class="actions">
+      <button type="button" class="cancel" data-close>Cancel</button>
+      <button type="button" class="ok" id="attOk">Attach</button>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+
+  // --- helpers ---
+  function getCookie(name)
+  {
+    var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function clearCookie(name)
+  {
+    document.cookie = name + "=; path=/; max-age=0";
+  }
+
+  function openModal(id)  { $("#" + id).addClass("active"); }
+  function closeModal(id) { $("#" + id).removeClass("active"); }
+
+  $(".modal-bg").on("click", function(e)
+  {
+    if (e.target === this) closeModal(this.id);
+  });
+  $("[data-close]").on("click", function() { closeModal($(this).closest(".modal-bg").attr("id")); });
+
+  function call(action, params, ok, err)
+  {
+    var data = $.extend({ Action: action }, params || {});
+
+    $.ajax({
+      type: "POST",
+      url:  "Wui/AccountsWui",
+      data: data,
+      success: function(json)
+      {
+        var resp;
+        try { resp = JSON.parse(json); } catch (e) { err && err("Bad response"); return; }
+
+        var body = resp.Body || resp;
+
+        if (body.Error === "Failure")
+        {
+          err && err(body.ErrorMsg || "Failed");
+          return;
+        }
+
+        ok && ok(resp);
+      },
+      error: function(jqXHR, textStatus, errorThrown)
+      {
+        err && err(errorThrown || textStatus || "Network error");
+      }
+    });
+  }
+
+  // Cross-app: site customization lives on the domatar SiteConfigWui, not AccountsWui.
+  function callSite(action, params, ok, err)
+  {
+    var data = $.extend({ Action: action }, params || {});
+
+    $.ajax({
+      type: "POST",
+      url:  "/domatar/domatar/Wui/SiteConfigWui",
+      data: data,
+      success: function(json)
+      {
+        var resp;
+        try { resp = JSON.parse(json); } catch (e) { err && err("Bad response"); return; }
+
+        var body = resp.Body || resp;
+
+        if (body.Error === "Failure")
+        {
+          err && err(body.ErrorMsg || "Failed");
+          return;
+        }
+
+        ok && ok(resp);
+      },
+      error: function(x, s, e)
+      {
+        err && err(e || s || "Network error");
+      }
+    });
+  }
+
+  // Cross-app: membership list/reconcile reads the domatar substrate
+  // (Update-Mandatory-App-Rewrite Phase 4).
+  function callSubstrate(action, params, ok, err)
+  {
+    var data = $.extend({ Action: action }, params || {});
+
+    $.ajax({
+      type: "POST",
+      url:  "/domatar/domatar/Wui/UserSubstrateWui",
+      data: data,
+      success: function(json)
+      {
+        var resp;
+        try { resp = JSON.parse(json); } catch (e) { err && err("Bad response"); return; }
+
+        var body = resp.Body || resp;
+
+        if (body.Error === "Failure")
+        {
+          err && err(body.ErrorMsg || "Failed");
+          return;
+        }
+
+        ok && ok(resp);
+      },
+      error: function(x, s, e)
+      {
+        err && err(e || s || "Network error");
+      }
+    });
+  }
+
+  function attrs(resp)
+  {
+    return (resp && resp.Attrs) || (resp && resp.Body && resp.Body.Attrs) || {};
+  }
+
+  // --- site customization (provider-only) ---
+
+  function loadSiteConfig()
+  {
+    callSite("GetDefaultAppsConfig", null,
+      function(resp)
+      {
+        var a = attrs(resp);
+
+        if (a.IsProvider !== "True")
+        {
+          $("#siteConfigCard").empty();
+          return;
+        }
+
+        renderSiteConfig(a);
+        loadDefaultShells();
+      },
+      function()
+      {
+        $("#siteConfigCard").empty();
+      }
+    );
+  }
+
+  function loadDefaultShells()
+  {
+    callSite("GetDefaultShells", null,
+      function(resp)
+      {
+        var a = attrs(resp);
+        if (a.IsProvider === "True")
+          renderDefaultShells(a);
+      },
+      function() { /* leave apps card as-is */ }
+    );
+  }
+
+  function roleLabel(roleId)
+  {
+    if (roleId === "login") return "Login";
+    if (roleId === "desktop") return "Desktop";
+    if (roleId === "navigator") return "Navigator";
+    if (roleId === "appstore") return "App Store";
+    return roleId || "";
+  }
+
+  function renderDefaultShells(a)
+  {
+    var shells = a.Shells || [];
+    var html =
+      '<h3>Default shells for new accounts</h3>' +
+      '<p class="subtitle">Which app fills each mandatory shell role.</p>' +
+      '<div id="defaultShellsList">';
+
+    for (var i = 0; i < shells.length; i++)
+    {
+      var row = shells[i];
+      var roleId = row.RoleId || "";
+      var selected = row.AppId || roleId;
+      var options = row.Options || [];
+      html +=
+        '<div class="row">' +
+          '<label for="shell_' + roleId + '">' + roleLabel(roleId) + '</label>' +
+          '<select class="shellRolePick" id="shell_' + roleId +
+            '" data-roleid="' + roleId + '">';
+      for (var j = 0; j < options.length; j++)
+      {
+        var opt = options[j];
+        var appId = opt.AppId || "";
+        html += '<option value="' + appId + '"' +
+          (appId === selected ? " selected" : "") + ">" +
+          (opt.AppName || appId) + "</option>";
+      }
+      html += "</select></div>";
+    }
+
+    html += "</div>" +
+      '<div class="toolbar">' +
+        '<button type="button" id="saveDefaultShellsBtn">Save shells</button>' +
+        '<button type="button" id="resetDefaultShellsBtn">Reset shells</button>' +
+      "</div>" +
+      '<div class="err" id="defaultShellsErr"></div>';
+
+    var $card = $("#siteConfigCard .card");
+    if ($card.length)
+    {
+      $("#defaultShellsSection").remove();
+      $card.append('<div id="defaultShellsSection">' + html + "</div>");
+    }
+    wireDefaultShellButtons();
+  }
+
+  function wireDefaultShellButtons()
+  {
+    $("#saveDefaultShellsBtn").off("click").on("click", function()
+    {
+      var parts = [];
+      $("#defaultShellsList .shellRolePick").each(function()
+      {
+        var role = $(this).attr("data-roleid");
+        var app = $(this).val();
+        if (role && app)
+          parts.push(role + "=" + app);
+      });
+      $("#defaultShellsErr").text("");
+      callSite("SetDefaultShells", { Shells: parts.join(",") },
+        function(resp) { renderDefaultShells(attrs(resp)); },
+        function(msg) { $("#defaultShellsErr").text(msg); }
+      );
+    });
+
+    $("#resetDefaultShellsBtn").off("click").on("click", function()
+    {
+      $("#defaultShellsErr").text("");
+      callSite("ResetDefaultShells", null,
+        function(resp) { renderDefaultShells(attrs(resp)); },
+        function(msg) { $("#defaultShellsErr").text(msg); }
+      );
+    });
+  }
+
+  function renderSiteConfig(a)
+  {
+    var locked = (a.Locked === "True");
+    var apps = a.Apps || [];
+    var html =
+      '<div class="card">' +
+        '<h2>Site customization</h2>' +
+        '<p class="subtitle">Settings for this provider\'s site.</p>' +
+        '<h3>Default apps for new accounts</h3>';
+
+    if (locked)
+      html += '<p class="locked-note">Default apps are pinned by the operator '
+            + '(DOMATAR_DEFAULT_APPS) and cannot be edited here.</p>';
+
+    html += '<div id="defaultAppsList">';
+
+    for (var i = 0; i < apps.length; i++)
+    {
+      var app = apps[i];
+      var mandatory = (app.IsMandatory === "True");
+      var checked = (app.IsDefault === "True") || mandatory;
+      var disabled = locked || mandatory;
+      var badge = mandatory ? '<span class="req">Required</span>' : '';
+
+      html +=
+        '<div class="row">' +
+          '<input type="checkbox" class="defaultAppCb" data-appid="' +
+            (app.AppId || "") + '"' +
+            (checked ? " checked" : "") +
+            (disabled ? " disabled" : "") +
+            ' id="da_' + (app.AppId || i) + '" />' +
+          '<label for="da_' + (app.AppId || i) + '">' +
+            (app.AppName || app.AppId || "") + badge +
+          '</label>' +
+        '</div>';
+    }
+
+    html += '</div>';
+
+    if (!locked)
+    {
+      html +=
+        '<div class="toolbar">' +
+          '<button type="button" id="saveDefaultAppsBtn">Save</button>' +
+          '<button type="button" id="resetDefaultAppsBtn">Reset to default</button>' +
+        '</div>';
+    }
+
+    html += '<div class="err" id="defaultAppsErr"></div></div>';
+
+    $("#siteConfigCard").html(html);
+    wireSiteConfigButtons();
+  }
+
+  function wireSiteConfigButtons()
+  {
+    $("#saveDefaultAppsBtn").off("click").on("click", function()
+    {
+      var ids = [];
+
+      // Include disabled-but-checked mandatory boxes so the server receives them
+      // too (normalization would inject them anyway).
+      $("#defaultAppsList .defaultAppCb:checked").each(function()
+      {
+        var id = $(this).attr("data-appid");
+        if (id) ids.push(id);
+      });
+
+      $("#defaultAppsErr").text("");
+      callSite("SetDefaultApps", { AppIds: ids.join(",") },
+        function(resp) { renderSiteConfig(attrs(resp)); loadDefaultShells(); },
+        function(msg) { $("#defaultAppsErr").text(msg); }
+      );
+    });
+
+    $("#resetDefaultAppsBtn").off("click").on("click", function()
+    {
+      $("#defaultAppsErr").text("");
+      callSite("ResetDefaultApps", null,
+        function(resp) { renderSiteConfig(attrs(resp)); loadDefaultShells(); },
+        function(msg) { $("#defaultAppsErr").text(msg); }
+      );
+    });
+  }
+
+  // --- list rendering (authoritative: local membership replica) ---
+
+  function refresh()
+  {
+    callSubstrate("ReconcileMembership", null,
+      function() { listPeers(); },
+      function() { listPeers(); }
+    );
+  }
+
+  function isLoginHomeRow(row)
+  {
+    return row != null && row.IsLoginHome !== "False";
+  }
+
+  function listPeers()
+  {
+    callSubstrate("ListMembership", null,
+      function(resp)
+      {
+        var list = (attrs(resp).Peers) || [];
+        var loginHomes = [];
+        var hostOnly = [];
+
+        for (var i = 0; i < list.length; i++)
+        {
+          if (isLoginHomeRow(list[i]))
+            loginHomes.push(list[i]);
+          else
+            hostOnly.push(list[i]);
+        }
+
+        if (loginHomes.length === 0)
+        {
+          $("#loginsList").html(
+            "<p>No linked logins recorded yet. Use 'Import existing login' " +
+            "or 'Add login' to register one.</p>");
+        }
+        else
+        {
+          var html = "";
+          var canRemoveProvider = loginHomes.length > 1;
+
+          for (var i = 0; i < loginHomes.length; i++)
+          {
+            var row = loginHomes[i];
+            var rootBadge = (row.IsRoot === "True")
+                ? '<span class="root">root</span>' : '';
+            var removeProv = canRemoveProvider
+                ? '<button type="button" class="btnStopProvider" data-prvid="' +
+                  (row.PrvId || "") + '">Stop using this provider</button>'
+                : '<button type="button" class="btnStopProvider" disabled ' +
+                  'title="Cannot remove your last login">Stop using this provider</button>';
+
+            html +=
+                '<div class="row" data-usrid="' + row.UsrId + '" data-appid="' +
+                  (row.AppId || "") + '" data-prvid="' + (row.PrvId || "") + '">' +
+                  '<div class="who">' +
+                    '<strong>' + (row.UsrName || row.UsrId) + '</strong> ' +
+                    '<span style="color:#6b7280">(' + row.UsrId +
+                    " on " + (row.PrvId || "?") + ")</span>" +
+                    rootBadge +
+                  '</div>' +
+                  '<button type="button" class="btnRename">Rename</button>' +
+                  '<button type="button" class="btnUsrName">Display name</button>' +
+                  '<button type="button" class="btnPwd">Password</button>' +
+                  '<button type="button" class="btnRemove">Remove</button>' +
+                  removeProv +
+                '</div>';
+          }
+
+          $("#loginsList").html(html);
+          wireRowButtons();
+          wireProviderButtons();
+        }
+
+        var hostHtml = "";
+
+        if (hostOnly.length > 0)
+        {
+          hostHtml += "<h3>Hosts objects (no sign-in)</h3>";
+          for (var j = 0; j < hostOnly.length; j++)
+          {
+            var host = hostOnly[j];
+            hostHtml +=
+                '<div class="row">' +
+                  '<div class="who"><strong>' + (host.PrvId || "?") + '</strong></div>' +
+                '</div>';
+          }
+        }
+
+        $("#hostOnlyList").html(hostHtml);
+      },
+      function(msg)
+      {
+        $("#loginsList").html("<p style='color:#dc2626'>Failed to load: " + msg + "</p>");
+        $("#hostOnlyList").empty();
+      }
+    );
+  }
+
+  function wireProviderButtons()
+  {
+    $(".btnStopProvider").off("click").on("click", function()
+    {
+      if ($(this).prop("disabled"))
+        return;
+
+      var prvId = $(this).attr("data-prvid");
+
+      if (!prvId)
+        return;
+
+      if (!confirm("Stop using provider " + prvId + "?\n\n" +
+          "This is cooperative removal only — it does not cryptographically " +
+          "evict that provider. A rebind is required for eviction."))
+        return;
+
+      call("RemoveProvider", { PrvId: prvId },
+        function() { refresh(); },
+        function(msg) { alert("Remove failed: " + msg); }
+      );
+    });
+  }
+
+  function rowOf($el) { return $el.closest(".row"); }
+  function rowUsrId($el) { return rowOf($el).attr("data-usrid"); }
+
+  function wireRowButtons()
+  {
+    $(".btnRename").off("click").on("click", function()
+    {
+      var usrId = rowUsrId($(this));
+      $("#renameOld").text(usrId);
+      $("#renameNew").val("");
+      $("#renameErr").text("");
+      openModal("renameModal");
+
+      $("#renameOk").off("click").on("click", function()
+      {
+        var newLocalname = $("#renameNew").val();
+
+        if (!newLocalname) { $("#renameErr").text("Required."); return; }
+
+        call("RenameUsrId", { UsrId: usrId, NewLocalname: newLocalname },
+          function() { closeModal("renameModal"); refresh(); },
+          function(msg) { $("#renameErr").text(msg); }
+        );
+      });
+    });
+
+    $(".btnUsrName").off("click").on("click", function()
+    {
+      var usrId = rowUsrId($(this));
+      $("#usrNameOld").text(usrId);
+      $("#usrNameNew").val("");
+      $("#usrNameErr").text("");
+      openModal("usrNameModal");
+
+      $("#usrNameOk").off("click").on("click", function()
+      {
+        var newUsrName = $("#usrNameNew").val();
+
+        if (!newUsrName) { $("#usrNameErr").text("Required."); return; }
+
+        call("ChangeUsrName", { UsrId: usrId, NewUsrName: newUsrName },
+          function() { closeModal("usrNameModal"); refresh(); },
+          function(msg) { $("#usrNameErr").text(msg); }
+        );
+      });
+    });
+
+    $(".btnPwd").off("click").on("click", function()
+    {
+      var usrId = rowUsrId($(this));
+      $("#pwdOld").text(usrId);
+      $("#pwdOldVal").val(""); $("#pwdNewVal").val(""); $("#pwdNew2Val").val("");
+      $("#pwdErr").text("");
+      openModal("changePwdModal");
+
+      $("#pwdOk").off("click").on("click", function()
+      {
+        var oldPwd = $("#pwdOldVal").val();
+        var newPwd = $("#pwdNewVal").val();
+        var newPwd2 = $("#pwdNew2Val").val();
+
+        if (!oldPwd || !newPwd) { $("#pwdErr").text("Both old and new are required."); return; }
+        if (newPwd !== newPwd2) { $("#pwdErr").text("New passwords don't match."); return; }
+
+        call("ChangePwd", { UsrId: usrId, OldPwd: oldPwd, NewPwd: newPwd },
+          function(resp)
+          {
+            var changed = attrs(resp).Changed;
+
+            if (changed === "True") { closeModal("changePwdModal"); refresh(); }
+            else                    { $("#pwdErr").text("Old password did not match."); }
+          },
+          function(msg) { $("#pwdErr").text(msg); }
+        );
+      });
+    });
+
+    $(".btnRemove").off("click").on("click", function()
+    {
+      var $row = rowOf($(this));
+      var usrId = $row.attr("data-usrid");
+      var totalRows = $("#loginsList .row").length;
+
+      if (totalRows <= 1)
+      {
+        alert("Cannot remove your last login - you would lose access to this account.");
+        return;
+      }
+
+      $("#removeWho").text(usrId);
+      $("#removeErr").text("");
+      openModal("removeModal");
+
+      $("#removeOk").off("click").on("click", function()
+      {
+        call("RemoveLogin", { UsrId: usrId },
+          function() { closeModal("removeModal"); refresh(); },
+          function(msg) { $("#removeErr").text(msg); }
+        );
+      });
+    });
+  }
+
+  $("#addLoginBtn").on("click", function()
+  {
+    $("#addLocalname").val(""); $("#addUsrName").val(""); $("#addPwd").val("");
+    $("#addErr").text("");
+    openModal("addLoginModal");
+  });
+
+  $("#addOk").on("click", function()
+  {
+    var appId = $("#addAppId").val();
+    var localname = $("#addLocalname").val();
+    var usrName = $("#addUsrName").val();
+    var pwd = $("#addPwd").val();
+
+    if (!localname || !pwd) { $("#addErr").text("Handle and password required."); return; }
+
+    call("AddLogin",
+         { AppId: appId, Localname: localname, UsrName: usrName, Pwd: pwd },
+      function() { closeModal("addLoginModal"); refresh(); },
+      function(msg) { $("#addErr").text(msg); }
+    );
+  });
+
+  $("#importLoginBtn").on("click", function()
+  {
+    $("#impUsrId").val(""); $("#impPwd").val(""); $("#impErr").text("");
+    openModal("importLoginModal");
+  });
+
+  $("#impOk").on("click", function()
+  {
+    var usrId = $("#impUsrId").val();
+    var pwd = $("#impPwd").val();
+
+    if (!usrId || !pwd) { $("#impErr").text("UsrId and password required."); return; }
+
+    call("ImportLogin", { UsrId: usrId, Pwd: pwd },
+      function() { closeModal("importLoginModal"); refresh(); },
+      function(msg) { $("#impErr").text(msg); }
+    );
+  });
+
+  $("#attachProviderBtn").on("click", function()
+  {
+    $("#attLocalname").val("");
+    $("#attUsrName").val("");
+    $("#attPwd").val("");
+    $("#attReverifyPwd").val("");
+    $("#attErr").text("");
+    openModal("attachModal");
+  });
+
+  $("#attOk").on("click", function()
+  {
+    var newPrvId = $("#attNewPrvId").val();
+    var newDomain = $("#attNewDomain").val();
+    var newAppId = $("#attNewAppId").val();
+    var localname = $("#attLocalname").val();
+    var usrName = $("#attUsrName").val();
+    var pwd = $("#attPwd").val();
+    var reverifyPwd = $("#attReverifyPwd").val();
+    var isSigning = $("#attIsSigning").val();
+
+    if (!newPrvId || !newDomain || !newAppId || !localname || !pwd || !reverifyPwd)
+    {
+      $("#attErr").text("All fields except display name are required.");
+      return;
+    }
+
+    call("AttachProvider", {
+        NewPrvId: newPrvId,
+        NewDomain: newDomain,
+        NewAppId: newAppId,
+        Localname: localname,
+        UsrName: usrName,
+        Pwd: pwd,
+        ReverifyPwd: reverifyPwd,
+        IsSigning: isSigning
+      },
+      function() { closeModal("attachModal"); refresh(); },
+      function(msg) { $("#attErr").text(msg); }
+    );
+  });
+
+  $("#signOutBtn").on("click", function()
+  {
+    call("SignOut", null,
+      function()
+      {
+        clearCookie("usrId");
+        clearCookie("token");
+        window.location.href = "/domatar/login/login.html";
+      },
+      function(msg) { alert("Sign-out failed: " + msg); }
+    );
+  });
+
+  // Top-level "Change password" button. Always wired to the cookie's
+  // usrId (i.e. the login the user is currently signed in with), so
+  // it works even when ListMembership comes back empty.
+  function openChangeMyPwd()
+  {
+    var usrId = getCookie("usrId");
+
+    if (!usrId)
+    {
+      alert("Not signed in.");
+      window.location.href = "/domatar/login/login.html";
+      return;
+    }
+
+    $("#pwdOld").text(usrId);
+    $("#pwdOldVal").val(""); $("#pwdNewVal").val(""); $("#pwdNew2Val").val("");
+    $("#pwdErr").text("");
+    openModal("changePwdModal");
+
+    $("#pwdOk").off("click").on("click", function()
+    {
+      var oldPwd  = $("#pwdOldVal").val();
+      var newPwd  = $("#pwdNewVal").val();
+      var newPwd2 = $("#pwdNew2Val").val();
+
+      if (!oldPwd || !newPwd) { $("#pwdErr").text("Both old and new are required."); return; }
+      if (newPwd !== newPwd2) { $("#pwdErr").text("New passwords don't match."); return; }
+
+      call("ChangePwd", { UsrId: usrId, OldPwd: oldPwd, NewPwd: newPwd },
+        function(resp)
+        {
+          var changed = attrs(resp).Changed;
+
+          if (changed === "True") { closeModal("changePwdModal"); }
+          else                    { $("#pwdErr").text("Old password did not match."); }
+        },
+        function(msg) { $("#pwdErr").text(msg); }
+      );
+    });
+  }
+
+  $("#changeMyPwdBtn").on("click", openChangeMyPwd);
+
+  $(function()
+  {
+    var me = getCookie("usrId");
+    $("#meLabel").text(me || "(unknown)");
+  });
+
+  $(refresh);
+  $(loadSiteConfig);
+
+</script>
+
+</body>
+</html>

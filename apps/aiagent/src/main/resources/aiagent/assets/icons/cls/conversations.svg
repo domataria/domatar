@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Conversations container: two overlapping chat bubbles -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Conversations">
+  <!-- Back bubble -->
+  <rect x="4" y="3" width="10" height="7" rx="2" fill="#a78bfa" opacity=".6"/>
+  <polygon points="6,10 4,13 9,10" fill="#a78bfa" opacity=".6"/>
+  <!-- Front bubble -->
+  <rect x="2" y="5" width="10" height="7" rx="2" fill="#7c3aed"/>
+  <polygon points="4,12 2,15 7,12" fill="#7c3aed"/>
+</svg>

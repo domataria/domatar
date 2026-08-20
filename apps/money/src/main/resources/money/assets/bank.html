@@ -1,0 +1,530 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bank Dashboard</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        /* Page header */
+        .bk-header       { margin-bottom: 24px; }
+        .bk-header h2    { margin: 0 0 6px; }
+        .bk-stats        { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 10px; }
+        .bk-stat         { display: flex; flex-direction: column; gap: 2px; }
+        .bk-stat-label   { font-size: 0.78em; font-weight: 600; color: var(--page-muted);
+                           text-transform: uppercase; letter-spacing: .04em; }
+        .bk-stat-value   { font-size: 1.3em; font-weight: 700; }
+        .bk-stat-value.avail { color: #15803d; }
+
+        /* Set-funds inline form */
+        .setfunds-row    { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+                           margin: 10px 0 22px; }
+        .setfunds-row input { padding: 6px 9px; border: 1px solid var(--border);
+                              border-radius: var(--radius); font-size: 0.95em; width: 130px; }
+        .bk-actions      { display: flex; gap: 10px; margin-bottom: 22px; }
+
+        /* Accounts table */
+        table.bk-table   { width: 100%; border-collapse: collapse; }
+        table.bk-table th,
+        table.bk-table td { text-align: left; padding: 7px 10px; }
+        table.bk-table th { font-size: 0.82em; font-weight: 600; color: var(--page-muted);
+                            border-bottom: 1px solid var(--border); }
+        table.bk-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        table.bk-table .col-actions { text-align: right; white-space: nowrap; }
+
+        /* Inline amount prompt row */
+        .amount-row      { display: none; background: #fafaf9; }
+        .amount-row td   { padding: 6px 10px !important; }
+        .amount-row.open { display: table-row; }
+        .amount-form     { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .amount-form input { padding: 5px 8px; border: 1px solid var(--border);
+                             border-radius: var(--radius); font-size: 0.92em; width: 110px; }
+        .amount-err      { font-size: 0.82em; color: var(--danger, #dc2626); }
+
+        .empty-msg       { color: var(--page-muted); font-style: italic; }
+
+        /* Modal */
+        .modal-backdrop  { display: none; position: fixed; inset: 0;
+                           background: rgba(0,0,0,0.4); z-index: 100; }
+        .modal-backdrop.open { display: flex; align-items: center; justify-content: center; }
+        .modal-box       { background: var(--page-bg); border-radius: var(--radius);
+                           padding: 24px 28px; min-width: 320px; max-width: 460px; width: 100%;
+                           box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+        .modal-box h3    { margin: 0 0 16px; }
+        .modal-field     { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+        .modal-field label { font-size: 0.85em; font-weight: 600; color: var(--page-muted); }
+        .modal-field input { padding: 7px 10px; border: 1px solid var(--border);
+                             border-radius: var(--radius); font-size: 1em;
+                             width: 100%; box-sizing: border-box; }
+        .modal-btns      { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+        #modal-error     { color: var(--danger, #dc2626); font-size: 0.9em;
+                           margin-top: 6px; min-height: 1.2em; }
+        .bk-error        { color: var(--danger, #dc2626); font-size: 0.9em;
+                           margin-bottom: 10px; min-height: 1.2em; }
+
+        /* Role-switch corner */
+        .sr-corner       { position: absolute; top: 16px; right: 24px;
+                           font-size: 0.8em; }
+        .sr-corner a     { color: var(--page-muted); text-decoration: none; cursor: pointer; }
+        .sr-corner a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var accountList = [];
+    var bankData    = {};
+
+    // -------------------------------------------------------------------------
+    // Guard: redirect if not a bank
+    // -------------------------------------------------------------------------
+
+    function checkRole()
+    {
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=GetProfile',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                var role = ret && ret.Attrs && ret.Attrs.Role ? ret.Attrs.Role : '';
+                if (role !== 'Bank')
+                {
+                    window.location.href = '/domatar/money/money.html';
+                    return;
+                }
+                loadBank();
+                loadAccounts();
+            },
+            error: function() { window.location.href = '/domatar/money/money.html'; }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Switch to Customer
+    // -------------------------------------------------------------------------
+
+    function switchToCustomer()
+    {
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=SetRole&Role=Customer',
+            cache: false,
+            timeout: 30000,
+            success: function() { window.location.href = '/domatar/money/accounts.html'; },
+            error: function()   { window.location.href = '/domatar/money/accounts.html'; }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Load bank header
+    // -------------------------------------------------------------------------
+
+    function loadBank()
+    {
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MoneyBankWui',
+            data: 'Action=GetBank',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (!ret || ret.Error === 'Failure')
+                {
+                    $('#bk-error').text(ret && ret.ErrorMsg ? ret.ErrorMsg : 'Failed to load bank.');
+                    return;
+                }
+                bankData = ret.Attrs || {};
+                $('#bk-name').text(bankData.Name || '');
+                $('#stat-total').text(fmt(bankData.TotalFunds));
+                $('#stat-avail').text(fmt(bankData.AvailableFunds));
+                $('#sf-input').val(bankData.TotalFunds || '0');
+            },
+            error: function(jqXHR, textStatus) { $('#bk-error').text('Error: ' + textStatus); }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Set funds
+    // -------------------------------------------------------------------------
+
+    function setFunds()
+    {
+        var val = $.trim($('#sf-input').val());
+        if (!val) { alert('Please enter a Total Funds amount.'); return; }
+
+        $('#btn-sf').prop('disabled', true).text('Saving\u2026');
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyBankWui',
+            data: 'Action=SetFunds&TotalFunds=' + encodeURIComponent(val),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                $('#btn-sf').prop('disabled', false).text('Set Funds');
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    alert(ret.ErrorMsg || 'Error setting funds.');
+                    return;
+                }
+                if (ret && ret.Attrs)
+                {
+                    $('#stat-total').text(fmt(ret.Attrs.TotalFunds));
+                    $('#stat-avail').text(fmt(ret.Attrs.AvailableFunds));
+                }
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#btn-sf').prop('disabled', false).text('Set Funds');
+                alert('Error: ' + textStatus);
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Load customer accounts
+    // -------------------------------------------------------------------------
+
+    function loadAccounts()
+    {
+        $('#bk-body').html('<tr><td colspan="4" class="empty-msg">Loading\u2026</td></tr>');
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MoneyAccountsWui',
+            data: 'Action=GetAccounts',
+            cache: false,
+            timeout: 30000,
+            success: function(json) { renderAccounts(JSON.parse(json)); },
+            error: function(jqXHR, textStatus)
+            {
+                $('#bk-body').html('<tr><td colspan="4">Error: ' + textStatus + '</td></tr>');
+            }
+        });
+    }
+
+    function renderAccounts(ret)
+    {
+        var body = $('#bk-body');
+
+        if (!ret || ret.Error === 'Failure')
+        {
+            body.html('<tr><td colspan="4" class="empty-msg">' +
+                      (ret && ret.ErrorMsg ? escHtml(ret.ErrorMsg) : 'Error') + '</td></tr>');
+            return;
+        }
+
+        accountList = (ret.Attrs && ret.Attrs.Accounts) ? ret.Attrs.Accounts : [];
+
+        if (accountList.length === 0)
+        {
+            body.html('<tr><td colspan="4" class="empty-msg">No accounts yet. Create one!</td></tr>');
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < accountList.length; i++)
+        {
+            var a = accountList[i];
+            html +=
+                '<tr id="acct-row-' + i + '">' +
+                  '<td>' + escHtml(a.CustomerName  || '') + '</td>' +
+                  '<td>' + escHtml(a.CustomerActId || '') + '</td>' +
+                  '<td id="bal-' + i + '">' + escHtml(fmt(a.Balance)) + '</td>' +
+                  '<td class="col-actions">' +
+                    '<button type="button" onclick="toggleAmount(' + i + ',\'Deposit\')">Deposit</button>' +
+                    ' <button type="button" onclick="toggleAmount(' + i + ',\'Withdraw\')">Withdraw</button>' +
+                  '</td>' +
+                '</tr>' +
+                '<tr class="amount-row" id="amount-row-' + i + '">' +
+                  '<td colspan="4">' +
+                    '<div class="amount-form">' +
+                      '<span id="amount-label-' + i + '"></span>' +
+                      '<input type="number" id="amount-input-' + i + '" min="0.01" step="any"' +
+                             ' placeholder="Amount"/>' +
+                      '<button type="button" onclick="submitAmount(' + i + ')">OK</button>' +
+                      '<button type="button" onclick="closeAmount(' + i + ')">Cancel</button>' +
+                      '<span class="amount-err" id="amount-err-' + i + '"></span>' +
+                    '</div>' +
+                  '</td>' +
+                '</tr>';
+        }
+        body.html(html);
+    }
+
+    // -------------------------------------------------------------------------
+    // Deposit / Withdraw inline prompt
+    // -------------------------------------------------------------------------
+
+    var amountAction = {};   // idx -> 'Deposit' | 'Withdraw'
+
+    function toggleAmount(idx, action)
+    {
+        var row = $('#amount-row-' + idx);
+        var alreadyOpen = row.hasClass('open') && amountAction[idx] === action;
+
+        // Close all open rows first.
+        $('.amount-row').removeClass('open');
+
+        if (!alreadyOpen)
+        {
+            amountAction[idx] = action;
+            $('#amount-label-' + idx).text(action + ':');
+            $('#amount-input-' + idx).val('');
+            $('#amount-err-'   + idx).text('');
+            row.addClass('open');
+            setTimeout(function() { $('#amount-input-' + idx).focus(); }, 50);
+        }
+    }
+
+    function closeAmount(idx)
+    {
+        $('#amount-row-' + idx).removeClass('open');
+    }
+
+    function submitAmount(idx)
+    {
+        var a      = accountList[idx];
+        var action = amountAction[idx];
+        var val    = $.trim($('#amount-input-' + idx).val());
+
+        if (!val) { $('#amount-err-' + idx).text('Enter an amount.'); return; }
+
+        $('#amount-err-' + idx).text('');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyAccountWui',
+            data: 'Action=' + action +
+                  '&AccountDomId=' + encodeURIComponent(a.AccountDomId) +
+                  '&Amount=' + encodeURIComponent(val),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#amount-err-' + idx).text(ret.ErrorMsg || 'Error');
+                    return;
+                }
+                closeAmount(idx);
+                // Refresh balance in row + stat bar.
+                if (ret && ret.Attrs && ret.Attrs.Balance)
+                {
+                    accountList[idx].Balance = ret.Attrs.Balance;
+                    $('#bal-' + idx).text(fmt(ret.Attrs.Balance));
+                }
+                loadBank();   // refresh TotalFunds / AvailableFunds
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#amount-err-' + idx).text('Error: ' + textStatus);
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Create Account modal
+    // -------------------------------------------------------------------------
+
+    function openCreateModal()
+    {
+        $('#ca-actid').val('');
+        $('#ca-name').val('');
+        $('#ca-balance').val('0');
+        $('#modal-error').text('');
+        $('#btn-create-ok').prop('disabled', false).text('Create');
+        $('#create-modal').addClass('open');
+        setTimeout(function() { $('#ca-actid').focus(); }, 50);
+    }
+
+    function closeCreateModal()
+    {
+        $('#create-modal').removeClass('open');
+        $('#btn-create-ok').prop('disabled', false).text('Create');
+    }
+
+    function submitCreate()
+    {
+        var actId   = $.trim($('#ca-actid').val());
+        var name    = $.trim($('#ca-name').val());
+        var balance = $.trim($('#ca-balance').val());
+
+        if (!actId) { $('#modal-error').text('Customer ActId is required.'); return; }
+
+        $('#modal-error').text('');
+        $('#btn-create-ok').prop('disabled', true).text('Creating\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyAccountsWui',
+            data: 'Action=CreateAccount' +
+                  '&CustomerActId='  + encodeURIComponent(actId) +
+                  '&CustomerName='   + encodeURIComponent(name) +
+                  '&InitialBalance=' + encodeURIComponent(balance || '0'),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#modal-error').text(ret.ErrorMsg || 'Error');
+                    $('#btn-create-ok').prop('disabled', false).text('Create');
+                    return;
+                }
+                $('#btn-create-ok').prop('disabled', false).text('Create');
+                closeCreateModal();
+                loadAccounts();
+                loadBank();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#modal-error').text('Error: ' + textStatus);
+                $('#btn-create-ok').prop('disabled', false).text('Create');
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilities
+    // -------------------------------------------------------------------------
+
+    function fmt(v)
+    {
+        var n = parseFloat(v);
+        if (isNaN(n)) return v || '—';
+        return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function escHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
+
+    $(document).ready(function()
+    {
+        checkRole();
+
+        $('#create-modal').on('click', function(e)
+        {
+            if (e.target === this) closeCreateModal();
+        });
+        $('#create-modal input').on('keydown', function(e)
+        {
+            if (e.key === 'Enter') submitCreate();
+        });
+        $('#sf-input').on('keydown', function(e)
+        {
+            if (e.key === 'Enter') setFunds();
+        });
+    });
+
+</script>
+
+<!-- Create Account modal -->
+<div class="modal-backdrop" id="create-modal">
+    <div class="modal-box">
+        <h3>Create Customer Account</h3>
+        <div class="modal-field">
+            <label for="ca-actid">Customer ActId</label>
+            <input type="text" id="ca-actid" placeholder="e.g. micha@quippin" maxlength="120"/>
+        </div>
+        <div class="modal-field">
+            <label for="ca-name">Customer Name <span style="font-weight:400">(optional)</span></label>
+            <input type="text" id="ca-name" placeholder="e.g. Micha" maxlength="120"/>
+        </div>
+        <div class="modal-field">
+            <label for="ca-balance">Initial Balance</label>
+            <input type="number" id="ca-balance" min="0" step="any" value="0"/>
+        </div>
+        <div id="modal-error"></div>
+        <div class="modal-btns">
+            <button type="button" onclick="closeCreateModal()">Cancel</button>
+            <button type="button" id="btn-create-ok" onclick="submitCreate()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Page body -->
+<div class="page">
+    <div class="page-content" style="position:relative;">
+
+        <div class="sr-corner"><a onclick="switchToCustomer()">Switch to Customer</a></div>
+
+        <div id="bk-error" class="bk-error"></div>
+
+        <div class="bk-header">
+            <h2 id="bk-name">Bank Dashboard</h2>
+            <div class="bk-stats">
+                <div class="bk-stat">
+                    <span class="bk-stat-label">Total Funds</span>
+                    <span class="bk-stat-value" id="stat-total">&mdash;</span>
+                </div>
+                <div class="bk-stat">
+                    <span class="bk-stat-label">Available Funds</span>
+                    <span class="bk-stat-value avail" id="stat-avail">&mdash;</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Set Funds row -->
+        <div class="setfunds-row">
+            <label for="sf-input" style="font-size:0.88em;font-weight:600;color:var(--page-muted);">
+                New Total Funds:
+            </label>
+            <input type="number" id="sf-input" min="0" step="any" placeholder="0.00"/>
+            <button type="button" id="btn-sf" onclick="setFunds()">Set Funds</button>
+        </div>
+
+        <!-- Actions bar -->
+        <div class="bk-actions">
+            <button type="button" onclick="openCreateModal()">+ Create Account</button>
+            <button type="button" onclick="loadAccounts()">&#8635; Refresh</button>
+        </div>
+
+        <!-- Customer accounts table -->
+        <table class="bk-table">
+            <thead>
+                <tr>
+                    <th>Customer Name</th>
+                    <th>Customer ActId</th>
+                    <th>Balance</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="bk-body">
+                <tr><td colspan="4" class="empty-msg">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+
+    </div>
+</div>
+
+</body>
+</html>

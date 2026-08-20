@@ -1,0 +1,5 @@
+AppId=fixtureapp
+AppName=Fixture
+AppDesc=Test fixture with ShellRoles
+Version=0.1
+ShellRoles=navigator,desktop

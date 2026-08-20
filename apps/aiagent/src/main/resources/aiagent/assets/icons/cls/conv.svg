@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Single conversation: a chat bubble -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Conversation">
+  <rect x="2" y="2" width="12" height="9" rx="2.5" fill="#7c3aed"/>
+  <polygon points="4,11 2,15 7,11" fill="#7c3aed"/>
+  <!-- Two text lines inside -->
+  <rect x="4" y="5"  width="7" height="1.5" rx=".75" fill="#fff" opacity=".8"/>
+  <rect x="4" y="8"  width="5" height="1.5" rx=".75" fill="#fff" opacity=".6"/>
+</svg>

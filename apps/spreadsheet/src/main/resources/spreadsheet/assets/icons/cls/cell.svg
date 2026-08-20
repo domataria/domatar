@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Spreadsheet cell: highlighted single cell with grid context -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Cell">
+  <!-- Faint surrounding grid -->
+  <rect x="1" y="1" width="14" height="14" rx="1"
+        fill="none" stroke="#86efac" stroke-width="0.8"/>
+  <line x1="6.5" y1="1" x2="6.5" y2="15" stroke="#86efac" stroke-width="0.7"/>
+  <line x1="1" y1="6.5" x2="15" y2="6.5" stroke="#86efac" stroke-width="0.7"/>
+  <!-- Highlighted active cell (top-left) -->
+  <rect x="1" y="1" width="5.5" height="5.5" rx="0.5"
+        fill="#16a34a" opacity="0.85"/>
+</svg>

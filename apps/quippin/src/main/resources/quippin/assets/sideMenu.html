@@ -1,0 +1,61 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Side Menu</title>
+<link rel="stylesheet" href="../domatar.css"/>
+
+<style>
+  /*
+   * sideMenu.html is loaded inside the SideMenuFrame iframe that
+   * sideMenu.js injects. The iframe sits on top of a dark overlay,
+   * so we want the iframe's own body to be transparent and the
+   * links to look like the .overlay nav links from domatar.css.
+   */
+  html, body {
+    height: 100%;
+    background: transparent;
+    color: #fff;
+  }
+
+  nav.menu {
+    padding-top: 30px;
+    text-align: center;
+  }
+  nav.menu a {
+    display: block;
+    padding: 10px 8px;
+    margin: 4px auto;
+    max-width: 260px;
+    font-size: 22px;
+    color: #cfd3da;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s;
+  }
+  nav.menu a:hover, nav.menu a:focus {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    text-decoration: none;
+  }
+</style>
+</head>
+<body>
+
+<nav class="menu">
+  <a href="/domatar/login/login.html" target="_top">Login</a>
+  <a href="news.html"                 target="_top">News</a>
+  <a href="newQuip.html"              target="_top">New Quip</a>
+  <a href="quips.html"                target="_top">My Quips</a>
+  <a href="follows.html"              target="_top">Follows</a>
+  <a href="bans.html"                 target="_top">Bans</a>
+  <a href="logs.html"                 target="_top">Logs</a>
+</nav>
+
+</body>
+</html>

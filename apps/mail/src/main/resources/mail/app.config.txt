@@ -1,0 +1,6 @@
+AppId=mail
+AppName=Mail
+AppDesc=Send and receive mail
+Version=0.1
+DependsOn=navigator,login,desktop
+ProviderHosts=

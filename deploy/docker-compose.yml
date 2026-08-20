@@ -1,0 +1,66 @@
+name: domatar
+
+# Public single-node development stack. One provider, one database.
+# Run from the repo root:
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# Passwords below are DEVELOPMENT DEFAULTS. They match the JDBC URL in
+# platform/war/src/main/webapp/WEB-INF/web.xml and provider.config.txt.
+# Change them before any network-exposed or production use.
+#
+# Do not bind-mount real provider keysets. Setup generates an operational
+# key on first run when DOMATAR_PROVIDER_KEY_PATH is set to a writable path.
+#
+# Host Tomcat port defaults to 8080. Override if that port is taken:
+#   TOMCAT_HOST_PORT=9080 docker compose -f deploy/docker-compose.yml up -d
+
+services:
+  db:
+    image: mysql:8.0.20
+    environment:
+      # DEV-ONLY default — must match the WAR JDBC password.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-domatar}
+      MYSQL_DATABASE: domatar
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: always
+    networks:
+      default:
+        aliases:
+          - db
+
+  tomcat:
+    image: tomcat:10.1-jdk17
+    init: true
+    depends_on:
+      - db
+    volumes:
+      - ./tomcat/context.xml:/usr/local/tomcat/conf/context.xml:ro
+      - ../platform/war/target/domatar.war:/usr/local/tomcat/webapps/domatar.war:ro
+      - provider_keys:/usr/local/tomcat/mySQL/dev-keys
+    ports:
+      - "${TOMCAT_HOST_PORT:-8080}:8080"
+    environment:
+      DOMATAR_HSTID: prv1
+      DOMATAR_PRVID: prv1
+      DOMATAR_DOMAIN: tomcat:8080
+      DOMATAR_DIRECTORY: tomcat:8080
+      # DEV-ONLY default — change immediately after first /Setup.
+      DOMATAR_ADMIN_PASSWORD: ${DOMATAR_ADMIN_PASSWORD:-admin}
+      DOMATAR_WIRE_SCHEME: http
+      DOMATAR_PROVIDER_KEY_PATH: /usr/local/tomcat/mySQL/dev-keys/provider-opkey.txt
+      # Optional LLM backend for the AI Agent app. Leave empty until you have a key.
+      AIAGENT_PROVIDER: groq
+      AIAGENT_API_URL: https://api.groq.com/openai/v1/chat/completions
+      AIAGENT_MODEL: llama-3.3-70b-versatile
+      AIAGENT_API_KEY: ${AIAGENT_API_KEY:-}
+    entrypoint: ["catalina.sh", "run"]
+    networks:
+      default:
+        aliases:
+          - tomcat
+          - domatar
+
+volumes:
+  db_data:
+  provider_keys:

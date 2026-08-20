@@ -1,0 +1,2146 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Agent</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .ai-wrap {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* ---- Two-pane split ---- */
+        .ai-split {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ---- Left: conversation list pane ---- */
+        #conv-pane {
+            width: 240px;
+            min-width: 140px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            background: var(--page-bg);
+            flex-shrink: 0;
+        }
+
+        .conv-pane-header {
+            padding: 12px 12px 8px;
+            font-size: .78rem;
+            font-weight: 600;
+            color: var(--page-muted);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        #conv-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+
+        .conv-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 2px 4px;
+            font-size: 13px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .conv-item-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .conv-item:hover { background: rgba(0,0,0,.05); }
+        .conv-item.active { background: var(--accent, #cce4ff); }
+
+        /* mode badge on sidebar items */
+        .mode-badge {
+            font-size: 10px;
+            background: #e5e7eb;
+            color: #374151;
+            border-radius: 8px;
+            padding: 1px 5px;
+            flex-shrink: 0;
+            font-weight: 600;
+            letter-spacing: .02em;
+        }
+        .mode-badge.ro { background: #dbeafe; color: #1e40af; }
+        .mode-badge.ag { background: #fef9c3; color: #854d0e; }
+
+        .conv-pane-footer {
+            padding: 8px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .conv-pane-footer button {
+            width: 100%;
+            padding: 7px 0;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+
+        .conv-pane-footer button:hover { background: var(--page-bg); }
+        #btn-new-chat { font-weight: 600; color: #2563eb; border-color: #bfdbfe; }
+        #btn-new-chat:hover { background: #eff6ff; }
+
+        /* ---- Right: chat pane ---- */
+        #chat-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--page-bg);
+        }
+
+        #chat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            flex-shrink: 0;
+            min-height: 44px;
+        }
+
+        #chat-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #chat-header button {
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        #chat-header button:hover { background: var(--page-bg); }
+
+        /* ---- Mode toolbar ---- */
+        #mode-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 16px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .mode-label {
+            font-size: 13px;
+            color: var(--text);
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .mode-toolbar-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mode-segmented {
+            display: flex;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .mode-btn {
+            border: none;
+            border-right: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            padding: 3px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background .1s;
+            white-space: nowrap;
+        }
+
+        .mode-btn:last-child { border-right: none; }
+        .mode-btn:hover { background: var(--page-bg); }
+        .mode-btn.active { background: #2563eb; color: #fff; }
+
+        .settings-btn {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 15px;
+            color: var(--page-muted);
+        }
+
+        .settings-btn:hover { background: var(--page-bg); color: var(--text); }
+
+        /* mode info banner */
+        #mode-banner {
+            padding: 5px 16px;
+            font-size: 12px;
+            background: #f0fdf4;
+            border-bottom: 1px solid #bbf7d0;
+            color: #166534;
+            flex-shrink: 0;
+        }
+
+        #mode-banner.warn {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #92400e;
+        }
+
+        /* ---- Message list ---- */
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chat-placeholder {
+            color: var(--page-muted);
+            font-style: italic;
+            text-align: center;
+            padding: 40px 20px;
+            margin: auto;
+        }
+
+        .msg-block {
+            border-radius: var(--radius);
+            padding: 10px 14px;
+            max-width: 820px;
+        }
+
+        .msg-block.user {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            align-self: flex-end;
+            max-width: 70%;
+        }
+
+        .msg-block.assistant {
+            background: var(--card);
+            border: 1px solid var(--border);
+            align-self: flex-start;
+            max-width: 85%;
+        }
+
+        .msg-block.typing {
+            opacity: .55;
+            font-style: italic;
+            background: var(--card);
+            border: 1px solid var(--border);
+            align-self: flex-start;
+        }
+
+        .msg-meta {
+            display: flex;
+            gap: 10px;
+            align-items: baseline;
+            margin-bottom: 5px;
+        }
+
+        .msg-role {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: capitalize;
+            color: var(--page-muted);
+        }
+
+        .msg-block.user .msg-role { color: #1d4ed8; }
+
+        .msg-time {
+            font-size: 11px;
+            color: var(--page-muted);
+        }
+
+        .msg-model {
+            font-size: 10px;
+            color: var(--page-muted);
+            font-style: italic;
+        }
+
+        .msg-text {
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text);
+            margin: 0;
+        }
+
+        /* ---- Tool message action bars ---- */
+        .tool-wrap {
+            display: flex;
+            flex-direction: column;
+            align-self: flex-start;
+            max-width: 85%;
+        }
+
+        .tool-bar {
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            border-left: 3px solid #9ca3af;
+            border-radius: var(--radius) var(--radius) 0 0;
+            padding: 5px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-family: monospace;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tool-bar[data-status="ok"]    { border-left-color: #22c55e; }
+        .tool-bar[data-status="error"] { border-left-color: #ef4444; }
+        .tool-bar[data-status="pending"] { border-left-color: #f59e0b; background: #fffbeb; }
+
+        .tool-toggle {
+            background: none;
+            border: 1px solid #9ca3af;
+            border-radius: 3px;
+            width: 17px;
+            height: 17px;
+            cursor: pointer;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .tool-icon { color: #6b7280; flex-shrink: 0; font-style: normal; }
+
+        .tool-name {
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #374151;
+            flex: 1;
+        }
+
+        .tool-status-pill {
+            background: #e5e7eb;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 10px;
+            color: #374151;
+            flex-shrink: 0;
+            font-family: sans-serif;
+        }
+
+        .tool-bar[data-status="ok"]      .tool-status-pill { background: #dcfce7; color: #166534; }
+        .tool-bar[data-status="error"]   .tool-status-pill { background: #fee2e2; color: #991b1b; }
+        .tool-bar[data-status="pending"] .tool-status-pill { background: #fef3c7; color: #92400e; }
+
+        .tool-copy-btn {
+            background: none;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 10px;
+            color: #6b7280;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-family: sans-serif;
+            line-height: 1.4;
+        }
+        .tool-copy-btn:hover { background: #f3f4f6; color: #111827; }
+        .tool-copy-btn.copied { border-color: #86efac; color: #166534; background: #f0fdf4; }
+
+        .tool-detail {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-top: none;
+            border-radius: 0 0 var(--radius) var(--radius);
+            padding: 8px 12px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .tool-wrap.open .tool-bar { border-radius: var(--radius) var(--radius) 0 0; }
+        .tool-wrap.open .tool-detail { display: block; }
+
+        .tool-detail pre {
+            margin: 3px 0 6px;
+            overflow-x: auto;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 11px;
+            background: #fff;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
+            border-radius: 3px;
+            padding: 4px 6px;
+            max-height: 120px;
+        }
+
+        .tool-detail b { color: #374151; }
+
+        /* ---- Confirmation card (pending tool calls) ---- */
+        .tool-card {
+            border: 2px solid #f59e0b;
+            border-radius: var(--radius);
+            background: #fffbeb;
+            padding: 12px 14px;
+            align-self: flex-start;
+            max-width: 85%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tool-card-head {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .tool-card-head strong { color: #92400e; }
+
+        .tool-card-head .tool-card-name {
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .tool-card-body {
+            font-size: 12px;
+            color: #374151;
+        }
+
+        .tool-card-body pre {
+            margin: 3px 0 0;
+            background: #fff;
+            color: #1f2937;
+            border: 1px solid #fde68a;
+            border-radius: 3px;
+            padding: 4px 6px;
+            font-size: 11px;
+            overflow-x: auto;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 100px;
+        }
+
+        .tool-card-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .tool-card-buttons button {
+            padding: 4px 12px;
+            border-radius: var(--radius);
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid;
+        }
+
+        .tool-card-buttons .approve {
+            background: #dcfce7; color: #166534; border-color: #86efac;
+        }
+        .tool-card-buttons .approve-always {
+            background: #dbeafe; color: #1e40af; border-color: #93c5fd;
+        }
+        .tool-card-buttons .reject {
+            background: #fee2e2; color: #991b1b; border-color: #fca5a5;
+        }
+        .tool-card-buttons button:hover { opacity: .85; }
+        .tool-card-buttons button:disabled { opacity: .5; cursor: default; }
+
+        /* ---- Footer / input area ---- */
+        #chat-footer {
+            flex-shrink: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+        }
+
+        #error-banner {
+            display: none;
+            padding: 8px 16px;
+            background: #fef2f2;
+            color: #991b1b;
+            border-bottom: 1px solid #fca5a5;
+            font-size: 13px;
+        }
+
+        #input-row {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            align-items: flex-end;
+        }
+
+        #msg-input {
+            flex: 1;
+            resize: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 8px 12px;
+            font-size: 14px;
+            font-family: inherit;
+            line-height: 1.45;
+            background: var(--page-bg);
+            color: var(--text);
+            min-height: 40px;
+            max-height: 140px;
+            overflow-y: auto;
+        }
+
+        #msg-input:focus { outline: none; border-color: #2563eb; }
+        #msg-input:disabled { opacity: .6; }
+
+        #btn-send {
+            padding: 9px 20px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            align-self: flex-end;
+            transition: background .12s;
+        }
+
+        #btn-send:hover:not(:disabled) { background: #1d4ed8; }
+        #btn-send:disabled { opacity: .5; cursor: default; }
+
+        #model-select {
+            flex-shrink: 0;
+            align-self: flex-end;
+            max-width: 240px;
+            min-width: 160px;
+            height: 40px;
+            padding: 0 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--page-bg);
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+        }
+
+        #model-select:focus { outline: none; border-color: #2563eb; }
+
+        /* ---- Settings modal ---- */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px 24px;
+            width: 440px;
+            max-width: 95vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 10px 40px rgba(0,0,0,.2);
+        }
+
+        .modal-card h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+
+        .modal-card label {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .modal-card input,
+        .modal-card textarea {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 6px 8px;
+            font-size: 13px;
+            font-family: inherit;
+            background: var(--page-bg);
+            color: var(--text);
+        }
+
+        .modal-card input:focus,
+        .modal-card textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+
+        .modal-card small {
+            font-size: 11px;
+            color: var(--page-muted);
+            font-weight: 400;
+        }
+
+        .modal-card details {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 8px 10px;
+        }
+
+        .modal-card details summary {
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .modal-card details > label { margin-top: 8px; }
+
+        .modal-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .modal-buttons button {
+            padding: 6px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 13px;
+            background: var(--card);
+            color: var(--text);
+        }
+
+        .modal-buttons button.primary {
+            background: #2563eb;
+            color: #fff;
+            border-color: #1d4ed8;
+        }
+
+        .modal-buttons button:hover { opacity: .88; }
+
+        /* ── ForeignActIds pill list ─────────────────────────── */
+        .pill-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 5px;
+            min-height: 24px;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+            border-radius: 12px;
+            padding: 2px 6px 2px 8px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .pill-remove {
+            cursor: pointer;
+            color: #1e40af;
+            font-size: 14px;
+            line-height: 1;
+            border: none;
+            background: none;
+            padding: 0 0 0 2px;
+        }
+        .pill-remove:hover { color: #991b1b; }
+        .pill-error {
+            background: #fef2f2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+
+        #settings-error {
+            color: #991b1b;
+            font-size: 12px;
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            border-radius: var(--radius);
+            padding: 5px 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    /* ----------------------------------------------------------------
+     * State
+     * ---------------------------------------------------------------- */
+    var convList           = [];    // [{ConvId, Title, UpdatedAt, Mode, ...}]
+    var convCache          = {};    // convId -> {Title, Model, Mode, Policy, ForeignActIds, Messages:[]}
+    var currentConvId      = null;  // null when no conv is selected / on new-chat
+    var currentMode        = "ReadOnly";
+    var currentPolicy      = "{}";
+    var currentForeignActIds = "[]";
+    var isSending          = false;
+    var MODEL_STORAGE_KEY  = "domatar-aiagent-model";
+
+    /* ----------------------------------------------------------------
+     * Boot
+     * ---------------------------------------------------------------- */
+    function init()
+    {
+        $("#btn-new-chat").on("click", onNewChat);
+        $("#btn-send").on("click", onSend);
+        $("#btn-sign-out").on("click", signOut);
+        $("#settings-btn").on("click", openSettings);
+        $("#settings-cancel").on("click", closeSettings);
+        $("#settings-save").on("click", saveSettings);
+        $("#model-select").on("change", function() {
+            persistModel($(this).val());
+        });
+
+        // Mode segmented buttons
+        $(".mode-btn").on("click", function() {
+            setMode($(this).data("mode"));
+        });
+
+        // Esc closes settings modal
+        $(document).on("keydown", function(e) {
+            if (e.key === "Escape") closeSettings();
+        });
+
+        // ForeignActIds input: Enter adds a pill, Backspace on empty removes last pill.
+        $(document).on("keydown", "#foreign-actids-input", function(e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                addForeignPill($(this).val());
+            } else if (e.key === "Backspace" && $(this).val() === "") {
+                e.preventDefault();
+                if (foreignPills.length > 0)
+                    removeForeignPill(foreignPills[foreignPills.length - 1]);
+            }
+        });
+
+        $("#msg-input").on("keydown", function(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSend();
+            }
+        });
+
+        $("#msg-input").on("input", autoResizeInput);
+
+        renderModeButtons();
+        loadModels();
+        listConversations();
+    }
+
+    /* ----------------------------------------------------------------
+     * Model drop-down (one saved pick for all conversations)
+     * ---------------------------------------------------------------- */
+    function rememberedModel()
+    {
+        try { return localStorage.getItem(MODEL_STORAGE_KEY) || ""; }
+        catch (e) { return ""; }
+    }
+
+    function persistModel(id)
+    {
+        try { localStorage.setItem(MODEL_STORAGE_KEY, id || ""); }
+        catch (e) { /* private mode / quota */ }
+    }
+
+    function selectedModel()
+    {
+        return ($("#model-select").val() || "").trim();
+    }
+
+    function applyRememberedModel()
+    {
+        var saved = rememberedModel();
+        var $sel  = $("#model-select");
+        var found = false;
+
+        $sel.find("option").each(function() {
+            if ($(this).val() === saved) {
+                found = true;
+                return false;
+            }
+        });
+
+        $sel.val(found && saved ? saved : "");
+    }
+
+    function loadModels()
+    {
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=ListModels",
+            timeout : 20000,
+            success : function(json) {
+                var resp = safeParse(json);
+                var $sel = $("#model-select");
+
+                $sel.find("option:not(:first)").remove();
+
+                if (!resp || resp.Error === "Failure") {
+                    showError("Could not load models: " +
+                              (resp && resp.ErrorMsg || "server error"));
+                    return;
+                }
+
+                var models = (resp.Attrs && resp.Attrs.Models) || [];
+
+                for (var i = 0; i < models.length; i++) {
+                    var id = models[i].Id || models[i];
+                    if (!id) continue;
+                    $sel.append($("<option>").attr("value", id).text(id));
+                }
+
+                applyRememberedModel();
+
+                if (models.length === 0)
+                    showError("No tool-capable models are available.");
+            },
+            error : function(jqXHR, status) {
+                showError("Could not load models: " + status);
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Auto-resize textarea
+     * ---------------------------------------------------------------- */
+    function autoResizeInput()
+    {
+        var el = document.getElementById("msg-input");
+        el.style.height = "auto";
+        el.style.height = Math.min(el.scrollHeight, 140) + "px";
+    }
+
+    /* ----------------------------------------------------------------
+     * ListConversations
+     * ---------------------------------------------------------------- */
+    function listConversations()
+    {
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=ListConversations",
+            timeout : 15000,
+            success : function(json) {
+                var resp = safeParse(json);
+
+                if (!resp || resp.Error === "Failure") {
+                    showError("Could not load conversations: " +
+                              (resp && resp.ErrorMsg || "server error"));
+                    showChatPlaceholder("(failed to load)");
+                    return;
+                }
+
+                convList = (resp.Attrs && resp.Attrs.Conversations) || [];
+                renderConvList();
+
+                if (convList.length > 0)
+                    selectConv(convList[0].ConvId);
+                else
+                    showNewChatPlaceholder();
+            },
+            error : function(jqXHR, status) {
+                showError("Network error: " + status);
+                showChatPlaceholder("(network error)");
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Render the left-pane conversation list
+     * ---------------------------------------------------------------- */
+    function renderConvList()
+    {
+        var $list = $("#conv-list").empty();
+
+        if (convList.length === 0) {
+            $list.html('<div style="padding:12px;font-size:12px;color:var(--page-muted);font-style:italic;">No conversations yet.</div>');
+            return;
+        }
+
+        for (var i = 0; i < convList.length; i++)
+        {
+            var c     = convList[i];
+            var $item = $('<div class="conv-item"></div>')
+                .attr("data-cid", c.ConvId);
+
+            $item.append($('<span class="conv-item-title"></span>').text(c.Title || c.ConvId));
+
+            // Mode badge (RO / AG) when not Chat
+            var m = c.Mode || "Chat";
+            if (m === "ReadOnly")
+                $item.append($('<span class="mode-badge ro">RO</span>'));
+            else if (m === "Agent")
+                $item.append($('<span class="mode-badge ag">AG</span>'));
+
+            if (c.ConvId === currentConvId)
+                $item.addClass("active");
+
+            (function(cid) {
+                $item.on("click", function() { selectConv(cid); });
+            })(c.ConvId);
+
+            $list.append($item);
+        }
+    }
+
+    function markActive(convId)
+    {
+        $(".conv-item").removeClass("active");
+        if (convId)
+            $(".conv-item[data-cid='" + convId + "']").addClass("active");
+    }
+
+    /* ----------------------------------------------------------------
+     * Select a conversation
+     * ---------------------------------------------------------------- */
+    function selectConv(convId)
+    {
+        if (isSending) return;
+
+        currentConvId = convId;
+        markActive(convId);
+
+        if (convCache[convId])
+            renderMessages(convCache[convId]);
+        else
+            getConversation(convId);
+    }
+
+    /* ----------------------------------------------------------------
+     * GetConversation
+     * ---------------------------------------------------------------- */
+    function getConversation(convId)
+    {
+        setInputEnabled(false);
+        showChatPlaceholder("Loading\u2026");
+        $("#chat-title").text("Loading\u2026");
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=GetConversation&ConvId=" + encodeURIComponent(convId),
+            timeout : 15000,
+            success : function(json) {
+                setInputEnabled(true);
+
+                if (convId !== currentConvId) return;
+
+                var resp = safeParse(json);
+
+                if (!resp || resp.Error === "Failure") {
+                    showError("Could not load conversation: " +
+                              (resp && resp.ErrorMsg || "server error"));
+                    showChatPlaceholder("(failed to load)");
+                    return;
+                }
+
+                var attrs = resp.Attrs || {};
+                var entry = {
+                    Title          : attrs.Title          || convId,
+                    Model          : attrs.Model          || "",
+                    Mode           : attrs.Mode           || "Chat",
+                    Policy         : attrs.Policy         || "{}",
+                    ForeignActIds  : attrs.ForeignActIds  || "[]",
+                    Messages       : attrs.Messages       || []
+                };
+
+                convCache[convId] = entry;
+                renderMessages(entry);
+            },
+            error : function(jqXHR, status) {
+                setInputEnabled(true);
+                showError("Network error: " + status);
+                showChatPlaceholder("(error)");
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Render messages into the right pane
+     * ---------------------------------------------------------------- */
+    function renderMessages(entry)
+    {
+        clearError();
+        hideModeBanner();
+        $("#chat-title").text(entry.Title || "Conversation");
+
+        // Update mode state from the loaded conversation
+        currentMode        = entry.Mode          || "ReadOnly";
+        currentPolicy      = entry.Policy        || "{}";
+        currentForeignActIds = entry.ForeignActIds || "[]";
+        renderModeButtons();
+        $("#mode-toolbar").show();
+
+        var $msgs = $("#chat-messages").empty();
+
+        if (!entry.Messages || entry.Messages.length === 0) {
+            $msgs.html('<div class="chat-placeholder">No messages yet. Send one below.</div>');
+        } else {
+            for (var i = 0; i < entry.Messages.length; i++)
+                appendMessage($msgs, entry.Messages[i]);
+            scrollToBottom();
+        }
+    }
+
+    /* ----------------------------------------------------------------
+     * Append one message object to a container
+     * ---------------------------------------------------------------- */
+    function appendMessage($container, m)
+    {
+        var role = (m.Role || "user").toLowerCase();
+
+        if (role === "tool") {
+            $container.append(buildToolBar(m));
+        } else {
+            $container.append(buildMsgBlock(m));
+        }
+    }
+
+    /* ----------------------------------------------------------------
+     * Build a standard chat message block
+     * ---------------------------------------------------------------- */
+    function buildMsgBlock(m, extraClass)
+    {
+        var role = (m.Role || "user").toLowerCase();
+
+        var $block = $('<div></div>').addClass("msg-block " + role +
+                                               (extraClass ? " " + extraClass : ""));
+
+        var $meta = $('<div class="msg-meta"></div>');
+        $meta.append($('<span class="msg-role"></span>').text(role));
+
+        if (m.Time)
+            $meta.append($('<span class="msg-time"></span>').text(formatTime(m.Time)));
+
+        if (role === "assistant" && m.Model)
+            $meta.append($('<span class="msg-model"></span>').text(m.Model));
+
+        var $text = $('<p class="msg-text"></p>').text(m.Text || "");
+
+        $block.append($meta).append($text);
+        return $block;
+    }
+
+    /* ----------------------------------------------------------------
+     * Build a tool-call action bar OR confirmation card
+     * ---------------------------------------------------------------- */
+    function buildToolBar(m)
+    {
+        if (m.ToolStatus === "pending")
+            return buildConfirmCard(m);
+
+        var status  = m.ToolStatus || "unknown";
+        var name    = m.ToolName   || "(unknown tool)";
+
+        var $wrap = $('<div class="tool-wrap"></div>');
+
+        var $bar = $('<div class="tool-bar"></div>').attr("data-status", status);
+
+        var $toggle = $('<button class="tool-toggle" title="Expand">+</button>');
+
+        $bar.append($toggle);
+        $bar.append($('<em class="tool-icon">[fn]</em>'));
+        $bar.append($('<span class="tool-name"></span>').text(name));
+
+        var $copyBtn = $('<button class="tool-copy-btn" title="Copy call and result">copy</button>');
+        $bar.append($copyBtn);
+        $bar.append($('<span class="tool-status-pill"></span>').text(status));
+
+        var $detail = $('<div class="tool-detail"></div>');
+
+        if (m.ToolTargetSov)
+            $detail.append($('<div></div>').html(
+                '<b>Target:</b> ' + esc(formatSov(m.ToolTargetSov))));
+
+        if (m.ToolArgs) {
+            $detail.append($('<div></div>').html('<b>Args:</b>'));
+            $detail.append($('<pre></pre>').text(jsonPretty(m.ToolArgs)));
+        }
+
+        if (m.ToolResult) {
+            $detail.append($('<div></div>').html('<b>Result:</b>'));
+            $detail.append($('<pre></pre>').text(jsonPretty(m.ToolResult)));
+        }
+
+        $wrap.append($bar).append($detail);
+
+        // Copy button: assembles a clean text block and writes it to clipboard
+        $copyBtn.on("click", function(e) {
+            e.stopPropagation();
+            var parts = [];
+            parts.push("Tool: " + name);
+            if (m.ToolTargetSov) parts.push("Target: " + formatSov(m.ToolTargetSov));
+            if (m.ToolArgs)      parts.push("Args:\n"   + jsonPretty(m.ToolArgs));
+            if (m.ToolResult)    parts.push("Result:\n" + jsonPretty(m.ToolResult));
+            var text = parts.join("\n\n");
+
+            function markCopied() {
+                $copyBtn.text("copied").addClass("copied");
+                setTimeout(function() { $copyBtn.text("copy").removeClass("copied"); }, 1500);
+            }
+
+            function fallbackCopy() {
+                // execCommand works over HTTP; position off-screen so select() works
+                var ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.cssText = "position:fixed;left:-9999px;top:0;width:2em;height:2em;border:0;padding:0;outline:0;";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                try { document.execCommand("copy"); markCopied(); }
+                catch(ex) { /* ignore — browser may block entirely */ }
+                document.body.removeChild(ta);
+            }
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(markCopied, fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+        });
+
+        // Toggle expand/collapse on bar click
+        $wrap.on("click", function(e) {
+            var open = $wrap.hasClass("open");
+            $wrap.toggleClass("open", !open);
+            $toggle.text(open ? "+" : "\u2212");
+        });
+
+        return $wrap;
+    }
+
+    /* ----------------------------------------------------------------
+     * Build a confirmation card for a pending tool call
+     * ---------------------------------------------------------------- */
+    function buildConfirmCard(m)
+    {
+        var pid  = m.PendingId || "";
+        var name = m.ToolName  || "(unknown tool)";
+
+        var $card = $('<div class="tool-card"></div>').attr("data-pending", pid);
+
+        var $head = $('<div class="tool-card-head"></div>');
+        $head.append($('<strong>Approve tool call?</strong>'));
+        $head.append($('<span class="tool-card-name"></span>').text(name));
+        $card.append($head);
+
+        var $body = $('<div class="tool-card-body"></div>');
+        if (m.ToolTargetSov)
+            $body.append($('<div></div>').html('<b>Target:</b> ' + esc(formatSov(m.ToolTargetSov))));
+        if (m.ToolArgs)
+        {
+            $body.append($('<div></div>').html('<b>Args:</b>'));
+            $body.append($('<pre></pre>').text(jsonPretty(m.ToolArgs)));
+        }
+        $card.append($body);
+
+        var $btns = $('<div class="tool-card-buttons"></div>');
+        var $approve       = $('<button class="approve">Approve</button>');
+        var $approveAlways = $('<button class="approve-always">Approve always</button>');
+        var $reject        = $('<button class="reject">Reject</button>');
+
+        (function(pendingId) {
+            $approve.on("click",       function() { approvePendingCall(pendingId, false, $card); });
+            $approveAlways.on("click", function() { approvePendingCall(pendingId, true,  $card); });
+            $reject.on("click",        function() { rejectPendingCall(pendingId, $card); });
+        })(pid);
+
+        $btns.append($approve).append($approveAlways).append($reject);
+        $card.append($btns);
+        return $card;
+    }
+
+    /* ----------------------------------------------------------------
+     * Approve / reject a pending tool call
+     * ---------------------------------------------------------------- */
+    function approvePendingCall(pendingId, always, $card)
+    {
+        if (!currentConvId) return;
+        $card.find("button").prop("disabled", true);
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=ApproveToolCall" +
+                      "&ConvId="    + encodeURIComponent(currentConvId) +
+                      "&PendingId=" + encodeURIComponent(pendingId) +
+                      "&Always="    + (always ? "True" : "False"),
+            timeout : 120000,
+            success : function(json) { applyResume(json, $card); },
+            error   : function(jqXHR, status) {
+                $card.find("button").prop("disabled", false);
+                showError("Network error: " + status);
+            }
+        });
+    }
+
+    function rejectPendingCall(pendingId, $card)
+    {
+        if (!currentConvId) return;
+        $card.find("button").prop("disabled", true);
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=RejectToolCall" +
+                      "&ConvId="    + encodeURIComponent(currentConvId) +
+                      "&PendingId=" + encodeURIComponent(pendingId),
+            timeout : 120000,
+            success : function(json) { applyResume(json, $card); },
+            error   : function(jqXHR, status) {
+                $card.find("button").prop("disabled", false);
+                showError("Network error: " + status);
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Apply a resume response: replace the pending card with resolved
+     * result and append any new messages.
+     * ---------------------------------------------------------------- */
+    function applyResume(json, $pendingCard)
+    {
+        var resp = safeParse(json);
+
+        if (!resp || resp.Error === "Failure")
+        {
+            if ($pendingCard) $pendingCard.find("button").prop("disabled", false);
+            showError("Resume failed: " + (resp && resp.ErrorMsg || "server error"));
+            return;
+        }
+
+        var attrs  = resp.Attrs || {};
+        var resume = attrs.Resume;
+
+        if (!resume)
+        {
+            if ($pendingCard) $pendingCard.find("button").prop("disabled", false);
+            showError("Unexpected response (no Resume key)");
+            return;
+        }
+
+        var convId = currentConvId;
+        if (!convCache[convId])
+            convCache[convId] = { Title: "", Model: "", Mode: currentMode,
+                                  Policy: currentPolicy,
+                                  ForeignActIds: currentForeignActIds,
+                                  Messages: [] };
+
+        var $msgs = $("#chat-messages");
+
+        // Replace the pending card with a resolved action bar.
+        var resolvedPendingId = resume.ResolvedPendingId;
+        var resolvedStatus    = resume.ResolvedStatus || "ok";
+
+        if ($pendingCard)
+        {
+            // Rebuild as a collapsed action bar with the resolved status.
+            var resolvedMsg = {
+                Role:          "tool",
+                PendingId:     resolvedPendingId,
+                ToolName:      resume.ResolvedToolName,
+                ToolStatus:    resolvedStatus,
+                ToolResult:    resume.ResolvedToolResult    || "",
+                ToolTargetSov: resume.ResolvedToolTargetSov || "",
+                ToolArgs:      $pendingCard.find(".tool-card-body pre").text() || ""
+            };
+            var $resolved = buildToolBar(resolvedMsg);
+            $pendingCard.replaceWith($resolved);
+
+            // Update cache entry for this message.
+            var msgArr = convCache[convId].Messages;
+            for (var i = 0; i < msgArr.length; i++)
+            {
+                if (msgArr[i].PendingId === resolvedPendingId
+                    && msgArr[i].ToolStatus === "pending")
+                {
+                    msgArr[i].ToolStatus = resolvedStatus;
+                    msgArr[i].ToolResult = resume.ResolvedToolResult || "";
+                    break;
+                }
+            }
+        }
+
+        // Append new tool messages.
+        var toolMsgs = resume.ToolMessages || [];
+        for (var i = 0; i < toolMsgs.length; i++)
+        {
+            convCache[convId].Messages.push(toolMsgs[i]);
+            $msgs.append(buildToolBar(toolMsgs[i]));
+        }
+
+        // Append assistant message (if loop completed).
+        var asgMsg = resume.AssistantMessage;
+        if (asgMsg)
+        {
+            convCache[convId].Messages.push(asgMsg);
+            $msgs.append(buildMsgBlock(asgMsg));
+        }
+
+        // Append new pending cards (if loop paused again).
+        var pendingMsgs = resume.PendingToolCalls || [];
+        for (var i = 0; i < pendingMsgs.length; i++)
+        {
+            convCache[convId].Messages.push(pendingMsgs[i]);
+            $msgs.append(buildToolBar(pendingMsgs[i]));
+        }
+
+        scrollToBottom();
+    }
+
+    /* ----------------------------------------------------------------
+     * Mode toolbar helpers
+     * ---------------------------------------------------------------- */
+    function renderModeButtons()
+    {
+        $(".mode-btn").each(function() {
+            $(this).toggleClass("active", $(this).data("mode") === currentMode);
+        });
+    }
+
+    function setMode(newMode)
+    {
+        if (newMode === currentMode) return;
+
+        if (!currentConvId)
+        {
+            currentMode = newMode;
+            renderModeButtons();
+            showModeBanner(modeBannerText(newMode));
+            return;
+        }
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=SetMode" +
+                      "&ConvId=" + encodeURIComponent(currentConvId) +
+                      "&Mode="   + encodeURIComponent(newMode),
+            timeout : 10000,
+            success : function(json) {
+                var resp = safeParse(json);
+
+                if (!resp || resp.Error === "Failure") {
+                    showError("SetMode failed: " + (resp && resp.ErrorMsg || "server error"));
+                    return;
+                }
+
+                currentMode = newMode;
+                renderModeButtons();
+
+                // Update convList entry mode badge
+                for (var i = 0; i < convList.length; i++) {
+                    if (convList[i].ConvId === currentConvId) {
+                        convList[i].Mode = newMode;
+                        break;
+                    }
+                }
+                renderConvList();
+                markActive(currentConvId);
+
+                if (convCache[currentConvId])
+                    convCache[currentConvId].Mode = newMode;
+
+                showModeBanner(modeBannerText(newMode));
+            },
+            error : function(jqXHR, status) {
+                showError("Network error: " + status);
+            }
+        });
+    }
+
+    function modeBannerText(mode)
+    {
+        if (mode === "ReadOnly")
+            return "Chat (with tools): the agent can explore and read your data across your apps to answer questions. It cannot make changes.";
+        if (mode === "Agent")
+            return "Agent (read/write): the agent can read your data and, with your confirmation, make changes.";
+        return "Chat (no tools): the model answers without tools.";
+    }
+
+    function showModeBanner(text)
+    {
+        $("#mode-banner").text(text).show();
+        // Auto-hide after 4 s
+        setTimeout(hideModeBanner, 4000);
+    }
+
+    function hideModeBanner()
+    {
+        $("#mode-banner").hide().text("");
+    }
+
+    /* ----------------------------------------------------------------
+     * Settings modal
+     * ---------------------------------------------------------------- */
+    function openSettings()
+    {
+        if (!currentConvId)
+        {
+            showError("Start the conversation first (send a message), then open settings.");
+            return;
+        }
+
+        // Populate from currentPolicy and currentForeignActIds
+        var policy = {};
+        try   { policy = JSON.parse(currentPolicy); }
+        catch (e) { /* ignore — use empty */ }
+
+        var foreign = [];
+        try   { foreign = JSON.parse(currentForeignActIds); }
+        catch (e) { /* ignore */ }
+
+        var allow  = (policy.AllowApps         || []).join(", ");
+        var deny   = (policy.DenyApps          || []).join(", ");
+        var preapp = (policy.PreApprovedWrites  || []).join("\n");
+        var budgets = policy.Budgets || {};
+
+        $("#allow-apps").val(allow);
+        $("#deny-apps").val(deny);
+        populateForeignPills(foreign);
+        $("#foreign-actids-input").val("");
+        $("#preapproved").val(preapp);
+        $("#b-iter").val(budgets.MaxIterations || "");
+        $("#b-ms").val(budgets.MaxMillis || "");
+        $("#b-tin").val(budgets.MaxTokensIn || "");
+        $("#b-tout").val(budgets.MaxTokensOut || "");
+        $("#settings-error").hide().text("");
+
+        $("#settings-modal").show();
+        $("#allow-apps").focus();
+    }
+
+    function closeSettings()
+    {
+        $("#settings-modal").hide();
+    }
+
+    function saveSettings()
+    {
+        var policyJson = buildPolicyJson();
+        var foreignJson = buildForeignActIdsJson();
+
+        // Validate JSON
+        try   { JSON.parse(policyJson); }
+        catch (e) {
+            $("#settings-error").text("Policy JSON is invalid: " + e.message).show();
+            return;
+        }
+
+        try   { JSON.parse(foreignJson); }
+        catch (e) {
+            $("#settings-error").text("ForeignActIds JSON is invalid: " + e.message).show();
+            return;
+        }
+
+        var cid = currentConvId;
+        var pendingCalls = 2;
+        var saveError = null;
+
+        function onDone() {
+            pendingCalls--;
+            if (pendingCalls > 0) return;
+            if (saveError) {
+                $("#settings-error").text(saveError).show();
+            } else {
+                currentPolicy = policyJson;
+                currentForeignActIds = foreignJson;
+                if (convCache[cid]) {
+                    convCache[cid].Policy = policyJson;
+                    convCache[cid].ForeignActIds = foreignJson;
+                }
+                closeSettings();
+            }
+        }
+
+        // Save Policy
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=SetPolicy" +
+                      "&ConvId="  + encodeURIComponent(cid) +
+                      "&Policy="  + encodeURIComponent(policyJson),
+            timeout : 10000,
+            success : function(json) {
+                var resp = safeParse(json);
+                if (!resp || resp.Error === "Failure")
+                    saveError = "SetPolicy failed: " + (resp && resp.ErrorMsg || "server error");
+                onDone();
+            },
+            error : function(jqXHR, status) {
+                saveError = "Network error (SetPolicy): " + status;
+                onDone();
+            }
+        });
+
+        // Save ForeignActIds
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=SetForeignActIds" +
+                      "&ConvId="          + encodeURIComponent(cid) +
+                      "&ForeignActIds="   + encodeURIComponent(foreignJson),
+            timeout : 10000,
+            success : function(json) {
+                var resp = safeParse(json);
+                if (!resp || resp.Error === "Failure") {
+                    var msg = resp && resp.ErrorMsg || "server error";
+                    saveError = "SetForeignActIds failed: " + msg;
+                    // Highlight the offending pill if the error names a specific actId.
+                    highlightForeignPillError(msg);
+                }
+                onDone();
+            },
+            error : function(jqXHR, status) {
+                saveError = "Network error (SetForeignActIds): " + status;
+                onDone();
+            }
+        });
+    }
+
+    function buildPolicyJson()
+    {
+        var allowStr  = $("#allow-apps").val().trim();
+        var denyStr   = $("#deny-apps").val().trim();
+        var preappStr = $("#preapproved").val().trim();
+        var iterVal   = $("#b-iter").val().trim();
+        var msVal     = $("#b-ms").val().trim();
+        var tinVal    = $("#b-tin").val().trim();
+        var toutVal   = $("#b-tout").val().trim();
+
+        var policy = {};
+
+        if (allowStr)
+            policy.AllowApps = allowStr.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+
+        if (denyStr)
+            policy.DenyApps = denyStr.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+
+        if (preappStr)
+            policy.PreApprovedWrites = preappStr.split("\n").map(function(s){ return s.trim(); }).filter(Boolean);
+
+        var budgets = {};
+        if (iterVal)  budgets.MaxIterations = parseInt(iterVal, 10);
+        if (msVal)    budgets.MaxMillis     = parseInt(msVal,   10);
+        if (tinVal)   budgets.MaxTokensIn   = parseInt(tinVal,  10);
+        if (toutVal)  budgets.MaxTokensOut  = parseInt(toutVal, 10);
+        if (Object.keys(budgets).length > 0) policy.Budgets = budgets;
+
+        return JSON.stringify(policy);
+    }
+
+    /* ----------------------------------------------------------------
+     * ForeignActIds pill list
+     * ---------------------------------------------------------------- */
+    var foreignPills = [];   // array of actId strings currently shown as pills
+
+    function populateForeignPills(arr)
+    {
+        foreignPills = Array.isArray(arr) ? arr.slice() : [];
+        renderForeignPills();
+    }
+
+    function renderForeignPills()
+    {
+        var $container = $("#foreign-actids-pills").empty();
+        foreignPills.forEach(function(actId, idx) {
+            $container.append(buildPill(actId, false));
+        });
+    }
+
+    function buildPill(actId, hasError)
+    {
+        var $pill = $('<span class="pill' + (hasError ? ' pill-error' : '') + '"></span>')
+            .text(actId);
+        var $x = $('<button class="pill-remove" title="Remove">&#x2715;</button>');
+        $x.on("click", function() { removeForeignPill(actId); });
+        $pill.append($x);
+        return $pill;
+    }
+
+    function addForeignPill(actId)
+    {
+        actId = actId.trim();
+        if (!actId) return;
+        if (foreignPills.indexOf(actId) === -1)
+        {
+            foreignPills.push(actId);
+            renderForeignPills();
+        }
+        $("#foreign-actids-input").val("");
+    }
+
+    function removeForeignPill(actId)
+    {
+        foreignPills = foreignPills.filter(function(a) { return a !== actId; });
+        renderForeignPills();
+    }
+
+    function buildForeignActIdsJson()
+    {
+        // Combine current pills with anything still typed in the input.
+        var inputStr = $("#foreign-actids-input").val().trim();
+        var combined = foreignPills.slice();
+        if (inputStr)
+        {
+            inputStr.split(",").forEach(function(s) {
+                var t = s.trim();
+                if (t && combined.indexOf(t) === -1) combined.push(t);
+            });
+        }
+        return JSON.stringify(combined);
+    }
+
+    /**
+     * Marks the pill for any actId mentioned in errorMsg with a red border so
+     * the user can identify the invalid entry without hunting through the list.
+     */
+    function highlightForeignPillError(errorMsg)
+    {
+        if (!errorMsg) return;
+        var $pills = $("#foreign-actids-pills").find(".pill");
+        $pills.each(function() {
+            var actId = $(this).text().replace("✕", "").trim();
+            if (errorMsg.indexOf(actId) !== -1)
+                $(this).addClass("pill-error");
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * "+ New chat" button
+     * ---------------------------------------------------------------- */
+    function onNewChat()
+    {
+        if (isSending) return;
+        showNewChatPlaceholder();
+    }
+
+    /* ----------------------------------------------------------------
+     * Send message
+     * ---------------------------------------------------------------- */
+    function onSend()
+    {
+        if (isSending) return;
+
+        var text = $("#msg-input").val().trim();
+        if (!text) return;
+
+        var model = selectedModel();
+        if (!model) {
+            showError("Choose a model");
+            return;
+        }
+
+        clearError();
+        isSending = true;
+        setInputEnabled(false);
+
+        var $msgs = $("#chat-messages");
+        $msgs.find(".chat-placeholder").remove();
+
+        var userNow  = Date.now().toString();
+        var $userBlk = buildMsgBlock({ Role: "user",      Text: text,    Time: userNow });
+        var $typBlk  = buildMsgBlock({ Role: "assistant", Text: "\u2026" }, "typing");
+
+        $msgs.append($userBlk).append($typBlk);
+        scrollToBottom();
+
+        var dataStr = "Action=SendMessage&Text=" + encodeURIComponent(text)
+                    + "&Mode="   + encodeURIComponent(currentMode || "ReadOnly")
+                    + "&Model="  + encodeURIComponent(model);
+        if (currentConvId)
+            dataStr += "&ConvId=" + encodeURIComponent(currentConvId);
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : dataStr,
+            timeout : 120000,
+            success : function(json) {
+                isSending = false;
+                setInputEnabled(true);
+                $userBlk.remove();
+                $typBlk.remove();
+
+                var resp = safeParse(json);
+
+                if (!resp || resp.Error === "Failure") {
+                    showError("Send failed: " + (resp && resp.ErrorMsg || "server error"));
+                    return;
+                }
+
+                var attrs       = resp.Attrs || {};
+                var convId      = attrs.ConvId;
+                var userMsg     = attrs.UserMessage;
+                var toolMsgs    = attrs.ToolMessages    || [];
+                var asgMsg      = attrs.AssistantMessage;
+                var pendingMsgs = attrs.PendingToolCalls || [];
+
+                if (!convCache[convId])
+                    convCache[convId] = { Title: "", Model: "", Mode: currentMode,
+                                          Policy: currentPolicy,
+                                          ForeignActIds: currentForeignActIds,
+                                          Messages: [] };
+
+                // New conversation path
+                if (convId && convId !== currentConvId) {
+                    currentConvId = convId;
+                    var title = text.length > 40 ? text.substring(0, 40) : text;
+                    convCache[convId].Title = title;
+                    convList.unshift({ ConvId: convId, Title: title, Mode: currentMode });
+                    renderConvList();
+                    markActive(convId);
+                    $("#chat-title").text(title);
+                    $("#mode-toolbar").show();
+                }
+
+                // Render user message
+                if (userMsg) {
+                    convCache[convId].Messages.push(userMsg);
+                    $msgs.append(buildMsgBlock(userMsg));
+                }
+
+                // Render completed tool messages
+                for (var i = 0; i < toolMsgs.length; i++) {
+                    convCache[convId].Messages.push(toolMsgs[i]);
+                    $msgs.append(buildToolBar(toolMsgs[i]));
+                }
+
+                // Render final assistant message (if loop completed)
+                if (asgMsg) {
+                    convCache[convId].Messages.push(asgMsg);
+                    $msgs.append(buildMsgBlock(asgMsg));
+                }
+
+                // Render pending confirmation cards (if loop paused)
+                for (var i = 0; i < pendingMsgs.length; i++) {
+                    convCache[convId].Messages.push(pendingMsgs[i]);
+                    $msgs.append(buildToolBar(pendingMsgs[i]));
+                }
+
+                scrollToBottom();
+                $("#msg-input").val("").css("height", "auto");
+            },
+            error : function(jqXHR, status) {
+                isSending = false;
+                setInputEnabled(true);
+                $userBlk.remove();
+                $typBlk.remove();
+                showError("Network error: " + status);
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Refresh
+     * ---------------------------------------------------------------- */
+    function onRefresh()
+    {
+        if (isSending) return;
+
+        if (!currentConvId) {
+            listConversations();
+            return;
+        }
+
+        delete convCache[currentConvId];
+        getConversation(currentConvId);
+    }
+
+    /* ----------------------------------------------------------------
+     * Rename
+     * ---------------------------------------------------------------- */
+    function onRename()
+    {
+        if (isSending || !currentConvId) return;
+
+        var oldTitle = (convCache[currentConvId] && convCache[currentConvId].Title)
+                       || currentConvId;
+
+        var newTitle = prompt("New title:", oldTitle);
+        if (!newTitle || !newTitle.trim()) return;
+        newTitle = newTitle.trim();
+
+        var cid = currentConvId;
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=RenameConversation" +
+                      "&ConvId=" + encodeURIComponent(cid) +
+                      "&Title="  + encodeURIComponent(newTitle),
+            timeout : 10000,
+            success : function(json) {
+                var resp = safeParse(json);
+
+                if (!resp || resp.Error === "Failure") {
+                    alert("Rename failed: " + (resp && resp.ErrorMsg || "server error"));
+                    return;
+                }
+
+                if (convCache[cid]) convCache[cid].Title = newTitle;
+
+                for (var i = 0; i < convList.length; i++)
+                    if (convList[i].ConvId === cid) { convList[i].Title = newTitle; break; }
+
+                renderConvList();
+                markActive(cid);
+
+                if (cid === currentConvId)
+                    $("#chat-title").text(newTitle);
+            },
+            error : function(jqXHR, status) {
+                alert("Network error: " + status);
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Delete
+     * ---------------------------------------------------------------- */
+    function onDelete()
+    {
+        if (isSending || !currentConvId) return;
+
+        var title = (convCache[currentConvId] && convCache[currentConvId].Title)
+                    || currentConvId;
+
+        if (!confirm('Delete "' + title + '"? This cannot be undone.')) return;
+
+        var cid = currentConvId;
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=DeleteConversation&ConvId=" + encodeURIComponent(cid),
+            timeout : 30000,
+            success : function(json) {
+                var resp = safeParse(json);
+
+                if (!resp || resp.Error === "Failure") {
+                    alert("Delete failed: " + (resp && resp.ErrorMsg || "server error"));
+                    return;
+                }
+
+                delete convCache[cid];
+
+                for (var i = 0; i < convList.length; i++) {
+                    if (convList[i].ConvId === cid) {
+                        convList.splice(i, 1);
+                        break;
+                    }
+                }
+
+                if (convList.length > 0)
+                    selectConv(convList[0].ConvId);
+                else
+                    showNewChatPlaceholder();
+
+                renderConvList();
+            },
+            error : function(jqXHR, status) {
+                alert("Network error: " + status);
+            }
+        });
+    }
+
+    /* ----------------------------------------------------------------
+     * Sign out
+     * ---------------------------------------------------------------- */
+    function signOut()
+    {
+        document.cookie = "usrId=; path=/; max-age=0";
+        document.cookie = "token=; path=/; max-age=0";
+        window.location.href = "/domatar/login/login.html";
+    }
+
+    /* ----------------------------------------------------------------
+     * Helpers
+     * ---------------------------------------------------------------- */
+    function setInputEnabled(on)
+    {
+        $("#msg-input").prop("disabled", !on);
+        $("#btn-send").prop("disabled",  !on);
+    }
+
+    function showError(msg)
+    {
+        $("#error-banner").text(msg).show();
+    }
+
+    function clearError()
+    {
+        $("#error-banner").hide().text("");
+    }
+
+    function scrollToBottom()
+    {
+        var el = document.getElementById("chat-messages");
+        if (el) el.scrollTop = el.scrollHeight;
+    }
+
+    function showChatPlaceholder(text)
+    {
+        $("#chat-messages").html(
+            '<div class="chat-placeholder">' + esc(text) + '</div>');
+    }
+
+    function showNewChatPlaceholder()
+    {
+        currentConvId = null;
+        markActive(null);
+        clearError();
+        hideModeBanner();
+        setInputEnabled(true);
+        $("#chat-title").text("New chat");
+        $("#mode-toolbar").show();
+        renderModeButtons();
+        showChatPlaceholder(
+            "Choose a mode above, then type below to start a new conversation.");
+    }
+
+    function formatTime(unixMs)
+    {
+        if (!unixMs) return "";
+        var d = new Date(parseInt(unixMs, 10));
+        if (isNaN(d.getTime())) return "";
+        return String(d.getHours()).padStart(2, "0") + ":" +
+               String(d.getMinutes()).padStart(2, "0");
+    }
+
+    function formatSov(s)
+    {
+        if (!s) return "";
+        // DomId is "hstId.appId.actId.objId" — show last two segments for brevity
+        var parts = s.split(".");
+        return parts.length >= 2 ? parts.slice(-2).join(".") : s;
+    }
+
+    function jsonPretty(s)
+    {
+        if (!s) return "";
+        try   { return JSON.stringify(JSON.parse(s), null, 2); }
+        catch (e) { return s; }
+    }
+
+    function safeParse(json)
+    {
+        try   { return JSON.parse(json); }
+        catch (e) { return null; }
+    }
+
+    function esc(s)
+    {
+        if (s == null) return "";
+        return String(s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+</script>
+
+<!--
+  No Quippin side menu. AI Agent is a standalone Domatar app.
+  Spec-AIAgent.txt PART 6.1 / Spec-Navigator.txt PART 6.1 precedent.
+-->
+
+<div class="ai-wrap">
+  <div class="ai-split">
+
+    <!-- Left pane: conversation list -->
+    <div id="conv-pane">
+      <div class="conv-pane-header">Conversations</div>
+      <div id="conv-list"></div>
+      <div class="conv-pane-footer">
+        <button id="btn-new-chat">+ New chat</button>
+        <button id="btn-sign-out">Sign out</button>
+      </div>
+    </div>
+
+    <!-- Right pane: chat -->
+    <div id="chat-pane">
+
+      <div id="chat-header">
+        <span id="chat-title">AI Agent</span>
+        <button onclick="onRefresh()">Refresh</button>
+        <button onclick="onRename()">Rename</button>
+        <button onclick="onDelete()">Delete</button>
+      </div>
+
+      <!-- Mode toolbar (visible for new chat and when a conversation is loaded) -->
+      <div id="mode-toolbar">
+        <span class="mode-label">Mode:</span>
+        <div class="mode-toolbar-right">
+          <div class="mode-segmented" role="radiogroup" aria-label="Conversation mode">
+            <button data-mode="ReadOnly" class="mode-btn">Chat (with tools)</button>
+            <button data-mode="Chat"     class="mode-btn">Chat (no tools)</button>
+            <button data-mode="Agent"    class="mode-btn">Agent (read/write)</button>
+          </div>
+          <button id="settings-btn" class="settings-btn" title="Conversation settings">&#9881;</button>
+        </div>
+      </div>
+
+      <!-- Mode info banner (transient, auto-hides) -->
+      <div id="mode-banner" style="display:none"></div>
+
+      <div id="chat-messages">
+        <div class="chat-placeholder">Loading&hellip;</div>
+      </div>
+
+      <div id="chat-footer">
+        <div id="error-banner"></div>
+        <div id="input-row">
+          <textarea id="msg-input" rows="1"
+                    placeholder="Type your message&hellip; (Enter to send, Shift+Enter for newline)"></textarea>
+          <button id="btn-send">Send</button>
+          <select id="model-select" aria-label="Model">
+            <option value="">Choose a model</option>
+          </select>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings-modal" class="modal" style="display:none">
+  <div class="modal-card">
+    <h2>Conversation settings</h2>
+
+    <label>Allowed apps
+      <input id="allow-apps" placeholder="Empty = all apps allowed"/>
+      <small>Comma-separated app IDs, e.g. aiagent, quippin</small>
+    </label>
+
+    <label>Denied apps
+      <input id="deny-apps" placeholder="Empty = deny nothing"/>
+      <small>Comma-separated app IDs to block</small>
+    </label>
+
+    <label>Foreign actIds
+      <input id="foreign-actids-input"
+             placeholder="Add actId (e.g. dave@quippin) then press Enter"/>
+      <div id="foreign-actids-pills" class="pill-list"></div>
+      <small>Add another user's actId here only when they have already granted
+        you access. Adding an actId here does NOT create access; it tells your
+        AI agent to attempt actions as that user.</small>
+    </label>
+
+    <label>Pre-approved writes
+      <textarea id="preapproved" rows="4"
+                placeholder="One dotted tool name per line&#10;e.g. quippin.feed.AddPost"></textarea>
+      <small>Write tool calls listed here will not prompt for confirmation.</small>
+    </label>
+
+    <details>
+      <summary>Budgets</summary>
+      <label>Max iterations
+        <input id="b-iter" type="number" min="1" max="32" placeholder="8"/>
+      </label>
+      <label>Max wall-clock ms
+        <input id="b-ms" type="number" min="1000" placeholder="60000"/>
+      </label>
+      <label>Max prompt tokens
+        <input id="b-tin" type="number" min="1000" placeholder="50000"/>
+      </label>
+      <label>Max completion tokens
+        <input id="b-tout" type="number" min="100" placeholder="8000"/>
+      </label>
+    </details>
+
+    <div id="settings-error"></div>
+
+    <div class="modal-buttons">
+      <button id="settings-cancel">Cancel</button>
+      <button id="settings-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+    $(init);
+</script>
+
+</body>
+</html>

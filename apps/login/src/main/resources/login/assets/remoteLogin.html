@@ -1,0 +1,424 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login</title>
+
+<style>
+  :root {
+    --bg:        #000000;
+    --card:      #ffffff;
+    --input-bg:  #f1f5f9;
+    --border:    #cbd5e1;
+    --text:      #1f2937;
+    --muted:     #6b7280;
+    --primary:   #2563eb;
+    --primary-h: #1d4ed8;
+    --primary-d: #1e40af;
+    --error:     #dc2626;
+    --radius:    10px;
+    --shadow:    0 8px 28px rgba(0, 0, 0, 0.45),
+                 0 1px 2px  rgba(0, 0, 0, 0.30);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px 28px 24px;
+  }
+
+  .card h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .card .subtitle {
+    margin: 0 0 20px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: #f1f3f8;
+    padding: 4px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    background: var(--card);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .pane { display: none; }
+  .pane.active { display: block; }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 9px 11px;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+  .field .hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--primary);
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+  .btn:hover  { background: var(--primary-h); }
+  .btn:active { background: var(--primary-d); transform: translateY(1px); }
+  .btn[disabled] { opacity: 0.6; cursor: progress; }
+
+  .msg {
+    display: none;
+    margin-top: 12px;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .msg.error   { display: block; background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .msg.success { display: block; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+</style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+  //
+  // -- Cross-domain login: trust model (sender side) --------------------
+  //
+  // This iframe produces login tokens. postMessage's second argument
+  // ("targetOrigin") tells the browser WHICH parent origin we intend
+  // the message for -- the browser will refuse to deliver it to any
+  // other origin. The old code passed "*", meaning "deliver to any
+  // parent no matter who they are". In a cross-domain deployment that
+  // is unsafe: a malicious site could embed this iframe, the user
+  // logs in, and the malicious parent walks away with the token.
+  //
+  // Today the parent is same-origin (this iframe was loaded from the
+  // same host via a relative URL), so window.location.origin is the
+  // only valid parent. When this iframe is embedded by foreign
+  // Domatar apps in the future, add each allowed parent origin here,
+  // e.g. "https://quippin.com".
+  //
+  // postMessage accepts only one targetOrigin per call. If there are
+  // multiple trusted parents we send one message per allowed origin;
+  // the browser drops the ones whose origin doesn't match the actual
+  // parent, so only the real parent ever receives the token.
+  //
+  var trustedParentOrigins = [
+    window.location.origin
+  ];
+
+  // Posts a structured message to the parent window.
+  //
+  // The parent (login.html) expects the shape { type, value } and
+  // dispatches on `type`. We intentionally send a structured object
+  // instead of a delimited string so that values containing odd
+  // characters (":", spaces, JWT dots, etc.) round-trip cleanly.
+  function postMsg(type, value)
+  {
+    var payload = { type: type, value: value };
+    trustedParentOrigins.forEach(function(origin)
+    {
+      parent.postMessage(payload, origin);
+    });
+  }
+</script>
+
+<div class="page">
+  <div class="card">
+    <h1>Welcome</h1>
+    <p class="subtitle">Sign in to your account or create a new one.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-pane="loginPane"  type="button">Log in</button>
+      <button class="tab"        data-pane="newActPane" type="button">Create account</button>
+    </div>
+
+    <div id="loginPane" class="pane active">
+      <form id="loginForm" action="" autocomplete="on">
+        <div class="field">
+          <label for="loginUsername">Username</label>
+          <input tabindex="1" id="loginUsername" name="loginUsername"
+                 autocomplete="username" placeholder="usrId@appId" />
+          <div class="hint">Format: usrId@appId</div>
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input tabindex="2" id="loginPassword" name="loginPassword"
+                 type="password" size="32" maxlength="32"
+                 autocomplete="current-password" />
+        </div>
+        <button class="btn" type="submit" name="loginBtn" id="loginBtn">Log in</button>
+        <div id="loginMsg" class="msg"></div>
+      </form>
+    </div>
+
+    <div id="newActPane" class="pane">
+      <form id="NewActForm" action="" autocomplete="on">
+        <div class="field">
+          <label for="newActUsername">Full name</label>
+          <input tabindex="3" id="newActUsername" name="newActUsername" />
+        </div>
+        <div class="field">
+          <label for="newActHandle">Handle</label>
+          <input tabindex="4" id="newActHandle" name="newActHandle"
+                 placeholder="haya" />
+          <div class="hint">Your display handle — no @ symbol, e.g. <em>haya</em></div>
+        </div>
+        <div class="field">
+          <label for="newActActId">Account ID</label>
+          <input tabindex="5" id="newActActId" name="newActActId"
+                 placeholder="hayay" />
+          <div class="hint">Your sign-in name — no @ symbol, e.g. <em>hayay</em></div>
+        </div>
+        <div class="field">
+          <label for="newActPassword">Password</label>
+          <input tabindex="6" id="newActPassword" name="newActPassword"
+                 type="password" size="32" maxlength="32"
+                 autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label for="newActPassword2">Repeat password</label>
+          <input tabindex="7" id="newActPassword2" name="newActPassword2"
+                 type="password" size="32" maxlength="32"
+                 autocomplete="new-password" />
+        </div>
+        <button class="btn" type="submit" name="newActBtn" id="newActBtn">Create account</button>
+        <div id="newActMsg" class="msg"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+
+  function showMsg($el, text, kind)
+  {
+    $el.removeClass("error success").addClass(kind || "error").text(text);
+  }
+  function clearMsg($el)
+  {
+    $el.removeClass("error success").text("");
+  }
+  function setBusy($btn, busy, busyText, idleText)
+  {
+    if (busy) { $btn.prop("disabled", true).data("idle", $btn.text()).text(busyText); }
+    else      { $btn.prop("disabled", false).text(idleText || $btn.data("idle")); }
+  }
+
+  function login()
+  {
+    var $btn = $("#loginBtn");
+    var $msg = $("#loginMsg");
+    clearMsg($msg);
+    setBusy($btn, true, "Logging in\u2026");
+
+    var username  = encodeURIComponent($("input#loginUsername").val());
+    var password  = encodeURIComponent($("input#loginPassword").val());
+
+    var dataString = 'Action=Login&UsrId=' + username + '&Pwd=' + password;
+
+    $.ajax({
+             type: "GET",
+             cache: false,
+             url: "/domatar/domatar/Wui/ActWui",
+             crossDomain: true,
+             data: dataString,
+             timeout: 10000000,
+             success: function(json) {
+               try {
+                 var data = JSON.parse(json);
+                 if (data.Error === "Failure") {
+                   showMsg($msg, data.ErrorMsg || "Login failed. Please check your credentials.");
+                   setBusy($btn, false, null, "Log in");
+                 } else {
+                   processLogin(data);
+                 }
+               }
+               catch (e) {
+                 showMsg($msg, "Unexpected response from server. Please try again.");
+                 setBusy($btn, false, null, "Log in");
+               }
+             },
+             error: function(jqXHR, textStatus, errorThrown) {
+               var detail = errorThrown || textStatus || "";
+               showMsg($msg, "Could not reach the server." + (detail ? " (" + detail + ")" : ""));
+               setBusy($btn, false, null, "Log in");
+             }
+           });
+  };
+
+  function processLogin(json)
+  {
+    console.log(json);
+    var token   = json.Attrs.Token;
+    var usrId   = json.Attrs.UsrId;
+    var usrName = json.Attrs.UsrName;
+
+    postMsg("LoginUsrId",   usrId);
+    postMsg("LoginToken",   token);
+    postMsg("LoginUsrName", usrName);
+    // Spec-Desktop.txt PART 7: post-login lands on the home-screen
+    // launcher, not directly on Quippin.
+    postMsg("GoTo", "/desktop/desktop.html");
+  };
+
+  function newAct()
+  {
+    var $btn = $("#newActBtn");
+    var $msg = $("#newActMsg");
+    clearMsg($msg);
+
+    var usrName = encodeURIComponent($("input#newActUsername").val());
+    var usrId   = encodeURIComponent($("input#newActHandle").val());
+    var actId   = encodeURIComponent($("input#newActActId").val());
+    var pwd     = encodeURIComponent($("input#newActPassword").val());
+    var pwd2    = encodeURIComponent($("input#newActPassword2").val());
+
+    if (pwd != pwd2)
+    {
+       showMsg($msg, "Passwords don't match, please try again.");
+       return;
+    }
+
+    setBusy($btn, true, "Creating\u2026");
+
+    var dataString = 'Action=AddAct&UsrName=' + usrName + '&UsrId=' + usrId + '&ActId=' + actId + '&Pwd=' + pwd;
+
+    $.ajax({
+             type: "GET",
+             cache: false,
+             url: "/domatar/domatar/Wui/ActWui",
+             crossDomain: true,
+             data: dataString,
+             timeout: 10000000,
+             success: function(json) {
+               try {
+                 var data = JSON.parse(json);
+                 if (data.Error === "Failure") {
+                   showMsg($msg, data.ErrorMsg || "Could not create account. Please try again.");
+                   setBusy($btn, false, null, "Create account");
+                 } else {
+                   processNewAct(data);
+                 }
+               }
+               catch (e) {
+                 showMsg($msg, "Unexpected response from server. Please try again.");
+                 setBusy($btn, false, null, "Create account");
+               }
+             },
+             error: function(jqXHR, textStatus, errorThrown) {
+               var detail = errorThrown || textStatus || "";
+               showMsg($msg, "Could not reach the server." + (detail ? " (" + detail + ")" : ""));
+               setBusy($btn, false, null, "Create account");
+             }
+           });
+  };
+
+  function processNewAct(json)
+  {
+    showMsg($("#newActMsg"), "Account created. Logging in\u2026", "success");
+    processLogin(json);
+  };
+
+  $(".tab").on("click", function() {
+    var pane = $(this).data("pane");
+    $(".tab").removeClass("active");
+    $(this).addClass("active");
+    $(".pane").removeClass("active");
+    $("#" + pane).addClass("active");
+    $("#" + pane).find("input").first().focus();
+  });
+
+  $("#loginForm").on("submit",  function(e) { e.preventDefault(); login();  });
+  $("#NewActForm").on("submit", function(e) { e.preventDefault(); newAct(); });
+
+  $(function() { $("#loginUsername").focus(); });
+
+</script>
+
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+AppId=navigator
+AppName=Navigator
+AppDesc=Object tree browser — the foundation for all other apps
+Version=1.0
+DependsOn=
+ProviderHosts=
+ShellRoles=navigator

@@ -1,0 +1,126 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000000; color: #ffffff; }
+</style>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+// Create IE + others compatible event handler
+var eventMethod = window.addEventListener ? "addEventListener" : "attachEvent";
+var eventer = window[eventMethod];
+var messageEvent = eventMethod == "attachEvent" ? "onmessage" : "message";
+
+//
+// -- Cross-domain login: trust model --------------------------------------
+//
+// The <iframe> loaded below (remoteLogin.html) is the login UI. It may
+// live on a different domain than this page (federated / SSO-style
+// login where one auth host serves many Domatar apps). When the iframe
+// finishes authenticating it posts the user's id, session token, and a
+// redirect target to this parent window via window.postMessage.
+//
+// Because postMessage messages can be sent by ANY window that has a
+// handle to this one (e.g. another iframe on the page, a pop-under,
+// something an attacker injected), we MUST:
+//
+//   1) Reject any message whose e.origin is not in our allowlist --
+//      otherwise a hostile frame could post a fake LoginToken and
+//      hand us an attacker-controlled session cookie.
+//   2) Reject any message that isn't in the exact structured shape
+//      we agreed on with the iframe -- defence-in-depth against a
+//      trusted origin being partially compromised.
+//
+// Today the iframe is same-origin (loaded via a relative URL on the
+// same host), so the only entry below is window.location.origin.
+// When true federation ships, add each trusted auth host here, e.g.
+//   "https://auth.domatar.com"
+//
+var trustedLoginOrigins = [
+  window.location.origin
+];
+
+// Whitelist of post-login redirect targets the iframe is allowed to
+// request. Locks down the GoTo message so a compromised or spoofed
+// iframe can't turn our login page into an open redirector.
+//
+// Spec-Desktop.txt PART 7: the post-login landing target is now
+// "desktop", the home-screen launcher. "quips" is kept on the
+// whitelist for the transition window (and for direct-link tests
+// against /domatar/quips), but the iframe defaults to "desktop".
+var allowedRedirects = [
+  "/desktop/desktop.html",
+  "/quippin/news.html"
+];
+
+// Listen for login events from the login iframe.
+//
+// Expected message shape (structured clone, NOT a string):
+//   { type: "LoginUsrId", value: "<username>"  }
+//   { type: "LoginToken", value: "<token>"     }
+//   { type: "GoTo",       value: "<path>"      }   // must be in allowedRedirects
+//
+// We used to send/parse pipe-concatenated strings ("LoginToken : " + value,
+// then split on " : "). That was brittle -- any ":" in the payload (e.g. a
+// JWT) silently corrupted the parse -- and gave us nothing over the
+// structured-clone form that postMessage supports natively.
+eventer(messageEvent, function(e)
+{
+  // 1) Origin check.
+  if (trustedLoginOrigins.indexOf(e.origin) === -1)
+  {
+    return;
+  }
+
+  // 2) Shape check.
+  var msg = e.data;
+  if (!msg || typeof msg !== "object" || typeof msg.type !== "string")
+  {
+    return;
+  }
+
+  if (msg.type === "LoginUsrId")
+  {
+    setCookie("usrId", msg.value);
+  }
+  else if (msg.type === "LoginToken")
+  {
+    setCookie("token", msg.value);
+  }
+  else if (msg.type === "LoginUsrName")
+  {
+    setCookie("usrName", msg.value);
+  }
+  else if (msg.type === "GoTo")
+  {
+    // 3) Redirect target must be one we've pre-approved.
+    if (allowedRedirects.indexOf(msg.value) !== -1)
+    {
+      location.replace(msg.value);
+    }
+  }
+}, false);
+</script>
+
+
+<iframe name="LoginFrame" id="LoginFrame" width="100%" height="5000" frameBorder="0"></iframe>
+
+<script type="text/javascript">
+  document.getElementById('LoginFrame').src = "";
+  document.getElementById('LoginFrame').src = "remoteLogin.html";
+</script>
+</body>
+</html>

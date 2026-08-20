@@ -1,0 +1,530 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Accounts</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .ac-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
+        .ac-header h2   { margin: 0; }
+        .ac-actions     { display: flex; gap: 10px; margin-bottom: 20px; }
+
+        /* Account cards */
+        .account-list   { display: flex; flex-direction: column; gap: 16px; max-width: 620px; }
+        .account-card   { border: 1px solid var(--border); border-radius: var(--radius);
+                          padding: 16px 20px; }
+        .ac-card-top    { display: flex; align-items: flex-start; justify-content: space-between;
+                          flex-wrap: wrap; gap: 8px; }
+        .ac-bank-name   { font-weight: 700; font-size: 1.05em; }
+        .ac-balance     { font-size: 1.4em; font-weight: 700; color: #15803d; }
+        .ac-detail      { font-size: 0.82em; color: var(--page-muted); margin-top: 4px;
+                          display: none; word-break: break-all; }
+        .ac-detail.open { display: block; }
+        .ac-toggle      { font-size: 0.8em; color: var(--page-muted);
+                          cursor: pointer; text-decoration: underline; margin-top: 4px;
+                          display: inline-block; }
+        .ac-btns        { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+        .empty-msg      { color: var(--page-muted); font-style: italic; }
+        .ac-error       { color: var(--danger, #dc2626); font-size: 0.9em;
+                          margin-bottom: 10px; min-height: 1.2em; }
+
+        /* Modal */
+        .modal-backdrop { display: none; position: fixed; inset: 0;
+                          background: rgba(0,0,0,0.4); z-index: 100; }
+        .modal-backdrop.open { display: flex; align-items: center; justify-content: center; }
+        .modal-box      { background: var(--page-bg); border-radius: var(--radius);
+                          padding: 24px 28px; min-width: 320px; max-width: 460px; width: 100%;
+                          box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+        .modal-box h3   { margin: 0 0 16px; }
+        .modal-title    { font-size: 0.88em; color: var(--page-muted); margin: -10px 0 16px; }
+        .modal-field    { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+        .modal-field label { font-size: 0.85em; font-weight: 600; color: var(--page-muted); }
+        .modal-field input { padding: 7px 10px; border: 1px solid var(--border);
+                             border-radius: var(--radius); font-size: 1em;
+                             width: 100%; box-sizing: border-box; }
+        .modal-btns     { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+        .modal-err      { color: var(--danger, #dc2626); font-size: 0.9em;
+                          margin-top: 6px; min-height: 1.2em; }
+
+        /* Role-switch corner */
+        .sr-corner      { position: absolute; top: 16px; right: 24px;
+                          font-size: 0.8em; }
+        .sr-corner a    { color: var(--page-muted); text-decoration: none; cursor: pointer; }
+        .sr-corner a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var accountList   = [];
+    var activeAcctIdx = -1;   // which account the open modal targets
+    var hasBank       = false;
+    var LABEL_PAY     = 'Transfer of Ownership';
+    var LABEL_BANK_XFER = 'Transfer between Banks';
+
+    // -------------------------------------------------------------------------
+    // Guard: redirect if not a customer
+    // -------------------------------------------------------------------------
+
+    function checkRole()
+    {
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=GetProfile',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret  = JSON.parse(json);
+                var role = ret && ret.Attrs && ret.Attrs.Role ? ret.Attrs.Role : '';
+                hasBank  = ret && ret.Attrs && ret.Attrs.HasBank === 'true';
+                if (role !== 'Customer')
+                {
+                    window.location.href = '/domatar/money/money.html';
+                    return;
+                }
+                loadAccounts();
+            },
+            error: function() { window.location.href = '/domatar/money/money.html'; }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Switch to Bank
+    // -------------------------------------------------------------------------
+
+    function switchToBank()
+    {
+        if (hasBank)
+        {
+            // Bank already set up — just flip the role.
+            $.ajax({
+                type: 'POST',
+                url: 'Wui/MoneyProfileWui',
+                data: 'Action=SetRole&Role=Bank',
+                cache: false,
+                timeout: 30000,
+                success: function() { window.location.href = '/domatar/money/bank.html'; },
+                error: function()   { window.location.href = '/domatar/money/bank.html'; }
+            });
+        }
+        else
+        {
+            // First time as a bank — show setup modal.
+            $('#sb-name').val('');
+            $('#sb-funds').val('0');
+            $('#sb-err').text('');
+            $('#switch-bank-modal').addClass('open');
+            setTimeout(function() { $('#sb-name').focus(); }, 50);
+        }
+    }
+
+    function closeSwitchBankModal()
+    {
+        $('#switch-bank-modal').removeClass('open');
+    }
+
+    function confirmSwitchBank()
+    {
+        var name  = $.trim($('#sb-name').val());
+        var funds = $.trim($('#sb-funds').val());
+        if (!name) { $('#sb-err').text('Bank Name is required.'); return; }
+        if (funds === '') funds = '0';
+
+        $('#sb-err').text('');
+        $('#btn-sb-ok').prop('disabled', true).text('Setting up\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=SetRole&Role=Bank' +
+                  '&BankName='   + encodeURIComponent(name) +
+                  '&TotalFunds=' + encodeURIComponent(funds),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#sb-err').text(ret.ErrorMsg || 'Error');
+                    $('#btn-sb-ok').prop('disabled', false).text('Confirm');
+                    return;
+                }
+                window.location.href = '/domatar/money/bank.html';
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#sb-err').text('Error: ' + textStatus);
+                $('#btn-sb-ok').prop('disabled', false).text('Confirm');
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Load accounts
+    // -------------------------------------------------------------------------
+
+    function loadAccounts()
+    {
+        $('#ac-list').html('<p class="empty-msg">Loading\u2026</p>');
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MoneyMyAccountsWui',
+            data: 'Action=GetMyAccounts',
+            cache: false,
+            timeout: 60000,
+            success: function(json) { renderAccounts(JSON.parse(json)); },
+            error: function(jqXHR, textStatus)
+            {
+                $('#ac-list').html('<p class="empty-msg">Error: ' + escHtml(textStatus) + '</p>');
+            }
+        });
+    }
+
+    function renderAccounts(ret)
+    {
+        var list = $('#ac-list');
+
+        if (!ret || ret.Error === 'Failure')
+        {
+            list.html('<p class="empty-msg">' +
+                      (ret && ret.ErrorMsg ? escHtml(ret.ErrorMsg) : 'Failed to load accounts.') +
+                      '</p>');
+            return;
+        }
+
+        accountList = (ret.Attrs && ret.Attrs.Accounts) ? ret.Attrs.Accounts : [];
+
+        if (accountList.length === 0)
+        {
+            list.html('<p class="empty-msg">No accounts yet. ' +
+                      'Ask a bank to create one for you, or a bank can create one ' +
+                      'automatically when you receive a payment.</p>');
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < accountList.length; i++)
+        {
+            var a = accountList[i];
+            html +=
+                '<div class="account-card" id="card-' + i + '">' +
+                  '<div class="ac-card-top">' +
+                    '<div>' +
+                      '<div class="ac-bank-name">' + escHtml(a.BankName || 'Unknown Bank') + '</div>' +
+                      '<span class="ac-toggle" onclick="toggleDetail(' + i + ')">details</span>' +
+                      '<div class="ac-detail" id="detail-' + i + '">' +
+                        '<b>Account DomId:</b> ' + escHtml(a.AccountDomId || '') + '<br/>' +
+                      '</div>' +
+                    '</div>' +
+                    '<div class="ac-balance" id="acbal-' + i + '">' + escHtml(fmt(a.Balance)) + '</div>' +
+                  '</div>' +
+                  '<div class="ac-btns">' +
+                    '<button type="button" onclick="openPayModal(' + i + ')">' + LABEL_PAY + '</button>' +
+                    '<button type="button" onclick="openBankTransferModal(' + i + ')">' + LABEL_BANK_XFER + '</button>' +
+                  '</div>' +
+                '</div>';
+        }
+        list.html(html);
+    }
+
+    function toggleDetail(i)
+    {
+        $('#detail-' + i).toggleClass('open');
+    }
+
+    // -------------------------------------------------------------------------
+    // Pay modal
+    // -------------------------------------------------------------------------
+
+    function openPayModal(idx)
+    {
+        activeAcctIdx = idx;
+        $('#pay-bank').text('Bank: ' + escHtml(accountList[idx].BankName || ''));
+        $('#pay-to-actid').val('');
+        $('#pay-to-name').val('');
+        $('#pay-amount').val('');
+        $('#pay-desc').val('');
+        $('#pay-err').text('');
+        $('#btn-pay-ok').prop('disabled', false).text(LABEL_PAY);
+        $('#pay-modal').addClass('open');
+        setTimeout(function() { $('#pay-to-actid').focus(); }, 50);
+    }
+
+    function closePayModal()
+    {
+        $('#pay-modal').removeClass('open');
+        $('#btn-pay-ok').prop('disabled', false).text(LABEL_PAY);
+        activeAcctIdx = -1;
+    }
+
+    function submitPay()
+    {
+        var idx       = activeAcctIdx;
+        var a         = accountList[idx];
+        var toActId   = $.trim($('#pay-to-actid').val());
+        var toName    = $.trim($('#pay-to-name').val());
+        var amount    = $.trim($('#pay-amount').val());
+        var desc      = $.trim($('#pay-desc').val());
+
+        if (!toActId) { $('#pay-err').text('Recipient User ID is required.'); return; }
+        if (!amount)  { $('#pay-err').text('Amount is required.'); return; }
+
+        $('#pay-err').text('');
+        $('#btn-pay-ok').prop('disabled', true).text('Sending\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyAccountWui',
+            data: 'Action=Transfer' +
+                  '&AccountDomId='    + encodeURIComponent(a.AccountDomId) +
+                  '&ToCustomerActId=' + encodeURIComponent(toActId) +
+                  '&ToCustomerName='  + encodeURIComponent(toName) +
+                  '&Amount='          + encodeURIComponent(amount) +
+                  '&Description='     + encodeURIComponent(desc),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#pay-err').text(ret.ErrorMsg || 'Error');
+                    $('#btn-pay-ok').prop('disabled', false).text(LABEL_PAY);
+                    return;
+                }
+                $('#btn-pay-ok').prop('disabled', false).text(LABEL_PAY);
+                closePayModal();
+                if (ret && ret.Attrs && ret.Attrs.FromBalance)
+                {
+                    accountList[idx].Balance = ret.Attrs.FromBalance;
+                    $('#acbal-' + idx).text(fmt(ret.Attrs.FromBalance));
+                }
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#pay-err').text('Error: ' + textStatus);
+                $('#btn-pay-ok').prop('disabled', false).text(LABEL_PAY);
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Bank Transfer modal
+    // -------------------------------------------------------------------------
+
+    function openBankTransferModal(idx)
+    {
+        activeAcctIdx = idx;
+        $('#bt-from-bank').text('From: ' + escHtml(accountList[idx].BankName || ''));
+        $('#bt-dest-actid').val('');
+        $('#bt-amount').val('');
+        $('#bt-err').text('');
+        $('#btn-bt-ok').prop('disabled', false).text(LABEL_BANK_XFER);
+        $('#bt-modal').addClass('open');
+        setTimeout(function() { $('#bt-dest-actid').focus(); }, 50);
+    }
+
+    function closeBankTransferModal()
+    {
+        $('#bt-modal').removeClass('open');
+        $('#btn-bt-ok').prop('disabled', false).text(LABEL_BANK_XFER);
+        activeAcctIdx = -1;
+    }
+
+    function submitBankTransfer()
+    {
+        var idx        = activeAcctIdx;
+        var a          = accountList[idx];
+        var destActId  = $.trim($('#bt-dest-actid').val());
+        var amount     = $.trim($('#bt-amount').val());
+
+        if (!destActId) { $('#bt-err').text('Destination Bank User ID is required.'); return; }
+        if (!amount)    { $('#bt-err').text('Amount is required.'); return; }
+
+        $('#bt-err').text('');
+        $('#btn-bt-ok').prop('disabled', true).text('Transferring\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyAccountWui',
+            data: 'Action=BankTransfer' +
+                  '&AccountDomId='  + encodeURIComponent(a.AccountDomId) +
+                  '&DestBankActId=' + encodeURIComponent(destActId) +
+                  '&Amount='        + encodeURIComponent(amount),
+            cache: false,
+            timeout: 45000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#bt-err').text(ret.ErrorMsg || 'Error');
+                    $('#btn-bt-ok').prop('disabled', false).text(LABEL_BANK_XFER);
+                    return;
+                }
+                $('#btn-bt-ok').prop('disabled', false).text(LABEL_BANK_XFER);
+                closeBankTransferModal();
+                if (ret && ret.Attrs && ret.Attrs.Balance)
+                {
+                    accountList[idx].Balance = ret.Attrs.Balance;
+                    $('#acbal-' + idx).text(fmt(ret.Attrs.Balance));
+                }
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#bt-err').text('Error: ' + textStatus);
+                $('#btn-bt-ok').prop('disabled', false).text(LABEL_BANK_XFER);
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilities
+    // -------------------------------------------------------------------------
+
+    function fmt(v)
+    {
+        var n = parseFloat(v);
+        if (isNaN(n)) return v || '—';
+        return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function escHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
+
+    $(document).ready(function()
+    {
+        checkRole();
+
+        // Close modals on backdrop click.
+        $('#pay-modal').on('click',         function(e) { if (e.target === this) closePayModal(); });
+        $('#bt-modal').on('click',          function(e) { if (e.target === this) closeBankTransferModal(); });
+        $('#switch-bank-modal').on('click', function(e) { if (e.target === this) closeSwitchBankModal(); });
+
+        // Enter in modal fields triggers submit.
+        $('#pay-modal input').on('keydown',         function(e) { if (e.key === 'Enter') submitPay(); });
+        $('#bt-modal  input').on('keydown',         function(e) { if (e.key === 'Enter') submitBankTransfer(); });
+        $('#switch-bank-modal input').on('keydown', function(e) { if (e.key === 'Enter') confirmSwitchBank(); });
+    });
+
+</script>
+
+<!-- Switch to Bank setup modal -->
+<div class="modal-backdrop" id="switch-bank-modal">
+    <div class="modal-box">
+        <h3>Set Up Your Bank</h3>
+        <div class="modal-field">
+            <label for="sb-name">Bank Name</label>
+            <input type="text" id="sb-name" placeholder="e.g. First Domatar Bank" maxlength="80"/>
+        </div>
+        <div class="modal-field">
+            <label for="sb-funds">Total Funds</label>
+            <input type="number" id="sb-funds" min="0" step="any" placeholder="0.00" value="0"/>
+        </div>
+        <div class="modal-err" id="sb-err"></div>
+        <div class="modal-btns">
+            <button type="button" onclick="closeSwitchBankModal()">Cancel</button>
+            <button type="button" id="btn-sb-ok" onclick="confirmSwitchBank()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Pay modal -->
+<div class="modal-backdrop" id="pay-modal">
+    <div class="modal-box">
+        <h3>Transfer of Ownership</h3>
+        <p class="modal-title" id="pay-bank"></p>
+        <div class="modal-field">
+            <label for="pay-to-actid">Recipient User ID</label>
+            <input type="text" id="pay-to-actid" placeholder="e.g. dave@quippin" maxlength="120"/>
+        </div>
+        <div class="modal-field">
+            <label for="pay-to-name">Recipient Name <span style="font-weight:400">(optional)</span></label>
+            <input type="text" id="pay-to-name" placeholder="e.g. Dave" maxlength="120"/>
+        </div>
+        <div class="modal-field">
+            <label for="pay-amount">Amount</label>
+            <input type="number" id="pay-amount" min="0.01" step="any" placeholder="0.00"/>
+        </div>
+        <div class="modal-field">
+            <label for="pay-desc">Description <span style="font-weight:400">(optional)</span></label>
+            <input type="text" id="pay-desc" placeholder="e.g. Lunch" maxlength="200"/>
+        </div>
+        <div class="modal-err" id="pay-err"></div>
+        <div class="modal-btns">
+            <button type="button" onclick="closePayModal()">Cancel</button>
+            <button type="button" id="btn-pay-ok" onclick="submitPay()">Transfer of Ownership</button>
+        </div>
+    </div>
+</div>
+
+<!-- Bank Transfer modal -->
+<div class="modal-backdrop" id="bt-modal">
+    <div class="modal-box">
+        <h3>Transfer between Banks</h3>
+        <p class="modal-title" id="bt-from-bank"></p>
+        <div class="modal-field">
+            <label for="bt-dest-actid">Destination Bank User ID</label>
+            <input type="text" id="bt-dest-actid" placeholder="e.g. dave@quippin" maxlength="120"/>
+        </div>
+        <div class="modal-field">
+            <label for="bt-amount">Amount</label>
+            <input type="number" id="bt-amount" min="0.01" step="any" placeholder="0.00"/>
+        </div>
+        <div class="modal-err" id="bt-err"></div>
+        <div class="modal-btns">
+            <button type="button" onclick="closeBankTransferModal()">Cancel</button>
+            <button type="button" id="btn-bt-ok" onclick="submitBankTransfer()">Transfer between Banks</button>
+        </div>
+    </div>
+</div>
+
+<!-- Page body -->
+<div class="page">
+    <div class="page-content" style="position:relative;">
+
+        <div class="sr-corner"><a onclick="switchToBank()">Switch to Bank</a></div>
+
+        <div class="ac-header">
+            <h2>My Accounts</h2>
+        </div>
+
+        <div id="ac-error" class="ac-error"></div>
+
+        <div class="ac-actions">
+            <button type="button" onclick="loadAccounts()">&#8635; Refresh</button>
+        </div>
+
+        <div class="account-list" id="ac-list">
+            <p class="empty-msg">Loading&hellip;</p>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+AppId=login
+AppName=Login
+AppDesc=Identity management — tracks all your logins across providers
+Version=1.0
+DependsOn=navigator
+ProviderHosts=
+ShellRoles=login

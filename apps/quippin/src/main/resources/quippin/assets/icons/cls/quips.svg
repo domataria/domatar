@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Quips container: stacked speech bubbles -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Quips">
+  <!-- Back bubble -->
+  <rect x="4" y="1" width="11" height="7" rx="2" fill="#16a34a" opacity=".4"/>
+  <!-- Front bubble -->
+  <rect x="1" y="5" width="11" height="7" rx="2" fill="#16a34a"/>
+  <!-- Tail -->
+  <polygon points="3,12 1,15 6,12" fill="#16a34a"/>
+</svg>

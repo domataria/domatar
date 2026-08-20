@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- For Sale: book with a price-tag circle -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="For Sale">
+  <!-- Book spine -->
+  <rect x="1" y="3" width="3" height="11" rx="1" fill="#0d9488"/>
+  <!-- Book pages -->
+  <rect x="4" y="3" width="7" height="11" rx="1" fill="#0d9488" opacity=".65"/>
+  <!-- Price-tag circle (amber) -->
+  <circle cx="13" cy="4" r="3" fill="#d97706"/>
+  <!-- $ vertical stroke -->
+  <line x1="13" y1="2.2" x2="13" y2="5.8" stroke="#fff" stroke-width="1" stroke-linecap="round"/>
+  <!-- $ top arc -->
+  <path d="M11.6 2.8 Q13 2.2 14 3 Q14.5 3.8 13 4" stroke="#fff" stroke-width=".7" fill="none" stroke-linecap="round"/>
+  <!-- $ bottom arc -->
+  <path d="M13 4 Q11.5 4.2 11.5 5 Q11.5 5.8 13 5.8" stroke="#fff" stroke-width=".7" fill="none" stroke-linecap="round"/>
+</svg>

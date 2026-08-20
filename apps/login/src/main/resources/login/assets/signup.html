@@ -1,0 +1,386 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up</title>
+
+<style>
+  :root {
+    --bg:        #0b0d12;
+    --card:      #ffffff;
+    --input-bg:  #f1f5f9;
+    --border:    #cbd5e1;
+    --text:      #1f2937;
+    --muted:     #6b7280;
+    --primary:   #2563eb;
+    --primary-h: #1d4ed8;
+    --primary-d: #1e40af;
+    --error:     #dc2626;
+    --radius:    10px;
+    --shadow:    0 8px 28px rgba(0, 0, 0, 0.45),
+                 0 1px 2px  rgba(0, 0, 0, 0.30);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .page { min-height: 100vh; display: flex; align-items: center;
+          justify-content: center; padding: 24px; }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px;
+  }
+
+  .card h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  .card .subtitle { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 500;
+                 color: var(--muted); margin-bottom: 6px; }
+  .field input,
+  .field select {
+    width: 100%; padding: 9px 11px; font-size: 14px; color: var(--text);
+    background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 8px; outline: none;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .btn {
+    width: 100%; padding: 10px 14px; font-size: 14px; font-weight: 600;
+    color: #fff; background: var(--primary); border: 0; border-radius: 8px;
+    cursor: pointer;
+  }
+  .btn:hover  { background: var(--primary-h); }
+  .btn:active { background: var(--primary-d); }
+  .btn.secondary { background: #e2e8f0; color: #1f2937; margin-top: 8px; }
+  .btn.secondary:hover { background: #cbd5e1; }
+
+  .msg {
+    display: none; margin-top: 12px; padding: 8px 10px; font-size: 12px;
+    border-radius: 6px;
+  }
+  .msg.error   { display: block; background: #fef2f2; color: var(--error);
+                 border: 1px solid #fecaca; }
+  .msg.success { display: block; background: #f0fdf4; color: #15803d;
+                 border: 1px solid #bbf7d0; }
+
+  .footer { margin-top: 16px; font-size: 12px; color: var(--muted); text-align: center; }
+  .footer a { color: var(--primary); text-decoration: none; }
+
+  #attachPanel { display: none; }
+  #signupPanel { display: block; }
+  #ssoFrame { display: none; width: 0; height: 0; border: 0; }
+</style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<!--
+  SSO recognize (Spec-Login-Multiple PART 8.1): optional iframe at ?sso=<origin>
+  posts LoginUsrId / LoginToken / LoginActId when a live session exists on the
+  SOURCE verifier. AttachProvider is always POSTed to the SOURCE AccountsWui
+  (where the session cookie is valid), never to this host (N).
+-->
+<iframe id="ssoFrame" title="sso"></iframe>
+
+<div class="page">
+  <div class="card">
+
+    <div id="attachPanel">
+      <h1>Attach this provider</h1>
+      <p class="subtitle">You are signed in as <strong id="attSessionUsr"></strong>.
+      Attach this provider to that account?</p>
+
+      <form id="attachForm" autocomplete="on">
+        <div class="field">
+          <label for="attSourceBase">Source AccountsWui base (where you are signed in)</label>
+          <input id="attSourceBase" placeholder="e.g. http://localhost:8080/domatar/login" />
+          <div class="hint">AttachProvider runs on the SOURCE, not on this host.</div>
+        </div>
+        <div class="field">
+          <label for="attNewPrvId">This provider id</label>
+          <input id="attNewPrvId" value="prv2" />
+        </div>
+        <div class="field">
+          <label for="attNewDomain">This provider domain</label>
+          <input id="attNewDomain" value="tomcat2:8080" />
+        </div>
+        <div class="field">
+          <label for="attNewAppId">App for the new login</label>
+          <select id="attNewAppId">
+            <option value="login" selected>login</option>
+            <option value="quippin">quippin</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="attLocalname">New handle on this provider</label>
+          <input id="attLocalname" />
+        </div>
+        <div class="field">
+          <label for="attUsrName">Display name</label>
+          <input id="attUsrName" />
+        </div>
+        <div class="field">
+          <label for="attPwd">Password for the new login</label>
+          <input id="attPwd" type="password" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label for="attReverifyPwd">Re-verify password (existing account)</label>
+          <input id="attReverifyPwd" type="password" autocomplete="current-password" />
+        </div>
+        <button class="btn" type="submit" id="attBtn">Attach provider</button>
+        <button class="btn secondary" type="button" id="attCancel">Create a brand-new account instead</button>
+        <div id="attMsg" class="msg"></div>
+      </form>
+    </div>
+
+    <div id="signupPanel">
+      <h1>Create your Domatar account</h1>
+      <p class="subtitle">Sign up with any Domatar app. You can link more
+      logins later from your Account page.</p>
+
+      <form id="signupForm" autocomplete="on">
+        <div class="field">
+          <label for="suUsrName">Display name</label>
+          <input id="suUsrName" name="UsrName" />
+        </div>
+        <div class="field">
+          <label for="suLocalname">Handle</label>
+          <input id="suLocalname" name="Localname"
+                 placeholder="e.g. dave (no @ - the app's domain is added)" />
+          <div class="hint">Your usrId will be &lt;handle&gt;@&lt;app&gt;.</div>
+        </div>
+        <div class="field">
+          <label for="suAppId">Sign up with</label>
+          <select id="suAppId" name="AppId">
+            <option value="login">Login (identity hub)</option>
+            <option value="quippin" selected>Quippin</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="suPwd">Password</label>
+          <input id="suPwd" name="Pwd" type="password" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label for="suPwd2">Repeat password</label>
+          <input id="suPwd2" name="Pwd2" type="password" autocomplete="new-password" />
+        </div>
+
+        <button class="btn" type="submit" id="suBtn">Create account</button>
+        <div id="suMsg" class="msg"></div>
+      </form>
+
+      <div class="footer">
+        Already have an account? <a href="/domatar/login/login.html">Log in</a>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+
+  function showMsg($el, text, kind)
+  {
+    $el.removeClass("error success").addClass(kind || "error").text(text);
+  }
+
+  function getCookie(name)
+  {
+    var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
+  function setCookie(name, value)
+  {
+    document.cookie = name + "=" + encodeURIComponent(value) + "; path=/; max-age=" + (60*60*24*365);
+  }
+
+  function showAttach(usrId, sourceBase)
+  {
+    $("#attSessionUsr").text(usrId || "(session)");
+    if (sourceBase) $("#attSourceBase").val(sourceBase);
+    $("#attachPanel").show();
+    $("#signupPanel").hide();
+  }
+
+  function showSignup()
+  {
+    $("#attachPanel").hide();
+    $("#signupPanel").show();
+  }
+
+  // Same-origin session cookies → offer attach (user is already on SOURCE).
+  var cookieUsr = getCookie("usrId");
+  var cookieTok = getCookie("token");
+  if (cookieUsr && cookieTok)
+  {
+    showAttach(cookieUsr, window.location.origin + "/domatar/login");
+  }
+
+  // Optional SSO iframe: ?sso=http://host:port  (SOURCE origin)
+  var params = new URLSearchParams(window.location.search);
+  var ssoOrigin = params.get("sso");
+  if (ssoOrigin)
+  {
+    var trusted = [ssoOrigin];
+    var eventMethod = window.addEventListener ? "addEventListener" : "attachEvent";
+    var eventer = window[eventMethod];
+    var messageEvent = eventMethod == "attachEvent" ? "onmessage" : "message";
+
+    eventer(messageEvent, function(e)
+    {
+      if (trusted.indexOf(e.origin) < 0) return;
+      var data = e.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "LoginUsrId" && data.value)
+      {
+        showAttach(data.value, ssoOrigin + "/domatar/login");
+      }
+    });
+
+    $("#ssoFrame").attr("src", ssoOrigin + "/domatar/login/remoteLogin.html");
+  }
+
+  $("#attCancel").on("click", function() { showSignup(); });
+
+  $("#attachForm").on("submit", function(e)
+  {
+    e.preventDefault();
+
+    var sourceBase = $("#attSourceBase").val().replace(/\/$/, "");
+    var newPrvId = $("#attNewPrvId").val();
+    var newDomain = $("#attNewDomain").val();
+    var newAppId = $("#attNewAppId").val();
+    var localname = $("#attLocalname").val();
+    var usrName = $("#attUsrName").val();
+    var pwd = $("#attPwd").val();
+    var reverifyPwd = $("#attReverifyPwd").val();
+
+    if (!sourceBase || !newPrvId || !newDomain || !localname || !pwd || !reverifyPwd)
+    {
+      showMsg($("#attMsg"), "Fill all required fields.");
+      return;
+    }
+
+    // POST to SOURCE AccountsWui (session cookie must be valid there).
+    $.ajax({
+      type: "POST",
+      url:  sourceBase + "/Wui/AccountsWui",
+      xhrFields: { withCredentials: true },
+      data: {
+        Action: "AttachProvider",
+        NewPrvId: newPrvId,
+        NewDomain: newDomain,
+        NewAppId: newAppId,
+        Localname: localname,
+        UsrName: usrName,
+        Pwd: pwd,
+        ReverifyPwd: reverifyPwd,
+        IsSigning: "True"
+      },
+      success: function(json)
+      {
+        var resp;
+        try { resp = JSON.parse(json); } catch (ex) { showMsg($("#attMsg"), "Bad response"); return; }
+        var body = resp.Body || resp;
+        if (body.Error === "Failure")
+        {
+          showMsg($("#attMsg"), body.ErrorMsg || "Attach failed");
+          return;
+        }
+        showMsg($("#attMsg"), "Attached. You can sign in on this provider.", "success");
+      },
+      error: function(jqXHR, textStatus, errorThrown)
+      {
+        showMsg($("#attMsg"), "Attach failed: " + (errorThrown || textStatus));
+      }
+    });
+  });
+
+  $("#signupForm").on("submit", function(e)
+  {
+    e.preventDefault();
+
+    var usrName   = $("#suUsrName").val();
+    var localname = $("#suLocalname").val();
+    var appId     = $("#suAppId").val();
+    var pwd       = $("#suPwd").val();
+    var pwd2      = $("#suPwd2").val();
+
+    if (!localname || !pwd) { showMsg($("#suMsg"), "Handle and password are required."); return; }
+    if (pwd !== pwd2)        { showMsg($("#suMsg"), "Passwords don't match.");           return; }
+
+    var data = {
+      Action:  "AddAct",
+      ActId:   localname,
+      UsrId:   localname,
+      UsrName: usrName || localname,
+      AppId:   appId,
+      Pwd:     pwd
+    };
+
+    $.ajax({
+      type: "POST",
+      url:  "/domatar/domatar/Wui/ActWui",
+      data: data,
+      success: function(json)
+      {
+        var resp;
+        try { resp = JSON.parse(json); } catch (ex) { showMsg($("#suMsg"), "Bad response from server."); return; }
+
+        if (resp.Body && resp.Body.Error === "Failure")
+        {
+          showMsg($("#suMsg"), "Sign-up failed: " + (resp.Body.ErrorMsg || "unknown error"));
+          return;
+        }
+
+        var attrs = resp.Attrs || (resp.Body && resp.Body.Attrs) || {};
+        var token = attrs.Token;
+        var newUsrId = attrs.UsrId;
+
+        if (!token || !newUsrId) { showMsg($("#suMsg"), "Sign-up succeeded but no session was issued."); return; }
+
+        setCookie("usrId", newUsrId);
+        setCookie("token", token);
+
+        showMsg($("#suMsg"), "Welcome! Redirecting...", "success");
+        window.location.href = "/domatar/login/account.html";
+      },
+      error: function(jqXHR, textStatus, errorThrown)
+      {
+        showMsg($("#suMsg"), "Sign-up failed: " + (errorThrown || textStatus));
+      }
+    });
+  });
+
+</script>
+
+</body>
+</html>

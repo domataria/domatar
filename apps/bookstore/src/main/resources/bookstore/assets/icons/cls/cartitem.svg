@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Book in shopping cart -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Cart Item">
+  <!-- Spine -->
+  <rect x="1" y="1" width="2.5" height="9" rx="1" fill="#0d9488"/>
+  <!-- Pages block -->
+  <rect x="3.5" y="1" width="6" height="9" rx="1" fill="#0d9488" opacity=".65"/>
+  <!-- Text lines -->
+  <line x1="5" y1="3.5" x2="8"  y2="3.5" stroke="#fff" stroke-width="1" stroke-linecap="round"/>
+  <line x1="5" y1="5.5" x2="8"  y2="5.5" stroke="#fff" stroke-width="1" stroke-linecap="round"/>
+  <!-- Mini cart (bottom-right) -->
+  <path d="M9.5 8.5h1l1 3h3.5l.8-2.5H11" fill="none" stroke="#f59e0b" stroke-width="1.2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="13" r=".8" fill="#f59e0b"/>
+  <circle cx="14.5" cy="13" r=".8" fill="#f59e0b"/>
+</svg>

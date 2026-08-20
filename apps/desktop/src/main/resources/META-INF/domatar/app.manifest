@@ -1,0 +1,7 @@
+AppId: desktop
+Version: 1.0
+InstallClass: com.desktop.install.DesktopInstall
+AssetDirectory: desktop/assets
+Handler: desktop, app,  com.desktop.objimpl.DesktopAppImpl
+Handler: desktop, apps, com.desktop.objimpl.AppsImpl
+Wui:     AppsWui,       com.desktop.webui.AppsWui

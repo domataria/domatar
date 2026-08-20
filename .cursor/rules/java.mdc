@@ -1,0 +1,39 @@
+---
+description: Domatar Java code style essentials
+globs: **/*.java
+alwaysApply: false
+---
+
+# Domatar Java Style
+
+Full rules: `docs/spec/platform/CodeStyle.md` (source of truth). Key points:
+
+- **Allman braces** — opening brace on the NEXT line for every construct.
+- **2-space indent**, never tabs. CRLF line endings. File ends with one newline.
+- **`final` locals** where practical; WHY-only comments (no change-narration).
+- Preserve the existing `/* Copyright (c) 2024 Domatar */` header when present;
+  do not add one to files that lack it.
+
+## Library choices (do not substitute)
+
+- Base64: use `com.domatar.util.Base64Encoder`, NEVER `java.util.Base64`.
+- Hashing: use `com.domatar.crypto.KeyOps.sha256`.
+- No new third-party dependencies.
+
+## Crypto / identity
+
+- Route all fingerprint derivation through `AccountKeys` (v1 = `SHA-256(pub)[0..24)`
+  → Base64Encoder → 32 chars). Never re-encode an actId/ownId at a call site.
+- Verification uses an account's STORED `FpVersion`; `defaultVersion()` is a
+  minting concern only. `fromPrivKey(bytes)` stays v1.
+
+```java
+// Allman, final locals, 2-space
+public void foo(final int x)
+{
+  if (x > 0)
+  {
+    doSomething();
+  }
+}
+```

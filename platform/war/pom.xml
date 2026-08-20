@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.domatar</groupId>
+        <artifactId>domatar</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>domatar-war</artifactId>
+    <packaging>war</packaging>
+    <name>Domatar Platform WAR</name>
+    <description>
+        Platform WAR: account manager, host directory, Domatar App objects,
+        and all app handlers loaded dynamically from WEB-INF/apps/ via AppLoader.
+    </description>
+
+    <dependencies>
+        <!-- Framework -->
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>domatar-core</artifactId>
+        </dependency>
+
+        <!--
+          App JARs needed at compile time by DomatarProviderInstall (direct imports
+          of NavigatorInstall, LoginInstall, DesktopInstall).  These will be moved
+          to provided/runtime scope in Task 16 when those direct calls are removed.
+        -->
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>navigator</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>login</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>desktop</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+          All app JARs loaded by AppLoader at runtime from WEB-INF/apps/.
+          provided scope: on the compile classpath but NOT extracted into WEB-INF/lib/
+          (the maven-dependency-plugin copies them to WEB-INF/apps/ instead).
+        -->
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>quippin</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>bookstore</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>spreadsheet</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>money</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>search</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>chat</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>mail</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>aiagent</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>appstore</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>domatar-app</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Servlet API -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>domatar</finalName>
+        <plugins>
+            <!--
+              Copy every app JAR into WEB-INF/apps/ at the package phase so that
+              AppLoader can discover and load them at Tomcat startup.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.7.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-app-jars</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeArtifactIds>
+                                navigator,login,desktop,appstore,quippin,
+                                bookstore,spreadsheet,money,search,chat,mail,
+                                aiagent,domatar-app
+                            </includeArtifactIds>
+                            <outputDirectory>${project.build.directory}/domatar/WEB-INF/apps</outputDirectory>
+                            <stripVersion>false</stripVersion>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

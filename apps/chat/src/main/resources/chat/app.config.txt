@@ -1,0 +1,6 @@
+AppId=chat
+AppName=Chat
+AppDesc=Real-time messaging
+Version=0.1
+DependsOn=navigator,login,desktop
+ProviderHosts=

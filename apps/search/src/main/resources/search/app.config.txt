@@ -1,0 +1,6 @@
+AppId=search
+AppName=Search
+AppDesc=Search across Domatar
+Version=0.1
+DependsOn=navigator,login,desktop
+ProviderHosts=

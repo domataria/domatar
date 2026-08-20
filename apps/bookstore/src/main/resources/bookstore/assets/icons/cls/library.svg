@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Library: three books side by side on a shelf -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Library">
+  <!-- Shelf line -->
+  <line x1="1" y1="13" x2="15" y2="13" stroke="#0d9488" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Book 1 (tall, dark) -->
+  <rect x="2" y="4" width="3" height="9" rx="1" fill="#0d9488"/>
+  <!-- Book 2 (medium, lighter) -->
+  <rect x="6" y="6" width="3" height="7" rx="1" fill="#0d9488" opacity=".7"/>
+  <!-- Book 3 (short, lightest) -->
+  <rect x="10" y="7" width="4" height="6" rx="1" fill="#0d9488" opacity=".45"/>
+</svg>

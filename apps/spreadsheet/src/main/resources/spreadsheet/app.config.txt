@@ -1,0 +1,6 @@
+AppId=spreadsheet
+AppName=Spreadsheet
+AppDesc=Collaborative spreadsheets
+Version=1.0
+DependsOn=navigator,login,desktop
+ProviderHosts=

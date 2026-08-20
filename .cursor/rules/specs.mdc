@@ -1,0 +1,30 @@
+---
+description: Domatar spec document conventions
+globs: docs/spec/**/*.md
+alwaysApply: false
+---
+
+# Domatar Spec Docs
+
+- Living public specs are Markdown under `docs/spec/` (WHAT and WHY,
+  present-tense, with "Direction" subsections for future work).
+- Phased `Update-*.txt` build plans live in the sibling `internal`
+  workspace root, not in this repository. Do not create them here.
+
+## Status markers
+
+Specs carry a status at the top, flipped as work lands:
+
+- `[DESIGN — not yet implemented]`
+- `[IMPLEMENTED — <Update-...>.txt]`
+
+## Conventions
+
+- Structure with `PART N` sections. Public specs use GitHub Markdown
+  headings (`#` / `## PART N`).
+- Reference companion specs by path under `docs/spec/` instead of
+  duplicating their content (duplication drifts).
+- Record deliberate deviations from a plan as KEY DECISIONS (KD1, KD2, …)
+  in the internal Update file and fold them back into the living spec.
+- When you implement or change behavior, update the relevant spec(s) in
+  the same change (status marker + cross-refs).

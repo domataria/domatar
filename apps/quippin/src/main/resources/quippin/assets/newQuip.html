@@ -1,0 +1,77 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Quip</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+  function submitForm()
+  {
+    var raw = $("textarea#text").val();
+
+    if (!raw || !raw.trim())
+    {
+      alert("Enter some text");
+      return;
+    }
+
+    var text       = encodeURIComponent(raw);
+    var dataString = 'Text=' + text + '&Action=AddQuip';
+
+    $.ajax({
+             type: "POST",
+             cache: false,
+             url: "Wui/QuipsWui",
+             crossDomain: false,
+             data: dataString,
+             timeout: 10000000,
+             success: function(json) {formSubmitted(JSON.parse(json));},
+             error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+           });
+  };
+
+  function formSubmitted(val)
+  {
+    if (val && val.Body && val.Body.Error === "Failure")
+    {
+      alert("AddQuip failed: " + (val.Body.ErrorMsg || "Unknown error"));
+      return;
+    }
+
+    location.replace("quips.html");
+  }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>New Quip</h1>
+  <p class="subtitle">Write something. Hit Quip when you're done.</p>
+
+  <div class="card">
+    <label for="text">Quip text</label>
+    <textarea id="text" name="text" rows="8" cols="50"></textarea>
+    <br /><br />
+    <button type="button" name="Quip" id="Quip" onclick="submitForm()">Quip</button>
+  </div>
+</div>
+
+</body>
+</html>

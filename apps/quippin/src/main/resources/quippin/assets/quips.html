@@ -1,0 +1,121 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quips</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+  function getHandle()
+  {
+    // New style: quips.html?user=handle
+    var params = new URLSearchParams(window.location.search);
+    var usrId  = params.get('user') || '';
+
+    if (usrId && usrId.indexOf('@') < 0)
+      usrId = usrId + '@quippin';
+
+    return usrId;
+  }
+
+  window.getQuips = function getQuips()
+  {
+    var usrId = getHandle();
+
+    var dataString;
+
+    if (usrId.length == 0)
+      dataString = 'Action=GetQuips';
+    else
+      dataString = 'Action=GetQuips&UsrId=' + usrId;
+
+    $.ajax({
+             type: "POST",
+             cache: false,
+             url: "Wui/QuipsWui",
+             crossDomain: false,
+             data: dataString,
+             timeout: 10000000,
+             success: function(json) {insertQuips(JSON.parse(json));},
+             error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+           });
+  };
+
+  function insertQuips(retObj) {
+      if (!retObj || retObj.Error == "Failure") {
+          alert("Error: " + retObj.ErrorMsg);
+          return;
+      }
+
+      var text = '<div style="text-align:center;width:100%;min-width:100%"><table style="text-align:left;width:100%;min-width:100%">';
+
+      var quipArray = retObj.Attrs.Quips;
+
+      for (var i = 0; i < quipArray.length; i++)
+      {
+        if (!quipArray[i].ParentId)
+           text += quipHtml(quipArray[i]);
+      }
+
+    text += '</table></div><br />';
+
+    $("#quips").html(text);
+    $("#Quip").click(function() { submitForm(); return false; });
+
+  };
+
+  function submitForm()
+  {
+    var text    = encodeURIComponent($("textarea#text").val());
+    var dataString = 'Text=' + text + '&Action=AddQuip';
+
+    $.ajax({
+             type: "POST",
+             cache: false,
+             url: "Wui/QuipsWui",
+             crossDomain: false,
+             data: dataString,
+             timeout: 10000000,
+             success: function(json) {formSubmitted(JSON.parse(json));},
+             error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+           });
+  };
+
+  function formSubmitted(val)
+  {
+    getQuips();
+  }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>Quips</h1>
+  <p class="subtitle">Posts by <span id="handle"></span></p>
+
+  <div class="card" id="quips"></div>
+</div>
+
+<script type="text/javascript">
+$("#handle").html(getHandle());
+$(getQuips());
+</script>
+
+</body>
+</html>

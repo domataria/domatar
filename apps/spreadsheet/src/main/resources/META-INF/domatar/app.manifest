@@ -1,0 +1,9 @@
+AppId: spreadsheet
+Version: 1.0
+InstallClass: com.spreadsheet.install.SpreadsheetInstall
+AssetDirectory: spreadsheet/assets
+Handler: spreadsheet, app,    com.spreadsheet.objimpl.SpreadsheetAppImpl
+Handler: spreadsheet, sheets, com.spreadsheet.objimpl.SheetsImpl
+Handler: spreadsheet, sheet,  com.spreadsheet.objimpl.SheetImpl
+Wui: SheetsWui,               com.spreadsheet.webui.SheetsWui
+Wui: SheetWui,                com.spreadsheet.webui.SheetWui

@@ -1,0 +1,7 @@
+# Default applications for every new user account (comma-separated appIds).
+# Edit only this file to change defaults — avoids touching provider.config.txt
+# (HstId, DbUrl, passwords, etc.). See Spec-Installation.txt PART 8.
+# Order matters. navigator and domatar are still installed first by ActManagerImpl
+# before this list is applied; duplicates in this list are ignored.
+
+navigator,domatar,login,desktop,appstore,quippin,bookstore,spreadsheet,money,search,chat,mail,aiagent

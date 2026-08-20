@@ -1,0 +1,256 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Follows</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    // ---- Directory lookup ------------------------------------------------
+
+    var directoryUsers = null; // session cache; null = not yet fetched
+
+    function openDirectoryLookup()
+    {
+        document.getElementById('directoryModal').style.display = 'flex';
+        if (directoryUsers !== null) { loadDirectoryList(directoryUsers); return; }
+        document.getElementById('directoryList').textContent = 'Loading\u2026';
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/QuippinDirectoryWui',
+            data: 'Action=GetDirectory',
+            cache: false,
+            timeout: 10000000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                directoryUsers = (ret.Attrs && ret.Attrs.Users) ? ret.Attrs.Users : [];
+                loadDirectoryList(directoryUsers);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                document.getElementById('directoryList').textContent =
+                    'Error loading directory: ' + textStatus;
+            }
+        });
+    }
+
+    function closeDirectoryLookup()
+    {
+        document.getElementById('directoryModal').style.display = 'none';
+    }
+
+    function selectDirectoryUser(usrId)
+    {
+        $('input#followInput').val(usrId);
+        closeDirectoryLookup();
+    }
+
+    function loadDirectoryList(users)
+    {
+        if (!users || users.length === 0)
+        {
+            document.getElementById('directoryList').textContent = 'No users found.';
+            return;
+        }
+
+        var html = '<table style="width:100%;border-collapse:collapse;">';
+        html += '<tr>' +
+                '<th style="text-align:left;padding:4px 8px;">Name</th>' +
+                '<th style="text-align:left;padding:4px 8px;">Handle</th>' +
+                '<th></th>' +
+                '</tr>';
+
+        for (var i = 0; i < users.length; i++)
+        {
+            var u = users[i];
+            var usrId   = u.UsrId   || u.ActId || '';
+            var usrName = u.UsrName || usrId;
+            html += '<tr>' +
+                    '<td style="padding:4px 8px;">' + usrName + '</td>' +
+                    '<td style="padding:4px 8px;">' + usrId + '</td>' +
+                    '<td style="padding:4px 8px;">' +
+                      '<button type="button" onclick="selectDirectoryUser(\'' + usrId + '\')">Select</button>' +
+                    '</td>' +
+                    '</tr>';
+        }
+
+        html += '</table>';
+        document.getElementById('directoryList').innerHTML = html;
+    }
+
+    // ---- Follow ----------------------------------------------------------
+
+    function follow()
+    {
+        var raw = $("input#followInput").val();
+
+        if (!raw)
+        {
+            alert("Enter a usrId@appId");
+            return;
+        }
+
+        var usrId = encodeURIComponent(raw);
+        var dataString = 'UsrId=' + usrId + '&Action=Follow';
+
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/FollowsWui",
+            crossDomain: false,
+            data: dataString,
+            timeout: 10000000,
+            success: function(json) {followed(JSON.parse(json));},
+            error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+        });
+    };
+
+    function followed(val)
+    {
+        if (val && val.Error === "Failure")
+        {
+            alert("Follow failed: " + (val.ErrorMsg || "Unknown error"));
+            return;
+        }
+
+        $("input#followInput").val("");
+
+        getFollows();
+    }
+
+    function getFollows()
+    {
+        var dataString = 'Action=GetFollows';
+
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/FollowsWui",
+            crossDomain: false,
+            data: dataString,
+            timeout: 10000000,
+            success: function(json) {insertFollows(JSON.parse(json));},
+            error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+        });
+    };
+
+    function unfollow(actId)
+    {
+        var dataString = 'ActId=' + encodeURIComponent(actId) + '&Action=Unfollow';
+
+        $.ajax({
+            type: "POST",
+            cache: false,
+            url: "Wui/FollowsWui",
+            crossDomain: false,
+            data: dataString,
+            timeout: 10000000,
+            success: function(json) {
+                var result = JSON.parse(json);
+                if (result && result.Error === "Failure")
+                    alert("Unfollow failed: " + (result.ErrorMsg || "Unknown error"));
+                else
+                    getFollows();
+            },
+            error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+        });
+    }
+
+    function insertFollows(retObj)
+    {
+        var follows = retObj.Attrs.Follows || [];
+
+        if (follows.length === 0)
+        {
+            $("#follows").html('<p>You are not following anyone yet.</p>');
+            return;
+        }
+
+        var text = '<table style="width:100%;border-collapse:collapse;">';
+        text += '<tr>' +
+                '<th style="text-align:left;padding:4px 8px;">Name</th>' +
+                '<th style="text-align:left;padding:4px 8px;">Handle</th>' +
+                '<th></th>' +
+                '</tr>';
+
+        for (var i = 0; i < follows.length; i++)
+        {
+            var f = follows[i];
+            var actId   = f.ActId   || '';
+            var usrId   = f.UsrId   || actId;
+            var usrName = f.UsrName || actId;
+
+            text +=
+                '<tr>' +
+                '<td style="padding:4px 8px;">' + usrName + '</td>' +
+                '<td style="padding:4px 8px;">' + usrId + '</td>' +
+                '<td style="padding:4px 8px;">' +
+                  '<button type="button" onclick="unfollow(' + "'" + actId + "'" + ')">Unfollow</button>' +
+                '</td>' +
+                '</tr>';
+        }
+
+        text += '</table>';
+
+        $("#follows").html(text);
+    };
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>Follows</h1>
+  <p class="subtitle">Accounts you follow across providers.</p>
+
+  <div class="card">
+    <label for="followInput">Follow user</label>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+      <input id="followInput" name="followInput" placeholder="usrId@appId" style="flex:1;" />
+      <button type="button" onclick="openDirectoryLookup()" title="Browse Quippin users"
+              style="font-size:1.1em;padding:2px 6px;">&#128269;</button>
+    </div>
+    <br />
+    <button type="button" id="FollowButton" onclick="follow()">Follow</button>
+  </div>
+
+  <!-- Directory lookup modal -->
+  <div id="directoryModal"
+       style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+              background:rgba(0,0,0,0.5);z-index:1000;
+              align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:16px;
+                min-width:320px;max-height:80vh;overflow-y:auto;
+                box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0;">Browse Quippin Users</h3>
+        <button type="button" onclick="closeDirectoryLookup()"
+                style="font-size:1.1em;background:none;border:none;cursor:pointer;">&#10005;</button>
+      </div>
+      <div id="directoryList">Loading&hellip;</div>
+    </div>
+  </div>
+
+  <div class="card" id="follows"></div>
+</div>
+
+<script type="text/javascript">
+    $(getFollows());
+</script>
+
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Money</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .mn-header       { display: flex; align-items: baseline; gap: 14px; margin-bottom: 28px; }
+        .mn-header h2    { margin: 0; }
+
+        /* Role-selection panel */
+        .role-panel      { max-width: 520px; }
+        .role-intro      { color: var(--page-muted); margin-bottom: 28px; line-height: 1.5; }
+        .role-cards      { display: flex; gap: 20px; flex-wrap: wrap; }
+        .role-card       { flex: 1; min-width: 200px; border: 1px solid var(--border);
+                           border-radius: var(--radius); padding: 20px 22px;
+                           cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+        .role-card:hover { border-color: var(--accent, #ca8a04); box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+        .role-card h3    { margin: 0 0 8px; font-size: 1.1em; }
+        .role-card p     { margin: 0; font-size: 0.88em; color: var(--page-muted); }
+
+        /* Bank sub-form (inside the Bank card when clicked) */
+        .bank-form       { margin-top: 14px; display: none; }
+        .bank-form.open  { display: block; }
+        .bank-form .mf   { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .bank-form label { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .bank-form input { padding: 6px 9px; border: 1px solid var(--border);
+                           border-radius: var(--radius); font-size: 0.95em; width: 100%;
+                           box-sizing: border-box; }
+        .bank-form-btns  { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+        .mn-error        { color: var(--danger, #dc2626); font-size: 0.9em;
+                           margin-top: 8px; min-height: 1.2em; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var currentRole = '';
+
+    // -------------------------------------------------------------------------
+    // Load profile
+    // -------------------------------------------------------------------------
+
+    function loadProfile()
+    {
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=GetProfile',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (!ret || ret.Error === 'Failure')
+                {
+                    showError(ret && ret.ErrorMsg ? ret.ErrorMsg : 'Failed to load profile.');
+                    return;
+                }
+                currentRole = (ret.Attrs && ret.Attrs.Role) ? ret.Attrs.Role : '';
+                renderRole(currentRole);
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Render based on role — redirect immediately if role is already set
+    // -------------------------------------------------------------------------
+
+    function renderRole(role)
+    {
+        if (role === 'Bank')
+        {
+            window.location.replace('/domatar/money/bank.html');
+        }
+        else if (role === 'Customer')
+        {
+            window.location.replace('/domatar/money/accounts.html');
+        }
+        else
+        {
+            $('#role-section').show();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Choose "I am a Bank" — show the sub-form inside the card
+    // -------------------------------------------------------------------------
+
+    function chooseBankCard()
+    {
+        $('#bank-form').addClass('open');
+        $('#customer-card').css('opacity', '0.5').css('pointer-events', 'none');
+        setTimeout(function() { $('#bank-name-input').focus(); }, 50);
+    }
+
+    function cancelBankCard()
+    {
+        $('#bank-form').removeClass('open');
+        $('#customer-card').css('opacity', '').css('pointer-events', '');
+        $('#bank-form-error').text('');
+    }
+
+    function confirmBank()
+    {
+        var name  = $.trim($('#bank-name-input').val());
+        var funds = $.trim($('#bank-funds-input').val());
+
+        if (!name)  { $('#bank-form-error').text('Bank Name is required.'); return; }
+        if (funds === '') funds = '0';
+
+        $('#bank-form-error').text('');
+        $('#btn-bank-ok').prop('disabled', true).text('Setting up\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=SetRole&Role=Bank' +
+                  '&BankName='   + encodeURIComponent(name) +
+                  '&TotalFunds=' + encodeURIComponent(funds),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#bank-form-error').text(ret.ErrorMsg || 'Error');
+                    $('#btn-bank-ok').prop('disabled', false).text('Confirm');
+                    return;
+                }
+                window.location.href = '/domatar/money/bank.html';
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#bank-form-error').text('Error: ' + textStatus);
+                $('#btn-bank-ok').prop('disabled', false).text('Confirm');
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Choose "I am a Customer"
+    // -------------------------------------------------------------------------
+
+    function chooseCustomer()
+    {
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MoneyProfileWui',
+            data: 'Action=SetRole&Role=Customer',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    showError(ret.ErrorMsg || 'Error');
+                    return;
+                }
+                window.location.href = '/domatar/money/accounts.html';
+            },
+            error: function(jqXHR, textStatus) { showError('Error: ' + textStatus); }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilities
+    // -------------------------------------------------------------------------
+
+    function showError(msg)
+    {
+        $('#page-error').text(msg);
+    }
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
+
+    $(document).ready(function()
+    {
+        loadProfile();
+
+        $('#bank-form input').on('keydown', function(e)
+        {
+            if (e.key === 'Enter') confirmBank();
+        });
+    });
+
+</script>
+
+<div class="page">
+    <div class="page-content">
+        <div class="mn-header">
+            <h2>Money</h2>
+        </div>
+
+        <div id="page-error" class="mn-error"></div>
+
+        <!-- Role not yet chosen — hidden until profile loads -->
+        <div id="role-section" style="display:none;">
+            <div class="role-panel">
+                <p class="role-intro">
+                    Welcome to Money. Choose how you want to participate:
+                    run a bank and manage customer accounts, or join as a
+                    customer and hold accounts at banks.
+                </p>
+                <div class="role-cards">
+
+                    <!-- Bank card -->
+                    <div class="role-card" id="bank-card" onclick="chooseBankCard()">
+                        <h3>&#127963; I am a Bank</h3>
+                        <p>Declare a pool of funds and open accounts for customers.</p>
+
+                        <!-- Sub-form shown after clicking the card -->
+                        <div class="bank-form" id="bank-form" onclick="event.stopPropagation()">
+                            <div class="mf">
+                                <label for="bank-name-input">Bank Name</label>
+                                <input type="text" id="bank-name-input"
+                                       placeholder="e.g. First Domatar Bank" maxlength="80"/>
+                            </div>
+                            <div class="mf">
+                                <label for="bank-funds-input">Total Funds</label>
+                                <input type="number" id="bank-funds-input"
+                                       min="0" step="any" placeholder="0.00" value="0"/>
+                            </div>
+                            <div id="bank-form-error" class="mn-error"></div>
+                            <div class="bank-form-btns">
+                                <button type="button" onclick="cancelBankCard()">Cancel</button>
+                                <button type="button" id="btn-bank-ok" onclick="confirmBank()">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Customer card -->
+                    <div class="role-card" id="customer-card" onclick="chooseCustomer()">
+                        <h3>&#128176; I am a Customer</h3>
+                        <p>Hold accounts at banks and pay other customers.</p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>

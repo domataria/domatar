@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Message row: a horizontal text line with a left role indicator -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Message">
+  <!-- Role dot -->
+  <circle cx="3" cy="8" r="2" fill="#a78bfa"/>
+  <!-- Text line -->
+  <rect x="7" y="6.5" width="7" height="2" rx="1" fill="#7c3aed" opacity=".6"/>
+  <rect x="7" y="10"  width="5" height="2" rx="1" fill="#7c3aed" opacity=".4"/>
+</svg>

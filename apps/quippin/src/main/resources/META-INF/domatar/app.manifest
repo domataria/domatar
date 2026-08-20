@@ -1,0 +1,22 @@
+AppId: quippin
+Version: 1.0
+InstallClass: com.quippin.install.QuippinInstall
+AssetDirectory: quippin/assets
+Handler: quippin, app,        com.quippin.objimpl.QuippinAppImpl
+Handler: quippin, quip,       com.quippin.objimpl.QuipImpl
+Handler: quippin, quips,      com.quippin.objimpl.QuipsImpl
+Handler: quippin, follows,    com.quippin.objimpl.FollowsImpl
+Handler: quippin, news,       com.quippin.objimpl.NewsImpl
+Handler: quippin, sentiment,  com.quippin.objimpl.SentimentImpl
+Handler: quippin, sentiments, com.quippin.objimpl.SentimentsImpl
+Handler: quippin, bans,       com.quippin.objimpl.BansImpl
+Handler: quippin, logs,       com.quippin.objimpl.LogsImpl
+Handler: quippin, directory,  com.quippin.objimpl.QuippinDirectoryImpl
+Wui: QuipWui,               com.quippin.webui.QuipWui
+Wui: QuipsWui,              com.quippin.webui.QuipsWui
+Wui: NewsWui,               com.quippin.webui.NewsWui
+Wui: FollowsWui,            com.quippin.webui.FollowsWui
+Wui: BansWui,               com.quippin.webui.BansWui
+Wui: LogsWui,               com.quippin.webui.LogsWui
+Wui: SentimentsWui,         com.quippin.webui.SentimentsWui
+Wui: QuippinDirectoryWui,   com.quippin.webui.QuippinDirectoryWui

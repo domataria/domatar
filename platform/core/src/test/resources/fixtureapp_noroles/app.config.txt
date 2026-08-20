@@ -1,0 +1,4 @@
+AppId=fixtureapp_noroles
+AppName=Fixture No Roles
+AppDesc=Test fixture without ShellRoles
+Version=0.1

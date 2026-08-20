@@ -1,0 +1,210 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quip</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+  var following = false;
+
+  function getUsrQuipId()
+  {
+    // New style: quip.html?handle=<handle>&quipId=<quipId>
+    var params  = new URLSearchParams(window.location.search);
+    var handle  = params.get('handle');
+    var quipId  = params.get('quipId');
+
+    if (handle && quipId)
+      return handle + '/' + quipId;
+
+    return null;
+  }
+
+  function getQuip()
+  {
+    var usrQuipId = getUsrQuipId();
+
+    if (usrQuipId == null)
+      return;
+
+    var split = usrQuipId.split('/');
+
+    if (split.length < 2)
+      return;
+
+    var usrId = split[0];
+
+    var quipId = split[1];
+
+    if (usrId == null || quipId == null)
+      return;
+
+    if (usrId.indexOf("@") < 0)
+      usrId = usrId + "@quippin";
+
+    var dataString = 'Action=GetQuip&UsrId=' + usrId + "&Quip=" + quipId;
+
+    $.ajax({
+             type: "POST",
+             cache: false,
+             url: "Wui/QuipWui",
+             crossDomain: false,
+             data: dataString,
+             timeout: 10000000,
+             success: function(json) {insertQuip(JSON.parse(json));},
+             error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+        });
+  };
+
+  function insertQuip(retObj)
+  {
+  	var followText;
+
+  	if (following)
+  	  followText = "UnFollow";
+  	else
+  	  followText = "Follow";
+
+  	var text = '<div style="text-align:center;"><table style="text-align:left;width:100%;">' +
+  	'Follow: ' +
+  	'<button style="font-weight: bold;" type="button" name="Follow" id="Follow">&nbsp;' + followText +
+  	'&nbsp;</button>' +
+  	'</div>';
+
+      var quip = retObj.Attrs;
+
+  	text += quipHtml(quip);
+
+    text += '</table></div><br />';
+
+      $("#quips").html(text);
+  	$("#Follow").click(function() { follow(); });
+  };
+
+  function follow()
+  {
+	var usrQuipId = getUsrQuipId();
+
+	if (usrQuipId == null)
+      return;
+
+	var split = usrQuipId.split('/');
+
+	if (split.length < 2)
+	  return;
+
+	var usrId = split[0];
+
+	var quipId = split[1];
+
+    if (usrId == null || quipId == null)
+      return;
+
+    if (usrId.indexOf("@") < 0)
+      usrId = usrId + "@quippin";
+
+    var dataString;
+
+    if (following)
+      dataString = 'Action=Unfollow&UsrId=' + usrId;
+    else
+      dataString = 'Action=Follow&UsrId=' + usrId;
+
+	$.ajax({
+        type: "POST",
+        cache: false,
+        url: "Wui/FollowsWui",
+		crossDomain: false,
+		data: dataString,
+		timeout: 10000000,
+        success: function(json) {showFollow(JSON.parse(json));},
+		error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+      });
+  };
+
+  function getFollow()
+  {
+	var usrQuipId = getUsrQuipId();
+
+	if (usrQuipId == null)
+      return;
+
+	var split = usrQuipId.split('/');
+
+	if (split.length < 2)
+	  return;
+
+	var usrId = split[0];
+
+	var quipId = split[1];
+
+    if (usrId == null || quipId == null)
+      return;
+
+    if (usrId.indexOf("@") < 0)
+      usrId = usrId + "@quippin";
+
+    var dataString = 'Action=IsFollowed&UsrId=' + usrId;
+
+	$.ajax({
+        type: "POST",
+        cache: false,
+        url: "Wui/FollowsWui",
+		crossDomain: false,
+		data: dataString,
+		timeout: 10000000,
+        success: function(json) {showFollow(JSON.parse(json));},
+		error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+      });
+  };
+
+  function showFollow(retObj)
+  {
+    var followStr = retObj.Attrs.Follow;
+
+    if (followStr == "True")
+    {
+      following = true;
+      $("#following").html("Following");
+  	  $("#Follow").text("Unfollow");
+    }
+    else
+    {
+      following = false;
+      $("#following").html("Not Following");
+  	  $("#Follow").text("Follow");
+    }
+  };
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>Quip</h1>
+  <p class="subtitle"><span id="following"></span></p>
+
+  <div class="card" id="quips"></div>
+</div>
+
+<script type="text/javascript">
+$(getFollow());
+$(getQuip());
+</script>
+
+</body>
+</html>

@@ -1,0 +1,6 @@
+AppId=domatar
+AppName=Domatar
+AppDesc=Core Domatar class descriptors and platform infrastructure
+Version=1.0
+DependsOn=navigator
+ProviderHosts=domatar-{PrvId}@{PrvId}

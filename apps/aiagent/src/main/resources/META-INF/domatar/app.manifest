@@ -1,0 +1,9 @@
+AppId: aiagent
+Version: 1.0
+InstallClass: com.aiagent.install.AiagentInstall
+AssetDirectory: aiagent/assets
+Handler: aiagent, app,           com.aiagent.objimpl.AiagentAppImpl
+Handler: aiagent, conversations, com.aiagent.objimpl.ConversationsImpl
+Handler: aiagent, conv,          com.aiagent.objimpl.ConvImpl
+Handler: aiagent, msg,           com.aiagent.objimpl.MsgImpl
+Wui: AgentWui,                   com.aiagent.webui.AgentWui

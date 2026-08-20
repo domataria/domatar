@@ -1,0 +1,183 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bans</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript">
+
+function unbanUsrs(actId)
+{
+  var dataString = 'Action=Unban&ActId=' + encodeURIComponent(actId);
+
+  $.ajax({
+           type: "POST",
+           cache: false,
+           url: "Wui/BansWui",
+           crossDomain: false,
+           data: dataString,
+           timeout: 10000000,
+           success: function(json) {usrUnbanned(JSON.parse(json));},
+           error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+         });
+};
+
+function usrUnbanned(retObj)
+{
+  getBannedUsrs();
+}
+
+function unbanIps(ip)
+{
+  var dataString = 'Action=Unban&Ip=' + encodeURIComponent(ip);
+
+  $.ajax({
+           type: "POST",
+           cache: false,
+           url: "Wui/BansWui",
+           crossDomain: false,
+           data: dataString,
+           timeout: 10000000,
+           success: function(json) {ipUnbanned(JSON.parse(json));},
+           error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+         });
+};
+
+function ipUnbanned(retObj)
+{
+  getBannedIps();
+}
+
+function getBannedUsrs()
+{
+  var dataString = 'Action=GetActBans';
+
+  $.ajax({
+           type: "POST",
+           cache: false,
+           url: "Wui/BansWui",
+           crossDomain: false,
+           data: dataString,
+           timeout: 10000000,
+           success: function(json) {insertBannedUsrs(JSON.parse(json));},
+           error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+         });
+};
+
+function insertBannedUsrs(retObj)
+{
+  var text = '<table>';
+
+  text += '<tr><th>User Name</th><th>UserId</th><th>IP Addresses</th><th></th></tr>';
+
+  var bannedArray = retObj.Attrs.BannedActs;
+
+  for (var i = 0; i < bannedArray.length; i++)
+  {
+    var ipArray = bannedArray[i].Ips;
+
+    var ips = "";
+
+    for (var j = 0; j < ipArray.length; j++)
+    {
+      if (j != 0)
+        ips += "<br/>";
+
+      ips += ipArray[j];
+    }
+
+    text +=
+      '<tr><td>' + bannedArray[i].UsrName + '</td>' +
+      '<td>' + bannedArray[i].UsrId + '</td>' +
+      '<td>' + ips + '</td>' +
+      '<td><button onclick="unbanUsrs(\'' + bannedArray[i].ActId + '\')">Unban User</button></td></tr>';
+  }
+
+  text += '</table>';
+
+  $("#bannedUsrs").html(text);
+};
+
+function getBannedIps()
+{
+  var dataString = 'Action=GetIpBans';
+
+  $.ajax({
+           type: "POST",
+           cache: false,
+           url: "Wui/BansWui",
+           crossDomain: false,
+           data: dataString,
+           timeout: 10000000,
+           success: function(json) {insertBannedIps(JSON.parse(json));},
+           error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+         });
+};
+
+function insertBannedIps(retObj)
+{
+  var text = '<table>';
+
+  text += '<tr><th>IP Address</th><th>Users</th><th></th></tr>';
+
+  var bannedArray = retObj.Attrs.BannedIps;
+
+  for (var i = 0; i < bannedArray.length; i++)
+  {
+    var usrArray = bannedArray[i].Usrs;
+
+    var usrs = "";
+
+    for (var j = 0; j < usrArray.length; j++)
+    {
+      if (j != 0)
+        usrs += "<br/>";
+
+      usrs += usrArray[j].UsrName + " (" + usrArray[j].UsrId + ")";
+    }
+
+    text +=
+      '<tr><td>' + bannedArray[i].Ip + '</td>' +
+      '<td>' + usrs + '</td>' +
+      '<td><button onclick="unbanIps(\'' + bannedArray[i].Ip + '\')">Unban IP Address</button></td></tr>';
+  }
+
+  text += '</table>';
+
+  $("#bannedIps").html(text);
+};
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>Bans</h1>
+  <p class="subtitle">Banned users and IP addresses.</p>
+
+  <div class="card">
+    <button onclick="getBannedUsrs()">Get Banned Users</button>
+    <div id="bannedUsrs"></div>
+  </div>
+
+  <div class="card">
+    <button onclick="getBannedIps()">Get Banned IP Addresses</button>
+    <div id="bannedIps"></div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>List a Book</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .form-row { margin-bottom: 14px; }
+        .form-row label { display: block; font-size: 0.9em; font-weight: 600;
+                          margin-bottom: 4px; color: var(--page-muted); }
+        .form-row input,
+        .form-row select,
+        .form-row textarea { width: 100%; box-sizing: border-box; }
+        .form-row textarea { height: 80px; resize: vertical; }
+        .form-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .required-note { font-size: 0.8em; color: var(--page-muted); margin-bottom: 16px; }
+        #error-msg { color: #dc2626; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    function submitListing()
+    {
+        var title     = $.trim($('#title').val());
+        var author    = $.trim($('#author').val());
+        var price     = $.trim($('#price').val());
+        var condition = $('#condition').val();
+
+        if (!title)     { showError('Title is required.');     return; }
+        if (!author)    { showError('Author is required.');    return; }
+        if (!price)     { showError('Price is required.');     return; }
+        if (!condition) { showError('Condition is required.'); return; }
+
+        hideError();
+        $('#submitBtn').prop('disabled', true).text('Listing\u2026');
+
+        var data = 'Action=ListBook' +
+                   '&Title='       + encodeURIComponent(title) +
+                   '&Author='      + encodeURIComponent(author) +
+                   '&ISBN='        + encodeURIComponent($('#isbn').val()) +
+                   '&Price='       + encodeURIComponent(price) +
+                   '&Condition='   + encodeURIComponent(condition) +
+                   '&Description=' + encodeURIComponent($('#description').val());
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ForSaleWui',
+            data: data,
+            cache: false,
+            timeout: 10000000,
+            success: function(json) {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    showError('Failed: ' + (ret.ErrorMsg || 'Unknown error'));
+                    $('#submitBtn').prop('disabled', false).text('List Book');
+                }
+                else
+                {
+                    window.location.href = '/domatar/bookstore/bookstore.html';
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                showError('Error: ' + textStatus + ' — ' + errorThrown);
+                $('#submitBtn').prop('disabled', false).text('List Book');
+            }
+        });
+    }
+
+    function showError(msg) { $('#error-msg').text(msg).show(); }
+    function hideError()    { $('#error-msg').hide(); }
+
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+    <h1>List a Book</h1>
+    <p class="subtitle">Fill in the details below to add a book to your listings.</p>
+
+    <div class="card">
+        <p class="required-note">Fields marked * are required.</p>
+
+        <div class="form-row">
+            <label for="title">Title *</label>
+            <input type="text" id="title" placeholder="Book title" />
+        </div>
+
+        <div class="form-row">
+            <label for="author">Author *</label>
+            <input type="text" id="author" placeholder="Author name" />
+        </div>
+
+        <div class="form-row">
+            <label for="isbn">ISBN</label>
+            <input type="text" id="isbn" placeholder="e.g. 978-3-16-148410-0 (optional)" />
+        </div>
+
+        <div class="form-row">
+            <label for="price">Price * (e.g. 12.50)</label>
+            <input type="text" id="price" placeholder="0.00" />
+        </div>
+
+        <div class="form-row">
+            <label for="condition">Condition *</label>
+            <select id="condition">
+                <option value="">— select —</option>
+                <option value="New">New</option>
+                <option value="Like New">Like New</option>
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="description">Description</label>
+            <textarea id="description" placeholder="Optional notes about the book (edition, notes, marks, etc.)"></textarea>
+        </div>
+
+        <div id="error-msg"></div>
+
+        <div class="form-actions">
+            <button type="button" id="submitBtn" onclick="submitListing()">List Book</button>
+            <button type="button" onclick="window.location.href='/domatar/bookstore/bookstore.html'"
+                    style="background:var(--surface);color:var(--text);border:1px solid var(--border);">Cancel</button>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

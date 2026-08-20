@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Money myaccounts: wallet -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="My Accounts">
+  <!-- Wallet body -->
+  <rect x="1" y="4" width="13" height="9" rx="1.5"
+        fill="#92400e"/>
+  <!-- Wallet flap -->
+  <rect x="1" y="4" width="13" height="3.5" rx="1.5"
+        fill="#b45309"/>
+  <!-- Coin slot / window on right -->
+  <rect x="10" y="6.5" width="3" height="4" rx="1"
+        fill="#fde68a" opacity="0.85"/>
+  <!-- Coin dot -->
+  <circle cx="11.5" cy="8.5" r="1" fill="#b45309"/>
+</svg>

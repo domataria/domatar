@@ -1,0 +1,24 @@
+AppId: domatar
+Version: 1.0
+InstallClass: com.domatar.install.DomatarAppInstall
+AssetDirectory: domatar/assets
+
+Handler: hst,     hsts,       com.domatar.hst.HstsImpl
+Handler: act,     actManager, com.domatar.act.ActManagerImpl
+Handler: act,     actCache,   com.domatar.act.ActCacheImpl
+Handler: domatar, app,        com.navigator.objimpl.NavAppImpl
+Handler: domatar, cls,        com.domatar.cls.ClsImpl
+Handler: domatar, srv,        com.domatar.srv.SrvImpl
+Handler: domatar, clss,       com.domatar.util.ObjImpl
+Handler: domatar, srvs,       com.domatar.util.ObjImpl
+Handler: domatar, hosts,      com.domatar.objimpl.HostsImpl
+Handler: domatar, host,       com.domatar.objimpl.HostImpl
+Handler: domatar, catalog,    com.domatar.objimpl.AppCatalogImpl
+Handler: domatar, userApps,   com.domatar.objimpl.UserAppsImpl
+Handler: domatar, shells,     com.domatar.objimpl.ShellsImpl
+Handler: domatar, membership, com.domatar.objimpl.DomatarMembershipImpl
+Handler: domatar, binding,    com.domatar.objimpl.DomatarBindingImpl
+
+Wui: ActWui, com.domatar.act.ActWui
+Wui: SiteConfigWui, com.domatar.act.SiteConfigWui
+Wui: UserSubstrateWui, com.domatar.webui.UserSubstrateWui

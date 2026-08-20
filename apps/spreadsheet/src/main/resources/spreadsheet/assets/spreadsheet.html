@@ -1,0 +1,303 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Spreadsheets</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .ss-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+        .ss-header h2   { margin: 0; }
+        .ss-actions     { display: flex; gap: 10px; margin-bottom: 20px; }
+        table.ss-table  { width: 100%; border-collapse: collapse; }
+        table.ss-table th,
+        table.ss-table td { text-align: left; padding: 6px 10px; }
+        table.ss-table th { font-size: 0.85em; font-weight: 600;
+                            color: var(--page-muted); border-bottom: 1px solid var(--border); }
+        table.ss-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        table.ss-table .col-actions { text-align: right; white-space: nowrap; }
+        .empty-msg      { color: var(--page-muted); font-style: italic; }
+
+        /* Modal */
+        .modal-backdrop { display: none; position: fixed; inset: 0;
+                          background: rgba(0,0,0,0.4); z-index: 100; }
+        .modal-backdrop.open { display: flex; align-items: center; justify-content: center; }
+        .modal-box      { background: var(--page-bg); border-radius: var(--radius);
+                          padding: 24px 28px; min-width: 320px; max-width: 480px; width: 100%;
+                          box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+        .modal-box h3   { margin: 0 0 16px; }
+        .modal-field    { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+        .modal-field label { font-size: 0.85em; font-weight: 600; color: var(--page-muted); }
+        .modal-field input { padding: 7px 10px; border: 1px solid var(--border);
+                             border-radius: var(--radius); font-size: 1em; width: 100%; box-sizing: border-box; }
+        .modal-btns     { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+        #modal-error    { color: var(--danger, #dc2626); font-size: 0.9em; margin-top: 6px; min-height: 1.2em; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    // -------------------------------------------------------------------------
+    // Data
+    // -------------------------------------------------------------------------
+
+    var sheetList = [];
+
+    // -------------------------------------------------------------------------
+    // Load sheets
+    // -------------------------------------------------------------------------
+
+    function getSheets()
+    {
+        $('#ss-body').html('<tr><td colspan="4" class="empty-msg">Loading\u2026</td></tr>');
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/SheetsWui',
+            data: 'Action=GetSheets',
+            cache: false,
+            timeout: 30000,
+            success: function(json) { renderSheets(JSON.parse(json)); },
+            error: function(jqXHR, textStatus) {
+                $('#ss-body').html('<tr><td colspan="4">Error: ' + textStatus + '</td></tr>');
+            }
+        });
+    }
+
+    function renderSheets(ret)
+    {
+        var body = $('#ss-body');
+
+        if (!ret || ret.Error === 'Failure')
+        {
+            body.html('<tr><td colspan="4" class="empty-msg">' +
+                      (ret && ret.ErrorMsg ? ret.ErrorMsg : 'Unknown error') + '</td></tr>');
+            return;
+        }
+
+        sheetList = (ret.Attrs && ret.Attrs.Sheets) ? ret.Attrs.Sheets : [];
+
+        if (sheetList.length === 0)
+        {
+            body.html('<tr><td colspan="4" class="empty-msg">No spreadsheets yet. Create one!</td></tr>');
+            return;
+        }
+
+        var html = '';
+
+        for (var i = 0; i < sheetList.length; i++)
+        {
+            var s = sheetList[i];
+            var created = s.CreatedAt ? s.CreatedAt.replace('T', ' ').substring(0, 16) : '';
+            html += '<tr>' +
+                    '<td>' + escHtml(s.Name || '') + '</td>' +
+                    '<td>' + escHtml(s.Cols || '') + ' \u00d7 ' + escHtml(s.Rows || '') + '</td>' +
+                    '<td>' + escHtml(created) + '</td>' +
+                    '<td class="col-actions">' +
+                      '<button type="button" onclick="openSheet(' + i + ')">Open</button>' +
+                      ' <button type="button" class="btn-danger" onclick="deleteSheet(' + i + ')">Delete</button>' +
+                    '</td>' +
+                    '</tr>';
+        }
+
+        body.html(html);
+    }
+
+    // -------------------------------------------------------------------------
+    // Open sheet
+    // -------------------------------------------------------------------------
+
+    function openSheet(idx)
+    {
+        var s = sheetList[idx];
+        if (!s) return;
+        window.location.href = '/domatar/spreadsheet/sheet.html?SheetId=' + encodeURIComponent(s.SheetId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Delete sheet
+    // -------------------------------------------------------------------------
+
+    function deleteSheet(idx)
+    {
+        var s = sheetList[idx];
+        if (!s) return;
+        if (!confirm('Delete "' + s.Name + '"? This cannot be undone.')) return;
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SheetsWui',
+            data: 'Action=DeleteSheet&SheetId=' + encodeURIComponent(s.SheetId),
+            cache: false,
+            timeout: 30000,
+            success: function() { getSheets(); },
+            error: function(jqXHR, textStatus) {
+                alert('Delete failed: ' + textStatus);
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Create sheet modal
+    // -------------------------------------------------------------------------
+
+    function openCreateModal()
+    {
+        $('#modal-name').val('');
+        $('#modal-cols').val('5');
+        $('#modal-rows').val('10');
+        $('#modal-error').text('');
+        $('#create-modal').addClass('open');
+        setTimeout(function() { $('#modal-name').focus(); }, 50);
+    }
+
+    function closeCreateModal()
+    {
+        $('#create-modal').removeClass('open');
+    }
+
+    function submitCreate()
+    {
+        var name = $.trim($('#modal-name').val());
+        var cols = parseInt($('#modal-cols').val(), 10);
+        var rows = parseInt($('#modal-rows').val(), 10);
+
+        if (!name)      { $('#modal-error').text('Name is required.'); return; }
+        if (isNaN(cols) || cols < 1 || cols > 26)
+            { $('#modal-error').text('Columns must be 1\u201326.'); return; }
+        if (isNaN(rows) || rows < 1 || rows > 500)
+            { $('#modal-error').text('Rows must be 1\u2013500.'); return; }
+
+        $('#modal-error').text('');
+        $('#btn-create-ok').prop('disabled', true).text('Creating\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SheetsWui',
+            data: 'Action=CreateSheet&Name=' + encodeURIComponent(name) +
+                  '&Cols=' + cols + '&Rows=' + rows,
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (ret && ret.Error === 'Failure')
+                {
+                    $('#modal-error').text(ret.ErrorMsg || 'Error');
+                    $('#btn-create-ok').prop('disabled', false).text('Create');
+                    return;
+                }
+                var sheetId = ret && ret.Attrs && ret.Attrs.SheetId;
+                closeCreateModal();
+                if (sheetId)
+                    window.location.href = '/domatar/spreadsheet/sheet.html?SheetId=' + encodeURIComponent(sheetId);
+                else
+                    getSheets();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#modal-error').text('Error: ' + textStatus);
+                $('#btn-create-ok').prop('disabled', false).text('Create');
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilities
+    // -------------------------------------------------------------------------
+
+    function escHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
+
+    $(document).ready(function()
+    {
+        getSheets();
+
+        // Close modal when clicking the backdrop.
+        $('#create-modal').on('click', function(e)
+        {
+            if (e.target === this) closeCreateModal();
+        });
+
+        // Enter in modal fields triggers submit.
+        $('#create-modal input').on('keydown', function(e)
+        {
+            if (e.key === 'Enter') submitCreate();
+        });
+    });
+
+</script>
+
+<!-- Create modal -->
+<div class="modal-backdrop" id="create-modal">
+    <div class="modal-box">
+        <h3>New Spreadsheet</h3>
+        <div class="modal-field">
+            <label for="modal-name">Name</label>
+            <input type="text" id="modal-name" placeholder="e.g. Budget 2024" maxlength="120"/>
+        </div>
+        <div class="modal-field">
+            <label for="modal-cols">Columns (1–26)</label>
+            <input type="number" id="modal-cols" min="1" max="26" value="5"/>
+        </div>
+        <div class="modal-field">
+            <label for="modal-rows">Rows (1–500)</label>
+            <input type="number" id="modal-rows" min="1" max="500" value="10"/>
+        </div>
+        <div id="modal-error"></div>
+        <div class="modal-btns">
+            <button type="button" onclick="closeCreateModal()">Cancel</button>
+            <button type="button" id="btn-create-ok" onclick="submitCreate()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Page body -->
+<div class="page">
+    <div class="page-content">
+        <div class="ss-header">
+            <h2>Spreadsheets</h2>
+        </div>
+
+        <div class="ss-actions">
+            <button type="button" onclick="openCreateModal()">+ New Spreadsheet</button>
+        </div>
+
+        <table class="ss-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="ss-body">
+                <tr><td colspan="4" class="empty-msg">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>

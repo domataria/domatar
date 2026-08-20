@@ -1,0 +1,50 @@
+---
+description: Domatar project context — stack, rebuild runbook, working preferences
+alwaysApply: true
+---
+
+# Domatar Project Context
+
+Domatar is a distributed app platform: one Tomcat 10.1 / Jakarta EE 10 / Java 17
+platform WAR (`domatar.war`) over MySQL 8, apps packaged as JARs under
+`WEB-INF/apps/`. See `docs/spec/Domatar.md` for the umbrella design.
+
+This folder is the **public** product tree. Phased `Update-*.txt` plans,
+workshop dumps, and the two-provider sim compose live in the sibling
+workspace root `internal`. Do not copy those files here.
+
+## Local stack
+
+Single node (`deploy/docker-compose.yml`):
+
+- `tomcat` + `db` at http://localhost:8080/domatar/ (override with `TOMCAT_HOST_PORT`)
+- WAR is the bind-mounted `platform/war/target/domatar.war`.
+
+## Rebuild + redeploy
+
+Always use `clean package` (not bare `package`). Incremental Maven builds can
+leave Eclipse ECJ "Unresolved compilation problems" stubs in app JARs under
+`WEB-INF/apps/`; AppLoader then fails to load apps (e.g. `domatar`, `appstore`)
+and `/Setup` reports the app is not in AppRegistry.
+
+```
+mvn -q -pl <modules>,platform/war clean package -am -DskipTests
+docker compose -f deploy/docker-compose.yml up -d --force-recreate tomcat
+docker compose -f deploy/docker-compose.yml exec tomcat curl -s http://localhost:8080/domatar/Setup
+```
+
+After `--force-recreate`, curl `/Setup` — it republishes the provider PubKey
+even when bootstrap is already done.
+
+If Setup fails with `'domatar' app not yet loaded`, check Tomcat logs for
+`Unresolved compilation problems` / AppLoader load errors and rebuild with
+`clean package` before retrying.
+
+## Working preferences
+
+- If Docker wedges ("did not receive an exit event", OCI setns errors), STOP and
+  ask the user to reboot Docker Desktop. Do not fight Docker.
+- Do NOT commit unless the user explicitly asks.
+- Never change the v1 actId/ownId math, existing identifiers, or host names.
+- When behaviour changes, update the living spec under `docs/spec/` in the
+  same change.

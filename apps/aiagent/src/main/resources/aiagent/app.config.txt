@@ -1,0 +1,6 @@
+AppId=aiagent
+AppName=AI Agent
+AppDesc=Conversational AI assistant
+Version=1.0
+DependsOn=navigator,login,desktop
+ProviderHosts=

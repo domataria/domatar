@@ -1,0 +1,7 @@
+AppId=desktop
+AppName=Desktop
+AppDesc=Home screen and app launcher
+Version=1.0
+DependsOn=navigator,login
+ProviderHosts=
+ShellRoles=desktop

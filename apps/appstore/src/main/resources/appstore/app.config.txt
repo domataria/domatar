@@ -1,0 +1,8 @@
+# App Store application configuration
+# Spec-Installation.txt PART 5.
+
+AppId=appstore
+AppName=App Store
+AppDesc=Discover, install, and uninstall applications on your account.
+Version=1.0
+ShellRoles=appstore

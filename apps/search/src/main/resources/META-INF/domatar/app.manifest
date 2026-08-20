@@ -1,0 +1,5 @@
+AppId: search
+Version: 0.1
+InstallClass: com.search.install.SearchInstall
+AssetDirectory: search/assets
+Handler: search, app, com.search.objimpl.SearchAppImpl

@@ -1,0 +1,6 @@
+AppId=money
+AppName=Money
+AppDesc=Personal finance and banking
+Version=1.0
+DependsOn=navigator,login,desktop
+ProviderHosts=

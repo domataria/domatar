@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icon for the Sovevos Quippin app.
+
+  Used by Desktop's app catalog (Spec-Desktop.txt PART 8) and shipped
+  with Quippin itself. Shape: a stylised speech-bubble carrying the
+  letter Q, signalling microblog / posts / conversation, on a
+  rounded-square tile so it lines up visually with other Sovevos app
+  icons.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"
+     width="64" height="64" role="img" aria-label="Quippin">
+  <defs>
+    <linearGradient id="qbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#064e3b"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="14" ry="14" fill="url(#qbg)"/>
+
+  <!-- Speech bubble body -->
+  <path d="M14 18
+           h36
+           a6 6 0 0 1 6 6
+           v18
+           a6 6 0 0 1 -6 6
+           h-20
+           l-10 8
+           v-8
+           h-6
+           a6 6 0 0 1 -6 -6
+           v-18
+           a6 6 0 0 1 6 -6 z"
+        fill="#ffffff"/>
+
+  <!-- Letter Q -->
+  <circle cx="32" cy="33" r="9.5" fill="none" stroke="#064e3b" stroke-width="3.5"/>
+  <line x1="38" y1="39" x2="44" y2="45" stroke="#064e3b" stroke-width="3.5" stroke-linecap="round"/>
+</svg>

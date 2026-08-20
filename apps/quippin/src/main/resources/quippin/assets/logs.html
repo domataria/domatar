@@ -1,0 +1,141 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logs</title>
+
+<link rel="stylesheet" href="../domatar.css"/>
+<style>
+  /* Logs page: stretch to full viewport with side margins = hamburger button width (~44px) */
+  .page { max-width: none; padding-left: 44px; padding-right: 44px; }
+</style>
+
+</head>
+<body>
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+
+<script type="text/javascript">
+
+function getLogs()
+{
+  var dataString = 'Action=GetLogs';
+
+  $.ajax({
+           type: "POST",
+           cache: false,
+           url: "Wui/LogsWui",
+           crossDomain: false,
+           data: dataString,
+           timeout: 10000000,
+           success: function(json) {insertLogs(JSON.parse(json));},
+           error: function(jqXHR, textStatus, errorThrown) {alert(textStatus + " : " + errorThrown);}
+         });
+};
+
+function insertLogs(retObj)
+{
+  var text = '<div style="text-align:left;"><table style="text-align:left;width:100%;">';
+
+  text += '<tr><th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">Time</th>' +
+              '<th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">User Name</th>' +
+              '<th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">UserId</th>' +
+              '<th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">User IP Address</th>' +
+              '<th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">DomId Path</th>' +
+              '<th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">Header Name</th>' +
+              '<th style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">Header Value</th>';
+
+  var logArray = retObj.Attrs.Logs;
+
+  for (var i = 0; i < logArray.length; i++)
+  {
+    var time = logArray[i].Time;
+
+    if (!time)
+      time = 0;
+
+    var date = new Date(parseInt(time));
+    var usrName = logArray[i].UsrName;
+    var usrId = logArray[i].UsrId;
+    var usrIp = logArray[i].UsrIp;
+    var srcDomId = (logArray[i].DomIdPath || '').replace(/\n\n/g, '<br>').replace(/\./g, '.<wbr>');
+    var httpHeaders = logArray[i].HttpHeaders;
+    var keys = Object.keys(httpHeaders);
+    var numHeaders = keys.length;
+
+    text +=
+      '<tr><td colspan="1" rowspan="' + numHeaders + '" style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+      date.toLocaleString() +
+      '</td>' +
+      '<td colspan="1" rowspan="' + numHeaders + '" style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+      usrName +
+      '</td>' +
+      '<td colspan="1" rowspan="' + numHeaders + '" style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+      usrId +
+      '</td>' +
+      '<td colspan="1" rowspan="' + numHeaders + '" style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+      usrIp +
+      '</td>' +
+      '<td colspan="1" rowspan="' + numHeaders + '" style="font-size:85%;border:2px ridge;color:black;background-color:#e5eecc;font-family:monospace;word-break:break-word;">' +
+      srcDomId +
+      '</td>';
+
+    if (numHeaders > 0)
+    {
+      text +=
+        '<td style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+        keys[0] +
+        '</td>' +
+        '<td style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+        httpHeaders[keys[0]] +
+        '</td>';
+    }
+    else
+    {
+      text +=
+        '<td style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+        '</td>' +
+        '<td style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+        '</td>';
+    }
+
+    text += '</tr>';
+
+    for (var j = 1; j < numHeaders; j++)
+    {
+      text +=
+        '<tr><td style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+        keys[j] +
+        '</td>' +
+        '<td style="font-size:100%;border:2px ridge;color:black;background-color:#e5eecc;">' +
+        httpHeaders[keys[j]] +
+        '</td></tr>';
+    }
+  }
+
+  text += '</table></div><br />';
+
+  $("#logs").html(text);
+};
+</script>
+
+<div id="SideDiv"></div>
+<script type="text/javascript" src="../sideMenu.js"></script>
+
+<div class="page">
+  <h1>Logs</h1>
+  <p class="subtitle">Server activity and request headers.</p>
+
+  <div class="card" id="logs"></div>
+</div>
+
+<script type="text/javascript">
+$(getLogs());
+</script>
+
+</body>
+</html>
