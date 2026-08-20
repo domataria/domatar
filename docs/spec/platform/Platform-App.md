@@ -1,4 +1,4 @@
-# SPEC: DOMATAR APP — THE PROVIDER APPLICATION
+# SPEC: DOMATAR APP — THE PLATFORM APPLICATION AND SHELL ROLES
 
 ## PART 1 — PURPOSE
 
@@ -9,16 +9,17 @@ and the core class descriptors.
 
 These live in the Domatar App: a first-class application (appId="domatar")
 owned by the provider itself. A provider administrator logs in as the
-provider account and sees the Domatar App in the Navigator alongside
-whatever other apps are installed on that provider — Navigator, Login,
-Desktop, and so on.
+provider account and sees the Domatar App in the Navigator alongside the
+four shell apps required on every login home — Navigator, Login, Desktop,
+and App Store — plus whatever other apps are installed on that provider.
 
 The platform app has two host kinds. Do not confuse them:
 
 - **Provider infrastructure** on `domatar-<prvActId>` (this document).
-- **Per-user substrate** on `domatar-<actId>-<prvId>` (PART at the end of
-  this spec): membership, binding, userApps, shells. Login, Desktop,
-  Navigator, and App Store are ordinary UI JARs that call those Msg ops.
+- **Per-user substrate** on `domatar-<actId>-<prvId>` (PART 13): membership,
+  binding, userApps, shells. Login, Desktop, Navigator, and App Store are
+  ordinary UI JARs that call those Msg ops. They fill shell *roles*; they
+  are not the platform app.
 
 Design principles:
 
@@ -42,7 +43,8 @@ Goals:
 
   G2. A provider administrator logs in with normal credentials on the
       provider's own host (no remote dependency) and navigates the Domatar
-      App alongside other installed apps.
+      App alongside the four shell apps (Navigator, Login, Desktop, App
+      Store) and any other installed apps.
 
   G3. The hosts table becomes browsable: the administrator can see all
       registered hosts, their domains, and their providers.
@@ -128,16 +130,18 @@ Non-goals for this version:
 3.3 The provider's Navigator
 
   After DomatarProviderInstall runs, the provider's Navigator tree
-  looks like this.  Only the three provider-appropriate apps are present.
+  looks like this.  The four shell apps plus the Domatar App are present
+  (PART 13). Optional product apps (Quippin, …) are not.
 
     [icon] prv1                          (navigator, root)
-      [icon] Navigator                   (domatar, app)  â† seqNum 1
-      [icon] Login                       (domatar, app)  â† seqNum 2
-          [icon] Logins                  (login, logins)      â† user layer (everyone)
-          [icon] ActManager              (act, actManager)    â† provider layer only
-          [icon] Accounts                (login, accounts)    â† provider layer only
-      [icon] Desktop                     (domatar, app)  â† seqNum 3
-      [icon] Domatar                     (domatar, app)  â† seqNum 4
+      [icon] Navigator                   (navigator, app)   ← seqNum 1
+      [icon] Login                       (login, app)       ← seqNum 2
+          [icon] Logins                  (login, logins)      ← user layer (everyone)
+          [icon] ActManager              (act, actManager)    ← provider layer only
+          [icon] Accounts                (login, accounts)    ← provider layer only
+      [icon] Desktop                     (desktop, app)     ← seqNum 3
+      [icon] App Store                   (appstore, app)    ← seqNum 4
+      [icon] Domatar                     (domatar, app)     ← seqNum 5
           [icon] Hosts                   (domatar, hosts)
               + [icon] prv1              (domatar, host)
               + [icon] prv2              (domatar, host)
@@ -157,49 +161,70 @@ Non-goals for this version:
 
   If other apps (Quippin, AI Agent, …) are also installed for the provider
   account, their app nodes appear as additional siblings under the root in
-  exactly the same way as for a regular user.
+  exactly the same way as for a regular user. The provider's App Store
+  also exposes Register / Withdraw offer ([App Store](../apps/AppStore.md),
+  [Installation](../install/Installation.md) PART 7.2); ordinary users do
+  not.
 
 ## PART 4 — SUB-HOSTS
 
 The provider account uses the same two-tier sub-host structure as every
 other account.
 
-The provider account has exactly four sub-hosts.  It is an
-administrative account, not a regular user account, and does not need
-social, productivity, or AI apps — but it does need a Desktop to land
-on after login.
+The provider account has the four stock shell replicas plus the Domatar
+App's per-provider infrastructure host.  It is an administrative account,
+not a regular user account, and does not need social, productivity, or
+AI apps — but it does need the four shell roles (PART 13) and a Desktop
+to land on after login.
 
-4.1  navigator-<prvActId>  (e.g. "navigator-<fingerprint>")
+Stock shell hosts are provider-qualified replicas
+`<appId>-<prvActId>-<prvId>` (PART 13.4). The short names below match
+that pattern with the live prvId suffix.
 
-  Created by NavigatorInstall. Holds the root obj and the four app-*
-  node objs (app-navigator, app-login, app-desktop, app-domatar).
+4.1  navigator-<prvActId>-<prvId>  (e.g. "navigator-<fingerprint>-prv1")
 
-4.2  login-<prvActId>       (e.g. "login-<fingerprint>")
+  Created by NavigatorInstall. Holds the root obj. App nodes for the
+  shells and the Domatar App live on their own sub-hosts and are linked
+  from this root (app-navigator, app-login, app-desktop, app-appstore,
+  app-domatar).
+
+4.2  login-<prvActId>-<prvId>       (e.g. "login-<fingerprint>-prv1")
 
   Created by LoginInstall. Holds the logins container (user layer) plus
   the actManager link and accounts container (provider layer).
   The recordLogin call dispatches RecordLogin to this sub-host — it must
   exist before recordLogin is called.
 
-4.3  desktop-<prvActId>     (e.g. "desktop-<fingerprint>")
+4.3  desktop-<prvActId>-<prvId>     (e.g. "desktop-<fingerprint>-prv1")
 
   Created by DesktopInstall. The provider lands here after login, just
   like any other user.
 
-4.4  domatar-<prvActId>     (e.g. "domatar-<fingerprint>")
+4.4  appstore-<prvActId>-<prvId>    (e.g. "appstore-<fingerprint>-prv1")
+
+  Created by AppstoreInstall. Holds app-appstore and home — the local
+  App Store shell over this provider's App Catalog and the central
+  registry ([App Store](../apps/AppStore.md)). The central registry host
+  remains `appstore` (not this replica).
+
+4.5  domatar-<prvActId>     (e.g. "domatar-<fingerprint>")
 
   The Domatar App's per-provider sub-host. Created by
   DomatarProviderInstall. Holds app-domatar, hosts container, clss
   container, host child objs, and class descriptor objs.
 
-  No aiagent-, quippin-, or other app sub-hosts are created for the
-  provider account.
+  Distinct from the per-user substrate host `domatar-<prvActId>-<prvId>`
+  (PART 13.5), which holds membership, binding, userApps, and shells
+  for the provider account as for any other login home.
+
+  No aiagent-, quippin-, or other product-app sub-hosts are created for
+  the provider account.
 
 ## PART 5 — OBJECTS
 
-5.1 Navigator root  — on navigator-<prvActId>
+5.1 Navigator root  — on navigator-<prvActId>-<prvId>
 
-  HstId    : navigator-<prvActId>
+  HstId    : navigator-<prvActId>-<prvId>
   AppId    : navigator
   ActId    : <prvActId>
   ObjId    : root
@@ -221,9 +246,9 @@ on after login.
   ObjName  : Domatar
   ObjDesc  : "Platform infrastructure for this provider"
 
-  Link: root (navigator-<prvActId>) → app-domatar (domatar-<prvActId>)
-             (tagAppId: navigator, tag: app, seqNum: 4)
-             (seqNum 4: after Navigator=1, Login=2, Desktop=3)
+  Link: root (navigator-<prvActId>-<prvId>) → app-domatar (domatar-<prvActId>)
+             (tagAppId: navigator, tag: app, seqNum: 5)
+             (seqNum 5: after Navigator=1, Login=2, Desktop=3, App Store=4)
 
 5.3 Hosts container  (hosts) — on domatar-<prvActId>
 
@@ -465,29 +490,35 @@ independent. No data migration is needed.
      row does not yet exist; ActWui must call addAct directly for the
      initial provider setup, bypassing the normal dispatch path.)
 
-  Step 3 — Minimal install chain (only the three provider-appropriate apps):
+  Step 3 — Minimal install chain (the four shell apps plus Domatar):
 
       NavigatorInstall.install(prvActId, prvId, domain, prvId)
-        → creates navigator-<prvActId>, root, app-navigator (seqNum 1)
+        → creates navigator-<prvActId>-<prvId>, root, app-navigator (seqNum 1)
 
       DomatarInstall.install(prvActId)
-        → creates per-account core class descriptors on navigator-<prvActId>
+        → creates per-account core class descriptors on navigator-<prvActId>-<prvId>
 
       LoginInstall.install(prvActId, prvId, domain, prvId)
-        → creates login-<prvActId>, logins container, app-login (seqNum 2),
+        → creates login-<prvActId>-<prvId>, logins container, app-login (seqNum 2),
           root→app-login link, Login class descriptors
 
       DesktopInstall.install(prvActId, prvId, domain, prvId)
-        → creates desktop-<prvActId>, app-desktop (seqNum 3),
+        → creates desktop-<prvActId>-<prvId>, app-desktop (seqNum 3),
           root→app-desktop link
           The provider lands on Desktop after login.
+
+      AppstoreInstall.install(prvActId, prvId, domain, prvId)
+        → creates appstore-<prvActId>-<prvId>, app-appstore (seqNum 4),
+          home, root→app-appstore link
+          The provider uses this shell to browse the local catalog and
+          to Register / Withdraw marketplace offers.
 
       No other app installs (AI Agent, Quippin, Bookstore, Spreadsheet,
       Money) are called.  The provider account is an administrative
       account, not a regular user account.
 
   Step 4 — recordLogin for the provider account.
-    Dispatch RecordLogin to login-<prvActId> / login / <prvActId> / logins
+    Dispatch RecordLogin to login-<prvActId>-<prvId> / login / <prvActId> / logins
     (same call as ActManagerImpl.recordLogin, using a local msgClient)
 
   -- Phase 2: provider-layer additions (specific to DomatarProviderInstall) --
@@ -498,12 +529,14 @@ independent. No data migration is needed.
       "act", "actManager", "ActManager", "Account manager for " + prvId)
 
   Step 6 — Link actManager from the provider's app-login node.
-    DomId appLoginId = new DomId("login-" + prvActId, "login", prvActId, "app-login")
+    DomId appLoginId = new DomId(DomId.subHstId("login", prvActId, prvId),
+                                 "login", prvActId, "app-login")
     LnkDb.addLnkIfMissing(appLoginId → actMgrId,
       tagAppId:"navigator", tag:"container", seqNum:2)
 
   Step 7 — accounts container.
-    DomId accountsId = new DomId("login-" + prvActId, "login", prvActId, "accounts")
+    DomId accountsId = new DomId(DomId.subHstId("login", prvActId, prvId),
+                                 "login", prvActId, "accounts")
     ObjDb.addObjIfMissing(accountsId,
       "login", "accounts", "Accounts", "All accounts on this provider")
     LnkDb.addLnkIfMissing(appLoginId → accountsId,
@@ -518,9 +551,10 @@ independent. No data migration is needed.
       "domatar", "app", "Domatar", "Platform infrastructure")
 
   Step 10 — root → app-domatar link.
-    DomId rootId = new DomId("navigator-" + prvActId, "navigator", prvActId, "root")
+    DomId rootId = new DomId(DomId.subHstId("navigator", prvActId, prvId),
+                             "navigator", prvActId, "root")
     LnkDb.addLnkIfMissing(rootId → appDomatarId,
-      tagAppId:"navigator", tag:"app", seqNum:4)
+      tagAppId:"navigator", tag:"app", seqNum:5)
 
   Step 11 — hosts container.
     DomId hostsId = new DomId(ssHstId, "domatar", prvActId, "hosts")
@@ -582,19 +616,21 @@ Contents:
          ('prv1', 'prv1@prv1', 'prv1@prv1', 'prv1', <hash>, ...),
          ('prv2', 'prv2@prv2', 'prv2@prv2', 'prv2', <hash>, ...)
 
-  3. Provider sub-host rows (exactly four per provider):
+  3. Provider sub-host rows (four stock shell replicas plus
+     `domatar-<prvActId>` per provider):
        INSERT IGNORE INTO hst (HstId, Domain, PrvId, ...)
        VALUES
-         ('navigator-prv1@prv1', 'tomcat1:8080', 'prv1', ...),
-         ('login-<fingerprint>',     'tomcat1:8080', 'prv1', ...),
-         ('desktop-prv1@prv1',   'tomcat1:8080', 'prv1', ...),
-         ('domatar-<fingerprint>',   'tomcat1:8080', 'prv1', ...),
+         ('navigator-<fingerprint>-prv1', 'tomcat1:8080', 'prv1', ...),
+         ('login-<fingerprint>-prv1',     'tomcat1:8080', 'prv1', ...),
+         ('desktop-<fingerprint>-prv1',   'tomcat1:8080', 'prv1', ...),
+         ('appstore-<fingerprint>-prv1',  'tomcat1:8080', 'prv1', ...),
+         ('domatar-<fingerprint>',        'tomcat1:8080', 'prv1', ...),
          (... repeat for prv2 ...)
 
   4. All obj rows for the provider tree:
-       - root on navigator-<prvActId>
-       - app-navigator, app-login, app-desktop, app-aiagent on their
-         respective sub-hosts (created by the standard install chain)
+       - root on navigator-<prvActId>-<prvId>
+       - app-navigator, app-login, app-desktop, app-appstore on their
+         respective shell sub-hosts (created by the standard install chain)
        - app-domatar, hosts, clss, host-* children, class descriptors
          on domatar-<prvActId>
      Use INSERT IGNORE.
@@ -653,11 +689,13 @@ T6. Multiple administrator accounts.
     provider install for a second account, or a proper admin-role mechanism.
 
 T7. Navigator sub-host for other apps.
-    If the provider wants to also install Quippin, Login, etc. for their
-    provider account, those installs follow the standard per-app install
-    path (QuippinInstall.install(prvActId, ...) etc.) and their app nodes
-    appear as siblings of "Domatar" in the Navigator root.  Nothing special
-    is needed; the existing install routines already support any actId.
+    If the provider wants to also install Quippin, Bookstore, etc. for
+    their provider account, those installs follow the standard per-app
+    install path (QuippinInstall.install(prvActId, ...) etc.) and their
+    app nodes appear as siblings of "Domatar" in the Navigator root.
+    Shell apps (Login, Desktop, Navigator, App Store) are already
+    installed at bootstrap (PART 9 / PART 13). Nothing special is
+    needed; the existing install routines already support any actId.
 
 T8. Automated first-run detection.
     If no actManager obj row exists for the provider's own host, run
@@ -665,21 +703,149 @@ T8. Automated first-run detection.
     generated password. This removes the need for a manual setup step
     in simple deployments.
 
-## Per-user substrate (implemented)
+## PART 13 — SHELL ROLES (implemented)
 
-The platform app has two host kinds. Do not confuse them.
+The platform requires four **shell roles** on every login home. It does
+not require the stock appIds to be immutable. `domatar` owns the
+bindings; Login, Desktop, Navigator, and App Store are ordinary UI JARs
+that implement the default bindings. Each of those apps keeps its own
+spec for HTML, launch paths, and app-owned objects.
 
-- **Provider infrastructure** lives on `domatar-<prvActId>`: actManager, hosts, class descriptors, provider-config, app-catalog. Each provider is local for its own provider account.
-- **Per-user substrate** lives on `domatar-<actId>-<prvId>` on every object-hosting provider. Login homes hold the full graph; object-only hosts hold a minimal replica (membership + binding).
+Companion specs (do not duplicate here):
 
-On each login provider L, host `domatar-<actId>-L` holds:
+- [Login](../apps/Login.md) — Account / identity UI
+- [Desktop](../apps/Desktop.md) — home-screen launcher
+- [Navigator](../apps/Navigator.md) — object-graph browser
+- [App Store](../apps/AppStore.md) — discovery / install UI (and the
+  marketplace registry)
+- [Installation](../install/Installation.md) — sign-up install chain
+- [Provider customization](../install/Provider-Customization.md) —
+  DefaultShells for new accounts
+- [Foreign Provider](../install/Foreign-Provider.md) — object-only hosts
+  get substrate without shells
+
+13.1  Capability vs UI
+
+  Platform capabilities (authenticate, list membership, list installed
+  apps, bind chrome) live on `domatar`. HTML shells are replaceable.
+  Desktop tiles and Navigator root children are views of `userApps`,
+  not independent authorities. Shell chrome (which app is Account,
+  Desktop, Navigator, App Store) uses `GetShells`.
+
+  `domatar` is not a shell role. It is mandatory as substrate
+  (catalog, actManager, hosts, userApps, shells). Ordinary users need
+  not see it as a Desktop tile; the provider account does, for
+  administration (PART 3.3).
+
+13.2  The four roles
+
+  Every account has exactly four shell roles. On each login provider
+  for that account, each role MUST be bound to some locally installed
+  app that implements the role. The stock defaults:
+
+    RoleId      Meaning                          Default appId
+    ----------  -------------------------------  -------------
+    login       Account / identity UI            login
+    desktop     Home-screen / launcher UI        desktop
+    navigator   Object-graph browser UI          navigator
+    appstore    App discovery / install UI       appstore
+
+  "Required by the platform" means the *roles* are bound and served
+  locally. It does not freeze the stock appId, and it does not require
+  the same AppId on every login home. A provider or user may bind
+  `desktop=altDesktop` on one home if that app declares `ShellRoles`
+  including `desktop` (`ShellRolePolicy` / app.config.txt).
+
+  App Store is in this set. It is the local discovery/install chrome
+  (and, for the provider account, Register / Withdraw offer). Product
+  apps (Quippin, Bookstore, …) are not shells: they may be remote, and
+  they are not required on every login home.
+
+13.3  Bound shells
+
+  A bound shell is a record scoped to ONE login provider, stored as a
+  flat `(domatar, shell)` child of `(domatar, shells)`:
+
+    ObjId      : shell-<LoginPrvId>-<RoleId>
+    LoginPrvId : login provider this binding applies to
+    RoleId     : login | desktop | navigator | appstore
+    AppId      : bound UI app (default stock id); MUST be installed
+                 on LoginPrvId
+    AppHstId   : hstId of that UI surface on LoginPrvId
+    LaunchPath : URL on LoginPrvId — never another provider's shell
+    IconPath   : launcher glyph (optional)
+
+  Invariants:
+
+    I1  For every login provider in membership, all four RoleIds are
+        bound.
+    I2  AppId declares the role (`ShellRoles` in app.config.txt) and
+        is locally installed on LoginPrvId.
+    I3  Shell LaunchPath is local to LoginPrvId. Non-shell userApps
+        may still point at a remote HostPrvId.
+    I4  Changing a binding on one login home does not change other
+        homes.
+    I5  Shell UIs hold no authoritative account state: they call
+        `domatar` (`GetUserApps`, `GetShells`, membership, binding).
+
+  `GetShells` / `SetShell` on `(domatar, shells)`. Provider defaults
+  for new accounts are DefaultShells on provider-config
+  ([Provider customization](../install/Provider-Customization.md)).
+
+13.4  Stock shell hosts
+
+  Per-user host naming is generally an app concern. The four stock
+  shell apps use provider-qualified replicas so each login home has a
+  local copy:
+
+    login-<actId>-<prvId>
+    desktop-<actId>-<prvId>
+    navigator-<actId>-<prvId>
+    appstore-<actId>-<prvId>
+
+  Alternate AppIds that bind a role choose their own host naming; they
+  must still be installable on that login provider. The App Store
+  *central registry* host remains `appstore` ([App Store](../apps/AppStore.md)
+  KD9) — that is not a shell replica.
+
+13.5  Per-user substrate
+
+  Do not confuse the two `domatar` host kinds:
+
+  - **Provider infrastructure** on `domatar-<prvActId>`: actManager,
+    hosts, class descriptors, provider-config, app-catalog. Each
+    provider is local for its own provider account (PART 2–11).
+  - **Per-user substrate** on `domatar-<actId>-<prvId>` on every
+    object-hosting provider. Login homes hold the full graph;
+    object-only hosts hold a minimal replica (membership + binding,
+    no shell-* rows, no shell InstallUser).
+
+  On each login provider L, host `domatar-<actId>-L` holds:
 
 ```
 app-domatar          (domatar, app)
   ├─ membership      (domatar, membership) → peer-* (linked providers)
   ├─ binding         (domatar, binding)    actId ↔ ownId
   ├─ userApps        (domatar, userApps)   → app-* installed apps
-  └─ shells          (domatar, shells)     RoleId login | desktop | navigator
+  └─ shells          (domatar, shells)
+       ├─ shell-<L>-login
+       ├─ shell-<L>-desktop
+       ├─ shell-<L>-navigator
+       └─ shell-<L>-appstore
 ```
 
-Login, Desktop, Navigator, and App Store are ordinary UI JARs. They call substrate Msg ops (`GetUserApps`, `GetShells`, membership, binding). They do not own those rows. Sign-up (`AddAct`) and attach-provider call `UserSubstrateInstall.ensureUserSubstrate` on each login home; default shell AppIds run `InstallUser` locally.
+  Sign-up (`AddAct`) and attach-provider call
+  `UserSubstrateInstall.ensureUserSubstrate` on each login home, then
+  `InstallUser` for the default shell AppIds (stock: `login`, `desktop`,
+  `navigator`, `appstore`) locally on that home. Marketplace
+  `InstallApp` writes a `userApp` row and still runs the target app's
+  `InstallUser` for app-owned data hosts.
+
+13.6  Provider account
+
+  The provider account is a normal login home. It receives the same
+  four shell roles plus `domatar` infrastructure (PART 3.3, PART 4,
+  PART 9). App Store is not optional there: the administrator
+  registers and withdraws offers from that shell. Quippin and other
+  product apps stay off the provider bootstrap chain.
+

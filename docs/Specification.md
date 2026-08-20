@@ -19,14 +19,15 @@ the vocabulary.
 - [Identifiers](spec/platform/Identifiers.md) — ownId, actId, usrId
 - [Login protocol](spec/apps/Login-Protocol.md) — federated identity (the protocol)
 - [Security](spec/platform/Security.md) — delegations, origin signatures, the wire
-- [Platform App](spec/platform/Platform-App.md) — the platform's own application (`domatar`)
+- [Platform App](spec/platform/Platform-App.md) — the platform's own application (`domatar`) and shell roles
 - [Installation](spec/install/Installation.md) — the three-level installation model
 
-## Shells (sign-in, home screen, object graph)
+## Shells (sign-in, home screen, object graph, app store)
 
 - [Login](spec/apps/Login.md) — federated identity (the user app)
 - [Desktop](spec/apps/Desktop.md) — the home-screen launcher
 - [Navigator](spec/apps/Navigator.md) — the object-graph browser
+- [App Store](spec/apps/AppStore.md) — discovery / install UI (marketplace detail below)
 
 ## Write or change an app
 
