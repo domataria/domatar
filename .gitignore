@@ -1,3 +1,11 @@
+# Secrets — never commit.
+mySQL/dev-keys/
+**/dev-keyset.txt
+genesis-vault*.txt
+genesis-export*.txt
+provider-opkey*.txt
+SovevosAIAgentKey.txt
+
 # Maven build output
 target/
 

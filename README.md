@@ -19,7 +19,8 @@ app (`domatar`).
 - Why this exists: [Why Domatar](docs/Why-Domatar.md)
 - How it is specified: [Specification](docs/Specification.md)
 
-This tree is under active development. See [LICENSE](LICENSE).
+This tree is under active development. Copyright Domatar; all rights
+reserved. See [LICENSE](LICENSE).
 
 ## Layout
 
