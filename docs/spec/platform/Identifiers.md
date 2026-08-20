@@ -117,7 +117,7 @@ keys on actId, which never changes here.
 2.2  actId - the permanent identity (immutable)
 
   actId = fingerprint(genesis public key) (PART 4). It is the identifier
-  written into every DomId and therefore into every obj/lnk row
+  written into every DomId and therefore into every object and link
   ([Domatar](../Domatar.md) PART 2), and it NEVER changes for the life of
   the account. It is provider-free.
 
@@ -168,7 +168,7 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
 
 3.2  Objects carry actId only
 
-  The actId slot in every obj/lnk row is the permanent name (PART 2.2).
+  The actId on every object and link is the permanent name (PART 2.2).
   Rebind never rewrites objects (O3). PART 10.5 covers any leftover
   account that still fingerprints a single operating key: declare that
   key genesis and publish an initial binding.
@@ -331,10 +331,11 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
   provider that hosts any of the account's objects. It replicates by the
   same LWW machinery as the membership (PART 12).
 
-  The binding is stored on the account's act row (GenesisPubKey /
-  OwnPubKey / BindingVersion / BindingNotBefore / BindingSig) and
-  travels with each signed message in Head.Sec.Binding. Login-peer
-  storage and replication are [Login protocol](../apps/Login-Protocol.md).
+  The binding is stored with the account (this realisation: columns
+  GenesisPubKey / OwnPubKey / BindingVersion / BindingNotBefore /
+  BindingSig on `act`) and travels with each signed message in
+  Head.Sec.Binding. Login-peer storage and replication are
+  [Login protocol](../apps/Login-Protocol.md).
 
 6.3  Why it is self-authenticating
 
@@ -451,7 +452,7 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
   On a login home: login-<actId>-<prvId> ([Login protocol](../apps/Login-Protocol.md) PART 5)
   plus the domatar substrate, carrying the current binding (PART 6).
 
-  On an object-only host there is NO act row. HostProvision
+  On an object-only host there is NO local account. HostProvision
   ([Foreign Provider](../install/Foreign-Provider.md)) is the install-time way the
   peer appears: binding and delegation live on the domatar binding
   object (domatar-<actId>-<prvId>), and membership holds
@@ -472,7 +473,7 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
   Only PUBLIC, verifiable data: the binding (genesis-signed), the
   membership index ([Login protocol](../apps/Login-Protocol.md) PART 7), and the delegation
   issued TO that provider. Stored on the domatar substrate binding /
-  membership objects when there is no act row (HostProvision). It does
+  membership objects when there is no local account (HostProvision). It does
   NOT hold the ownership private key (PART 5.4). So installing objects
   on a new provider extends the binding's reach without extending the
   T1 key exposure.
@@ -653,7 +654,8 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
 
 Names indicative; follow [Code Style](CodeStyle.md).
 
-  The binding lives on the act row and in Head.Sec; ActManagerImpl /
+  The binding lives with the account and in Head.Sec; this realisation
+  stores account fields on `act`. ActManagerImpl /
   OwnIdsRebind perform rebind; Msg.verifyCredentialChain checks the
   binding hop + local Version freshness. MembershipImpl GetBinding /
   SetBinding replicate it ([Login protocol](../apps/Login-Protocol.md)).
@@ -675,7 +677,7 @@ Names indicative; follow [Code Style](CodeStyle.md).
                                          Action=Rebind).
 
   Verifier (Msg.verifyCredentialChain): binding hop (PART 11.1) and the
-  per-actId highest-Version check against the local act row (PART 11.3
+  per-actId highest-Version check against the local account (PART 11.3
   single-provider form).
 
   Delegation: unchanged in shape ([Security](Security.md) PART 6.2), but now
@@ -699,7 +701,7 @@ Building on the two-provider sim ([Login protocol](../apps/Login-Protocol.md) PA
     prv2's OLD delegation is now REJECTED once prv2's verifier has the t1
     binding (PART 10.3, PART 11.3).
   * Add an object-only provider (a third tomcat with a Login peer and a
-    delegation but no act row) and confirm it receives the t1 binding and
+    delegation but no local account) and confirm it receives the t1 binding and
     correctly identifies the new ownId with no login (PART 8).
 
   As in the sibling sim, TLS is bypassed; the ownership-key transfer of
@@ -834,8 +836,8 @@ account's actId.
   still validates with no lookup, PART 6.3). An unknown/unsupported
   version is REJECTED (fail closed).
 
-  FpVersion at verify time, in order: local act row; membership/peer
-  record; default 1.
+  FpVersion at verify time, in order: local account; membership/peer
+  record; default 1. This realisation reads `act.FpVersion` first.
 
 18.4  Minting, reading, routing
 

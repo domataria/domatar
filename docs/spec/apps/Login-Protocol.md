@@ -39,14 +39,14 @@ Five commitments:
 
   C2. usrId always has the shape "<localname>@<appId>". The "@<appId>"
       suffix is the routing key for verification: it tells every prv
-      WHICH app's central host owns this login's password row. The
-      suffix is therefore immutable for a given act row; only the
+      WHICH app's central host owns this login's password. The
+      suffix is therefore immutable for a given account; only the
       <localname> portion is renameable.
 
-  C3. The act table for usrId "<localname>@<appId>" lives on the
+  C3. The account for usrId "<localname>@<appId>" lives on the
       central host of <appId>. Every prv that wants to verify or
-      mutate that act row dispatches a Domatar message to that
-      central host. Per-prv "local" act tables disappear from the
+      mutate that account dispatches a Domatar message to that
+      central host. Per-prv local account copies disappear from the
       authentication path; they remain only as caches (PART 7).
 
   C4. Cross-app linking ("I want to add a Spreadsheet login to my
@@ -173,25 +173,25 @@ is shown to actually matter.
     Decorative display name. Per-usrId, per-app. Mutable, not used for
     identity. Identical to today's semantics.
 
-3.4 The act row (canonical, on each app's central host)
+3.4 The account (canonical, on each app's central host)
 
-    Stored in the obj table on the central host of <appId>, in the
-    same shape ActDb already uses, but with these field semantics:
+    Stored on the central host of <appId>. This realisation uses
+    ActDb / the `act` table, with these field semantics:
 
       actId         fingerprint                (PART 3.1)
       usrId         "<localname>@<appId>"      (PART 3.2)
       usrName       display name               (PART 3.3)
       hashedPwd     PBKDF2/scrypt/argon2 hash of the per-app password
-      salt          per-row
+      salt          per-account
       ...
 
-    Cross-app linked logins (PART 5) share one actId across rows.
-    A row on the Spreadsheet central host that links an existing
+    Cross-app linked logins (PART 5) share one actId across accounts.
+    An account on the Spreadsheet central host that links an existing
     account holds that fingerprint actId alongside
     usrId="david@spreadsheet". The usrId's suffix tells routing
     which central host owns this login's password.
 
-    The act row is OWNED by the <appId> central host. No prv stores
+    The account is OWNED by the <appId> central host. No prv stores
     its own copy; per-prv session caches (PART 7) reference the actId
     but never the password.
 
@@ -201,7 +201,7 @@ is shown to actually matter.
            central host that minted it; it is never rendered in UI.
     INV-2  usrId rename only changes <localname>; the @<appId> suffix
            is immutable.
-    INV-3  An actId may be referenced from multiple act rows on
+    INV-3  An actId may be referenced from multiple accounts on
            multiple app central hosts, but each (appId, usrId) pair
            is unique.
     INV-4  A login row's verifier is unambiguously the central host
@@ -235,13 +235,13 @@ Flow:
      shares its name ([Domatar](../Domatar.md) PART 4).
 
   4. The <appId> central host's ActManagerImpl.addAct:
-       a. Validates uniqueness of "<localname>@<appId>" in its act
-          table (within the scope of THIS central host).
+       a. Validates uniqueness of "<localname>@<appId>" among its
+          accounts (within the scope of THIS central host).
        b. Mints a fingerprint actId from a new genesis key
           ([Identifiers](../platform/Identifiers.md) PART 4 / PART 9).
           Uniqueness is cryptographic (PART 3.1 C1); no global
           registry.
-       c. Persists the act row: (actId, usrId="<localname>@<appId>",
+       c. Persists the account: (actId, usrId="<localname>@<appId>",
           usrName, hashedPwd, salt, genesis/ownership binding, ...).
        d. Issues a session token (PART 7) and replies with
           { LoggedIn: "True", ActId, UsrId, UsrName, Token }.
@@ -296,7 +296,7 @@ Flow:
           an existing ActId, that would be impersonation.
        b. Confirms <localname>@spreadsheet is not yet taken on this
           central host.
-       c. Persists the act row, REUSING the supplied actId X. No
+       c. Persists the account, REUSING the supplied actId X. No
           new actId generation in this branch.
        d. Replies success.
 
@@ -345,10 +345,10 @@ Flow:
      The wire body carries (UsrId, Pwd, Ip).
 
   6. The <appId> central host's ActManagerImpl.verifyLogin:
-       a. Looks up the act row by usrId.
+       a. Looks up the account by usrId.
        b. Verifies the password against the stored hash + salt.
        c. On success: issues a session token, persists the
-          (token, actId, ip, expiry) row in its sessions table,
+          session (token, actId, ip, expiry),
           replies with { LoggedIn: "True", ActId, UsrId, UsrName,
           Token }.
        d. On failure: replies with { LoggedIn: "False" } (no Error -
@@ -380,7 +380,7 @@ When a request handled by prv1 needs to fetch data from prv2, the
 existing /Msg cross-prv flow already runs verifyLogin on prv2
 ([Domatar](../Domatar.md) PART 9). The change here is what verifyLogin DOES on prv2:
 
-  - Today: prv2's ActManagerImpl checks its own local act table.
+  - Today: prv2's ActManagerImpl checks its own local account store.
   - Going forward: prv2 routes verifyLogin by usrId suffix - i.e.
     sends the verification to the <appId> central host, exactly as
     in PART 6. prv2 is no longer authoritative; the central host is.
@@ -664,14 +664,14 @@ usrId; actId is never shown.
   Web pages and Wui servlets render usrId / usrName, never actId
   (PART 10). A remaining actId in a URL or display is a bug.
 
-11.8 Act rows
+11.8 Accounts
 
-  Each act row stores a fingerprint ActId and a usrId of shape
+  Each account stores a fingerprint ActId and a usrId of shape
   `<localname>@<appId>`. They are never the same string.
 
 11.9 Sessions
 
-  VerifyLogin against the app's central-host act table is the
+  VerifyLogin against the app's central-host account is the
   session check (Token column; match token + usrId + ip). A
   per-provider session cache is Direction (PART 7.3).
 
@@ -707,9 +707,8 @@ Two options:
       MySQL instance, DOMATAR_HSTID=quippin. More realistic but
       requires more compose plumbing and a new act DB.
 
-For v1 take (A). The central host's act table becomes a special
-case of prv1's act table (it lives in the same DB, just under a
-different DOMATAR_HSTID-shaped HstId).
+For v1 take (A). In this realisation the central host's accounts
+live in the same MySQL as prv1, under a different HstId.
 
 ## PART 13 — SHARP EDGE: CROSS-APP ACTID FORGERY (DEFERRED)
 
@@ -750,7 +749,7 @@ The same shape applies to a previously-honest app that turns
 malicious: every app a user has ever linked is inside that user's
 trust boundary. There is no v1 "revoke an app's right to vouch
 for me" mechanism, because the rogue host is itself the source of
-truth for its own act table.
+truth for its own accounts.
 
 13.2 Why per-seam verification is not enough
 
@@ -793,7 +792,7 @@ fixed key list, or RFC 8785).
     newApp:  verifies linkSig against pubkey, where pubkey is
              fetched from the home central host (actId's "@<appId>")
              via a new GetActPubKey op. Stores linkSig on the
-             new act row.
+             new account.
 
   Receive a request from a linked app (C2: receiver verifies)
   ----------------------------------------------------------
@@ -918,8 +917,8 @@ out not to hold:
 
   - The attack does NOT require the targeted user to have linked
     the rogue app. Attacker only needs evil to be a registered
-    appId in the directory; evil's act table is then free to
-    contain a fabricated row binding any (usrId, actId) pair the
+    appId in the directory; evil's account store is then free to
+    contain a fabricated binding of any (usrId, actId) pair the
     attacker invents. The receiver routes verifyLogin to evil
     purely on parseAppId(wireUsrId), so the attacker just sets
     usrId=mallory@evil + token=<evil-issued> on their own browser
@@ -977,7 +976,7 @@ What v1 actually bounds:
     Logout so the cache does not undo the instant-everywhere
     property the v1 design relies on.
   - Replication of the central host (PART 2 sharp edge):
-    multi-master act table for resilience. The user's natural
+    multi-master account store for resilience. The user's natural
     mitigation is multi-app linking (PART 5 / PART 7.2.2): a backup
     login on a second app sidesteps any one central host being
     down. Replication is therefore a per-app availability decision,
@@ -1097,7 +1096,7 @@ container, binding obj, and peer rows (PART 14).
   * usrId       - a login handle "<localname>@<appId>" ([Login protocol](Login-Protocol.md)
                   PART 3.2). The "@<appId>" suffix routes verification to
                   that app's central host.
-  * app-login   - one act row: a (usrId, password) pair on some app
+  * app-login   - one login: a (usrId, password) pair on some app
                   central host, all sharing the same actId. This is what
                   [Login protocol](Login-Protocol.md) PART 5 calls a "linked login".
   * PEER        - an app-login belonging to the account. The set of peers
@@ -1230,8 +1229,8 @@ lookup for the network.
 4.3  Replication boundary
 
   Replicated by THIS spec (the identity layer):
-    * the act row (usrId, hashedPwd, salt, usrName, ...) - actually one
-      act row PER peer, on that peer's app central host; see PART 7.4;
+    * the account (usrId, hashedPwd, salt, usrName, ...) - actually one
+      account PER peer, on that peer's app central host; see PART 7.4;
     * the ownership private key (act.OwnPrvKey) on each SIGNING provider
       ([Identifiers](../platform/Identifiers.md) PART 5.2); object-only providers do NOT get it;
     * the delegation for each home provider ([Security](../platform/Security.md) PART 6);
@@ -1264,7 +1263,7 @@ lookup for the network.
     login-<actId>-<prvId>       one Login membership replica per provider
     desktop-<actId>-<prvId>     one Desktop replica per provider (companion)
 
-  Each such host id has exactly one hst row and resolves through the
+  Each such host id has exactly one host record and resolves through the
   directory to exactly one provider, unchanged from today's routing
   (HttpClient.dispatch / getHst). Replicas are simply ordinary sub-hosts;
   no directory changes, no provider-directed message bypass.
@@ -1287,9 +1286,9 @@ lookup for the network.
 5.3  actId stays provider-free
 
   The '-<prvId>' suffix is on the HOST id, not on the actId. The actId
-  embedded in every obj/lnk row remains provider-free and immutable
+  embedded in every object and link remains provider-free and immutable
   ([Identifiers](../platform/Identifiers.md) PART 2.2). Host ids have always mapped to a provider
-  (that is what the hst table is), so naming the provider in a replica's
+  (that is what the host directory is), so naming the provider in a replica's
   host id is consistent with the model, not a violation of it.
 
 5.4  Local hot path stays local
@@ -1391,18 +1390,18 @@ rebind.
   KD8). Desktop sync still uses login homes only (companion spec
   PART 5), after de-duplicating peers that share a provider.
 
-7.4  Relationship to the per-app act rows
+7.4  Relationship to the per-app accounts
 
-  Each peer still corresponds to a canonical act row on its verifier's
+  Each peer still corresponds to a canonical account on its verifier's
   central host ([Login protocol](Login-Protocol.md) PART 3.4), carrying the shared actId. The
-  membership row is the account-side INDEX of those act rows; it is not
-  the password store. Passwords live only in the act rows (hashedPwd),
+  membership object is the account-side INDEX of those logins; it is not
+  the password store. Passwords live only on those accounts (hashedPwd),
   never in the membership directory (same rule as [Login](Login.md)
   PART 6.2).
 
 ## PART 8 - ATTACH-A-PROVIDER FLOW
 
-AttachProvider creates a LOGIN HOME on N (act row, shells, optional
+AttachProvider creates a LOGIN HOME on N (account, shells, optional
 ownership-key copy). Hosting an app on N without a sign-in door is
 [Foreign Provider](../install/Foreign-Provider.md) (HostProvision / object-only
 peer). Do not use AttachProvider as a side-effect of InstallApp.
@@ -1561,7 +1560,7 @@ plain app link.
        delegation lapses at NotAfter; after that no verifier accepts N's
        signatures for the actId.
     c. Optionally ask N to delete its local replica (login-<actId>-N,
-       desktop-<actId>-N, act rows, OwnPrvKey). An honest N complies.
+       desktop-<actId>-N, accounts, OwnPrvKey). An honest N complies.
     d. Refuse to remove the LAST peer (that would lock the user out),
        mirroring [Login](Login.md) PART 8.8.
 
@@ -1681,7 +1680,7 @@ Handlers / actions:
   are per-provider and exempt from desktop tile content-sync
   ([Desktop](Desktop.md) PART 4.4).
 
-Directory / seed: hst rows for login-<actId>-<prvId> per replica (PART 5).
+Directory / seed: host records for login-<actId>-<prvId> per replica (PART 5).
 
 ## PART 15 - LOCAL SIMULATION
 

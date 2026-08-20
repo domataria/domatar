@@ -194,7 +194,7 @@ Steps (all idempotent via addObjIfMissing / addLnkIfMissing):
        Body attrs: { ActId, UsrId, UsrName }
        The catalog does not create a per-user object — it only stores an
        actId→domain mapping so that cross-prv catalog links can be resolved.
-       (This step is a no-op in v1 since the catalog uses cross-prv lnk rows
+       (This step is a no-op in v1 since the catalog uses cross-prv links
         that carry the full LnkHstId; it is included as a hook for future
         directory-style optimisations.)
 

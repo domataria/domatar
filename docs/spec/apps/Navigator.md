@@ -8,10 +8,10 @@ each node has a +/- expander, an icon, and the object's ObjName.
 The right pane shows the currently-selected object's metadata
 (ClsAppId, ClsId, ObjName, ObjDesc, attrs).
 
-Every node in the tree is a real obj row in the obj table. Every
-parent->child edge is a real row in the lnk table. Nothing about
+Every node in the tree is a real Domatar object. Every
+parent->child edge is a real link. Nothing about
 the tree is synthesised at request time - if the Navigator can
-show it, it is in the database.
+show it, that object and that link exist.
 
 On Open, NavRootReconcile adds root→app links from GetUserApps
 ([Platform App](../platform/Platform-App.md)). The tree is the user's
@@ -31,18 +31,17 @@ installed apps plus whatever those apps linked under themselves.
   +------------------------------------------------------+
 
 The tree is the user's view of the Domatar object graph. Every
-node IS a Domatar object; every parent->child edge IS a row in
-the lnk table. The Navigator does not invent any new structure -
+node IS a Domatar object; every parent->child edge IS a link.
+The Navigator does not invent any new structure -
 it just renders what already exists.
 
 PART 2 onward fills in the details. Four things drive everything:
 
   1. Open(DomId)        protocol that any obj answers, returning
                         its details + its outgoing lnks.
-  2. lnk table          the existing edge table. Apps that want
+  2. links              the existing edges. Apps that want
                         their data to show up in the tree
-                        maintain lnk rows alongside their existing
-                        obj rows.
+                        maintain links alongside their objects.
   3. App install        the moment an app's per-user surface is
                         first created on this account. Install
                         creates the app's per-user sub-host, the
@@ -75,7 +74,7 @@ under PART 14 TODO.
                    each provider serves its own roots locally.
   hosting prv    : the provider that owns this replica (DomatarConfig.getPrvId()).
 
-The hst row for navigator-<actId>-<prvId> is created by NavigatorReplica.ensure
+The host record for navigator-<actId>-<prvId> is created by NavigatorReplica.ensure
 (via NavigatorInstall / DesktopInstall / DesktopSyncCutover) on sign-up or
 migration. Routing then follows the existing hstId -> prvId resolution
 path with no Navigator-specific machinery.
@@ -98,7 +97,7 @@ ready to issue Open against it.
 
 ObjName for the root obj is the user's display name, e.g. "David B."
 (populated at sign-up time by ActManagerImpl). ObjDesc, Attrs,
-ClsAppId/ClsId all come from the obj row itself; the page sees
+ClsAppId/ClsId all come from the object itself; the page sees
 them on the first Open.
 
 3.2 How a node's children appear
@@ -111,7 +110,8 @@ The user clicks '+' on a node N:
      and op="Open", and dispatches.
   3. HttpClient routes by N.DomId.hstId; the message lands on the
      prv where the obj actually lives.
-  4. Msg.doAction loads the obj from the local obj table -- this
+  4. Msg.doAction loads the obj — in this realisation from the
+     local `obj` table — this
      is what the user described as "instantiate an Obj with that
      DomId" -- and dispatches into the obj's class implementation.
   5. The class's Open handler returns:
@@ -252,11 +252,11 @@ and msgClient, returns the response shape above. Pseudocode:
   //   return out;
 
 This default works for ANY class - the Navigator does not need
-class-specific code on the server side as long as the obj rows
-and lnk rows already exist.
+class-specific code on the server side as long as the objects
+and links already exist.
 
 A null obj is a hard error, identical to the existing GetObj
-behaviour: the address pointed at no row in the obj table. The
+behaviour: the address pointed at no object. The
 Navigator never receives a null-obj reply because it never
 addresses anything that has not been installed (PART 5 / PART 10).
 
@@ -294,7 +294,7 @@ expansion as a greyed-out stub (PART 6.4).
 ## PART 5 — THE TREE STRUCTURE (what gets lnk'd to what)
 
 The Navigator does not impose any tree structure of its own; it
-just walks the lnk table. But for the tree to LOOK like a sensible
+just walks the links. But for the tree to LOOK like a sensible
 filesystem to the user, the apps must maintain a sensible set of
 lnks. This part lays out the v1 tree shape.
 
@@ -321,18 +321,18 @@ lnks. This part lays out the v1 tree shape.
 
 Three observations:
 
-  - The Root and the four "app-..." nodes are real obj rows on
+  - The Root and the four "app-..." nodes are real objects on
     navigator-<actId>, with class (navigator, root) and (navigator,
-    app) respectively (PART 7.1). The Navigator owns these rows.
+    app) respectively (PART 7.1). The Navigator owns these objects.
 
   - The per-kind containers (Follows, Quips, Logins, Apps, ...)
-    are real obj rows too, written at install time on each app's
+    are real objects too, written at install time on each app's
     own sub-host. v1 does NOT synthesise these: they exist or the
     Navigator does not show them.
 
-  - Every edge in the tree is one row in the lnk table, stored on
+  - Every edge in the tree is one link, stored on
     the prv where the SOURCE obj lives. The cross-prv hop happens
-    on the OUTGOING dispatch from a follow row to the followee's
+    on the OUTGOING dispatch from a follow object to the followee's
     root, not on edge enumeration.
 
 5.2 The lnks the skeleton needs
@@ -395,7 +395,7 @@ its per-item rows. Concretely:
 
                   Both lnks live on the SOURCE prv (the follower's
                   prv). The followee's nav root DomId is computable
-                  from the followee's actId; the lnk row records
+                  from the followee's actId; the link records
                   it as a string and the Navigator's UI follows
                   it cross-prv on click.
 
@@ -425,7 +425,7 @@ its per-item rows. Concretely:
 Each is one extra LnkDb call per existing op. None of them adds
 business logic; they all add denormalised metadata
 (lnkObjName / lnkObjDesc) that the Navigator reads cheaply
-without touching the obj table.
+without loading each object.
 
 5.4 Cross-app pointer lnks
 
@@ -450,7 +450,7 @@ jumps are persisted lnks, not synthesised:
     Navigator.
 
   login.login    (single linked login row)
-    Could carry a persistent lnk pointing at the act row at
+    Could carry a persistent lnk pointing at the account at
     <appId>'s central host. PART 14 TODO.
 
 ## PART 6 — WEB UI (navigator.html)
@@ -590,7 +590,7 @@ Per-action request handling:
                      PART 4.1)
       Builds dst from DomId, addRequestHead, addRequestBody("Open",
       attrs), addClsId. The (ClsAppId, ClsId) on addClsId is
-      derived from the dst DomId's ObjId family if the obj row
+      derived from the dst DomId's ObjId family if the object
       itself is not yet known to the dispatcher; in v1 we use the
       simple heuristic table in PART 12 (e.g. "follow-*" ->
       ("quippin","follow")), and accept that on a miss the
@@ -638,7 +638,7 @@ JsonMsg shaped per PART 4.1, using:
 
 For null obj, openObj returns an "Obj not found" error - the
 same shape the existing GetObj path uses. There is no synthesis;
-every node in the v1 tree is a real obj row written by an
+every node in the v1 tree is a real object written by an
 install routine (PART 10).
 
 8.2 Existing impls' fallback
@@ -692,9 +692,9 @@ ImplMap gets two new entries:
 The act/actCache/actManager classes are already registered for
 the navigator central host (same factoring quippin/login use).
 No FollowImpl, QuipImpl, BanImpl, etc. is needed in v1: the
-default ObjImpl is enough for individual rows because every edge
-they care about is a persisted lnk, and the obj row itself
-already exists in the obj table.
+default ObjImpl is enough for individual objects because every edge
+they care about is a persisted lnk, and the object itself
+already exists.
 
 ## PART 9 — CROSS-PRV NAVIGATION
 
@@ -767,7 +767,7 @@ is the moment that:
 
 Subsequent ordinary use of the app (following someone, posting a
 quip, recording a login, installing an icon on Desktop) adds and
-removes per-item lnks alongside the per-item obj rows it already
+removes per-item lnks alongside the per-item objects it already
 writes (PART 10.4).
 
 10.1 The InstallApp routine
@@ -806,7 +806,7 @@ Concrete v1 routines:
                         val=null, seqNum=4)
 
   com.quippin.install.QuippinInstall.install
-        1. (the user's quippin-<actId> hst row is already created
+        1. (the user's quippin-<actId> host record is already created
             by ActDb.addAct's existing logic; idempotent re-add)
         2. ObjDb.addObj for each of the four containers on
            quippin-<actId>: follows, quips, bans, logs.
@@ -859,7 +859,7 @@ DesktopInstall, step 1).
 The order matters. NavigatorInstall must run first because the
 other installs lnk into <root>. QuippinInstall normally runs
 second because the existing addAct code path is "Quippin on the
-Quippin central host" (the Quippin hst row exists already by
+Quippin central host" (the Quippin host record exists already by
 the time we get here). Login and Desktop are independent of
 each other.
 
@@ -867,44 +867,43 @@ For LINK-mode AddAct (the user is linking a new <usrId>@<appId>
 to an existing actId via the Login app, [Login](Login.md) PART 7),
 the navigator/quippin/login/desktop install routines are NOT
 re-run. The actId already has its skeleton from the original
-sign-up; link-mode just adds another act row.
+sign-up; link-mode just adds another account.
 
 10.3 Legacy users (SQL backfill)
 
 Dave (dave@quippin) and Micha (micha@quippin) were created before
-the Navigator existed, so their obj/lnk skeleton is missing.
+the Navigator existed, so their object/link skeleton is missing.
 mySQL/dump-2024-01-19-navigator.sql (NEW) creates everything
 their AddAct's install routines would have written today:
 
-  - hst rows:
+  - host records:
       navigator                  -> tomcat1:8080, prv1
       navigator-<fingerprint>     -> tomcat1:8080, prv1
       navigator-micha@quippin    -> tomcat2:8080, prv2
-  - obj rows on navigator-<actId>:
+  - objects on navigator-<actId>:
       root, app-navigator, app-quippin, app-login, app-desktop
-      (per user, x2 = 10 obj rows)
-  - obj rows on quippin-<actId>:
-      follows, quips, bans, logs (per user, x2 = 8 obj rows)
-  - obj rows on login-<actId>:
-      logins (per user, x2 = 2 obj rows)
-  - obj rows on desktop-<actId>:
-      apps (per user, x2 = 2 obj rows)
+      (per user, x2 = 10 objects)
+  - objects on quippin-<actId>:
+      follows, quips, bans, logs (per user, x2 = 8 objects)
+  - objects on login-<actId>:
+      logins (per user, x2 = 2 objects)
+  - objects on desktop-<actId>:
+      apps (per user, x2 = 2 objects)
   - lnks (per user):
       root -> app-* (4 lnks)
       app-quippin -> follows / quips / bans / logs (4 lnks)
       app-login -> logins (1 lnk)
       app-desktop -> apps (1 lnk)
       app-navigator -> (none)
-      Total: 10 lnks per user, x2 = 20 lnk rows.
+      Total: 10 lnks per user, x2 = 20 links.
 
 For every seeded follow row (dave -> micha), the SQL also writes:
 
   - <follows> -> <follow-micha@quippin>
   - <follow-micha@quippin> -> navigator-micha@quippin...root
 
-Same for any seeded quip / ban / login / app rows. The seed walks
-the obj table looking for rows
-in the families "follow-", "quip-", "ban-", "log-", "login-",
+Same for any seeded quip / ban / login / app. The seed walks
+objects in the families "follow-", "quip-", "ban-", "log-", "login-",
 "app-" and emits the parent->child + (where applicable)
 cross-app lnks.
 
@@ -1025,11 +1024,11 @@ New files:
   src/main/java/com/desktop/install/DesktopInstall.java
       Per-app install routines (PART 10.1). Each one is a small
       static method that idempotently writes the app's per-user
-      hst row, container obj rows, app-obj on navigator-<actId>,
+      host record, container objects, app-obj on navigator-<actId>,
       and skeleton lnks.
 
   mySQL/dump-2024-01-19-navigator.sql
-      Legacy backfill (PART 10.3): hst rows + obj rows + skeleton
+      Legacy backfill (PART 10.3): host records + objects + skeleton
       lnks + per-item lnks for dave@quippin and micha@quippin.
 
 Edits to existing files:
@@ -1204,7 +1203,7 @@ Dave clicks '+' on that drill-through Michael B.:
  18. Msg.doAction on prv2:
        - verifyAndStamp runs LoginRemote.verifyLogin against the
          navigator central host on prv1, which says yes.
-       - obj = Micha's seeded root row on prv2's obj table.
+       - obj = Micha's seeded root on prv2.
        - getLnks(500) returns Micha's four nav skeleton lnks.
        - Response travels back.
 
@@ -1231,7 +1230,7 @@ not need to know which prv is answering.
     UninstallApp(actId, appId) as a real op (probably on the
     Navigator central host) so the Desktop's "+" tile becomes
     a real install, and uninstall removes the app's per-user
-    sub-host + obj rows + lnks.
+    sub-host + objects + lnks.
 
   - Owner-match in hasRights. NavRootImpl/NavAppImpl run with
     verified-only in v1; tighten to inMsg.getContext().actId ==
@@ -1262,7 +1261,7 @@ not need to know which prv is answering.
 
   - Drilling into login.login rows. PART 5.4 lists this;
     LoginsImpl.recordLogin should write a persistent lnk from
-    the new <login row> to the act row at the linked appId's
+    the new <login row> to the account at the linked appId's
     central host (mirroring how FollowsImpl.follow already
     writes the <follow row> -> <followee root> lnk).
 

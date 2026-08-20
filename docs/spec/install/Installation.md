@@ -67,7 +67,7 @@ these:
       Every Domatar host (provider host, app central host, per-user
       sub-host) carries its own copy of every class descriptor and
       every link it needs. Host migration is then just "copy this
-      host's obj / act / lnk rows".
+      host's objects, accounts, and links".
 
   P4. Config files own the variation.
       All site-specific settings live in plain text config files. There
@@ -296,7 +296,7 @@ once per server by the system administrator.
 
   Stage A — Platform bootstrap (DomatarProviderInstall.install).
 
-    1. Provider account row in the local `act` table:
+    1. Provider account (this realisation: local `act` table):
          actId = fingerprint of the provider genesis key
                  (DomatarConfig.getPrvActId())
          usrId = <PrvId>@<PrvId>
@@ -317,10 +317,10 @@ once per server by the system administrator.
     4. Phase 2 of `DomatarProviderInstall` — the provider-layer
        additions on the Domatar App's sub-host
        (`domatar-<prvActId>`):
-         * `actManager` obj row (act, actManager).
+         * `actManager` object (act, actManager).
          * Link from `app-login` to `actManager`.
          * `accounts` container obj on the login sub-host.
-         * `domatar-<prvActId>` host row.
+         * `domatar-<prvActId>` host record.
          * `app-domatar` obj on that sub-host.
          * Link from the Navigator root to `app-domatar`.
          * `hosts` container obj.
@@ -628,8 +628,8 @@ in the default list) or explicitly via the AppStore.
                                         msgClient);
 
   Before sending, UserInstallDispatch ensures the destination
-  sub-host row exists in the local hst table (chicken-and-egg
-  safety: a fresh sub-host has no `hst` row yet, so it would be
+  sub-host exists in the local host cache (chicken-and-egg
+  safety: a fresh sub-host has no host record yet, so it would be
   unroutable). It then sends the message; the receiving prv resolves
   `<appId>~<actId>` via the directory, dispatches to
   `AppUserInstallHandler(appId)`, which calls

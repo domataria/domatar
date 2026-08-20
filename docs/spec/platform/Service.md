@@ -26,7 +26,7 @@ implement the same service are interoperable through it.
 
 ## PART 2 — TWO DESCRIPTOR KINDS
 
-There are two descriptor kinds, both ordinary rows in the obj table:
+There are two descriptor kinds, both ordinary objects:
 
   Service descriptor   (domatar, srv)
       Holds the INTERFACE: the attribute and message declarations. Immutable
@@ -56,7 +56,7 @@ second dispatch axis.
 
 ## PART 3 — SERVICE OBJECT IDENTITY
 
-A service object is a row in the obj table whose own class is (domatar, srv).
+A service object is an object whose own class is (domatar, srv).
 Its DomId fields are:
 
   HstId   : the sub-host on which this service descriptor lives (the same
@@ -310,7 +310,7 @@ silently.
 
 Dispatch is unchanged from [Domatar](../Domatar.md) PART 5 / PART 6: a message
 reaches an object, the runtime determines the object's class (clsAppId,
-clsId) — from the envelope class fields or from the obj row — and ImplMap
+clsId) — from the envelope class fields or from the object — and ImplMap
 routes to that class's single handler. The operation field carries the bare
 message Name, exactly as today (e.g. "GetBook"). Existing operations
 (GetObj, Open, GetLnks, ListBook, …) are unaffected.

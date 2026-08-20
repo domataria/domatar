@@ -34,8 +34,8 @@ Every login-home replica has a Desktop sub-host. The naming convention
 `<appId>-<actId>-<prvId>` is the same as other shell apps
 ([Login protocol](Login-Protocol.md)):
 
-  hst row       hstId=desktop-<actId>-prv1   prvId=prv1
-  hst row       hstId=desktop-<actId>-prv2   prvId=prv2
+  host record       hstId=desktop-<actId>-prv1   prvId=prv1
+  host record       hstId=desktop-<actId>-prv2   prvId=prv2
 
 Because every Desktop request is addressed to the calling user's OWN
 desktop-<actId>-<prvId> replica, HttpClient.dispatch routes same-provider
@@ -140,8 +140,7 @@ asks to purge "app-" rows.
   at /quippin/, so the actual URLs are /quippin/desktop, /quippin/AppsWui,
   and /quippin/icons/quippin.svg. Once the per-host context-path TODO
   in [Domatar](../Domatar.md) PART 11 lands, Desktop will move to /desktop/... and
-  ship as its own WAR. The IconPath/LaunchPath strings stored in the
-  obj table are fully-qualified absolute URLs, so they don't change
+  ship as its own WAR. The   IconPath/LaunchPath strings stored on those objects are fully-qualified absolute URLs, so they don't change
   shape when that move happens - only the Desktop pages themselves
   relocate.
 
@@ -292,7 +291,7 @@ Routed to by ImplMap entry (desktop, apps) -> AppsImpl.
 6.3 Dispatch
 
   Every Desktop call addresses dst.hstId = desktop-<actId>-<localPrvId>
-  (DomId.localSubHstId), whose hst row points at the user's home prv,
+  (DomId.localSubHstId), whose host record points at the user's home prv,
   which is also the prv serving the request - so HttpClient.dispatch
   takes the sendLocal path on the GetApps hot path. Cross-prv traffic
   happens only during ReconcileApps / fan-out.
@@ -430,7 +429,7 @@ Edits to existing files:
       Update the post-login GoTo value (PART 7).
 
   mySQL/dump-*.sql  (optional, for the docker-compose seed)
-      Add per-user hst rows for desktop-<actId>:
+      Add per-user host records for desktop-<actId>:
 
         INSERT INTO hst VALUES
           ('desktop-dave@quippin',  'localhost', 'prv1', 1, 0),
@@ -451,7 +450,7 @@ maps to desktop.html. desktop.html on load:
 
   2. AppsWui (running on tomcat1 / prv1):
        - DomatarServlet outer dispatch verifies Dave's session token
-         against the local act table -> Context.verified=true,
+         against the local account store -> Context.verified=true,
          actId=dave@quippin.
        - AppsWui.getMsg builds:
            srcDomId = (prv1, desktop, dave@quippin, AppsWui)
@@ -488,7 +487,7 @@ maps to desktop.html. desktop.html on load:
 
   - Eager catalog seeding at AddAct time. Today AppsImpl.GetApps
     bootstraps the apps container on first read. Once AddAct knows
-    about Desktop it should create the desktop-<actId> hst row, the
+    about Desktop it should create the desktop-<actId> host record, the
     apps container, and the default app rows in one transaction. The
     lazy path then becomes a defensive fallback rather than the
     primary install mechanism.

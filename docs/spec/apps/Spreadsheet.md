@@ -741,7 +741,7 @@ Operations:
 
 File: mySQL/dump-2024-01-23-spreadsheet.sql
 
-  1. System account in the act table:
+  1. System account:
        actId   = "spreadsheet@spreadsheet"
        usrId   = "spreadsheet@spreadsheet"
        usrName = "Spreadsheet"

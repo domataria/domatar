@@ -366,7 +366,7 @@ OUT OF SCOPE (Direction, PART 9):
                                          customization is not replicated today)
 
   Created lazily on the first SetDefaultApps. Owned by the provider account;
-  read/write authorized to isProvider(ctx) only. Being a normal obj row it is
+  read/write authorized to isProvider(ctx) only. Being a normal object it is
   captured by mysqldump and survives restarts (unlike a container-FS file),
   which is the whole point of moving off default-apps-config.txt for live edits.
   Deleted by ResetDefaultApps (PART 4.3), after which resolution falls back to
@@ -435,7 +435,7 @@ OUT OF SCOPE (Direction, PART 9):
      disabled with a "Required" badge.
 
   3. Unchecking a non-mandatory app (e.g. Bookstore) and Save, then reloading,
-     shows the change persisted; the provider-config obj row carries the
+     shows the change persisted; the provider-config object carries the
      normalized DefaultApps CSV and a Version.
 
   4. Attempting (via a crafted request) to Save a list WITHOUT login/desktop/

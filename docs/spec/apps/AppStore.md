@@ -438,7 +438,7 @@ new ops may be added rather than overloading GetApps beyond recognition.
   A standing goal of Domatar is that a user's installation can MOVE from one
   host to another by exporting that host's objects and importing them on the
   destination (and, later, by copying a per-host database file). The HstId
-  is the stable name of that installation in the directory; the hst row's
+  is the stable name of that installation in the directory; the host record's
   Domain / PrvId say where it currently lives.
 
   Therefore the marketplace MUST NOT bake the offering provider into ordinary
@@ -526,7 +526,7 @@ new ops may be added rather than overloading GetApps beyond recognition.
      inside InstallApp. [Foreign Provider](../install/Foreign-Provider.md).
   3. Resolve HstId via PART 9; enforce the already-installed policy (9.4).
   4. Dispatch InstallUser to the offering provider addressed at that HstId,
-     cls `(appId, install)`. Register / update the directory hst row so the
+     cls `(appId, install)`. Register / update the directory host record so the
      portable HstId resolves to the offering provider's Domain.
   5. On success, create Desktop tile on the home Desktop replica (PART 11).
 

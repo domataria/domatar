@@ -32,14 +32,14 @@ Two design constraints are worth stating up front:
 
   C1. The Login app does NOT replace any per-app central host's
       ActManager. Each app's ActManager remains the authority for
-      its own act rows and passwords. The Login app is a CLIENT of
+      its own accounts and passwords. The Login app is a CLIENT of
       every app's ActManager - it just gives the user a unified
       place to issue those ops. Adding a Spreadsheet login from the
       Login app sends AddAct to spreadsheet.domatar.com; renaming a
       Quippin usrId sends UpdateAct to quippin.domatar.com.
 
   C2. The Login app has its own central host ("login") and its own
-      act table on that host, just like every other app. A user who
+      account store on that host, just like every other app. A user who
       "just wants a Domatar identity, no specific app in mind" signs
       up via the Login app and gets a key-fingerprint actId minted
       server-side. From that root, they can later link Quippin /
@@ -77,7 +77,7 @@ desktop-<actId>-<prvId>.
 
 3.1 Act rows on the Login app's central host
 
-Identical schema to any other app's act table ([Login protocol](Login-Protocol.md)
+Identical schema to any other app's account store ([Login protocol](Login-Protocol.md)
 PART 3.4):
 
   HstId    = login
@@ -133,7 +133,7 @@ poll every app's central host.
       "UsrName":   "<display name>",
       "AppId":     "<appId>",
       "AddedAt":   "<base64 time>",
-      "IsRoot":    "True"|"False"      (the act row whose @<appId>
+      "IsRoot":    "True"|"False"      (the account whose @<appId>
                                         suffix matches the actId's
                                         @<appId> suffix is the
                                         ROOT - the original sign-up)
@@ -144,12 +144,12 @@ Login), the originating app SHOULD create a row in login-<actId>
 recording their root login. When the Login app's UI is the agent
 adding/removing/renaming a login, it updates this directory inline.
 
-For act rows that exist on per-app central hosts but are NOT
+For accounts that exist on per-app central hosts but are NOT
 recorded in login-<actId> (e.g. created directly via that app's
 own AddAct, never going through the Login app), the user can
 "import" them by entering the usrId+password in the Login app's
 "Import existing login" form (PART 8.7). The Login app verifies
-the credentials, confirms the act row's actId matches the user's
+the credentials, confirms the account's actId matches the user's
 current actId, and creates the directory row.
 
 3.3 ObjId family
@@ -274,9 +274,9 @@ on the per-user logins container at login-<actId>.
       as a side-effect of UpdateAct in PART 7.
 
 The "side-effect" pattern: the central host that owns the truth
-(per-app act table) drives writes to the directory mirror on
+(per-app account store) drives writes to the directory mirror on
 login-<actId>. This guarantees that the directory cannot drift
-out of sync with the act tables - if an UpdateAct succeeds at
+out of sync with the account stores - if an UpdateAct succeeds at
 the central host but the side-effect fails, the central host
 reports the error and the user retries. PART 13 has a TODO for
 making this two-phase / idempotent.
@@ -289,7 +289,7 @@ protocol additions to [Login protocol](Login-Protocol.md) that ANY app's central
 host must implement to be manageable through the Login app.
 
   UpdateAct(actId, usrId, [newLocalname], [newUsrName])
-      Changes <localname> and/or usrName on an existing act row.
+      Changes <localname> and/or usrName on an existing account.
       Authorization: hasRights = "verified AND ctx.actId ==
       target.actId" (the caller is verified AND is changing
       THEIR OWN row, not someone else's).
@@ -306,7 +306,7 @@ host must implement to be manageable through the Login app.
       passwords).
 
   DeleteAct(actId, usrId)
-      Removes the act row.
+      Removes the account.
       Authorization: same verified+owner-match.
       Refuses if this would leave the actId with ZERO linked
       logins (the user would lock themselves out). The Login
@@ -332,7 +332,7 @@ just expose previously-implicit edits as first-class messages.
          [Login protocol](Login-Protocol.md)).
        - mints a fingerprint actId ([Login protocol](Login-Protocol.md)
          PART 3.1 / PART 11.1).
-       - persists the act row.
+       - persists the account.
        - issues a session token.
        - dispatches RecordLogin to login-<actId> via
          HttpClient.send so the directory mirror is created with
@@ -362,7 +362,7 @@ just expose previously-implicit edits as first-class messages.
   3. The <appId> central host's ActManagerImpl.addAct:
        - confirms ctx is verified (Auth.isVerified).
        - confirms <localname>@<appId> not yet taken on this host.
-       - persists the act row REUSING the supplied actId
+       - persists the account REUSING the supplied actId
          ([Login protocol](Login-Protocol.md) PART 5).
        - dispatches RecordLogin to login-<actId>.
        - replies success.
@@ -386,7 +386,7 @@ just expose previously-implicit edits as first-class messages.
        - replies success.
 
   Note that the @<appId> suffix is IMMUTABLE here: the central
-  host receiving UpdateAct is the one that owns this act row;
+  host receiving UpdateAct is the one that owns this account;
   it will not re-route to a different host. Renames stay within
   one host's namespace.
 
@@ -435,7 +435,7 @@ just expose previously-implicit edits as first-class messages.
        - performs ListLogins on login-<actId> to confirm at least
          one OTHER login exists. If this is the last, return
          failure.
-       - deletes the act row.
+       - deletes the account.
        - dispatches ForgetLogin to login-<actId>.
        - replies success.
 
@@ -498,7 +498,7 @@ Edits to existing files:
 - [Desktop](Desktop.md) — PART 11 TODO mentions "Add app login UI" as a future Desktop surface; that surface lives in the Login app. PART 8 (initial app catalog) includes a default Login icon, the same way it includes Quippin.
 
   mySQL/dump-*.sql (local sim seed)
-      Add hst rows for "login" central host and per-user
+      Register hosts for "login" central host and per-user
       login-<actId> sub-hosts.
 
 ## PART 11 — POST-LOGIN INTEGRATION (Desktop catalog)
@@ -579,7 +579,7 @@ fires, no recursive HTTP.
     in one shot, not just the current session. One-line addition
     to Logout op once central-host session storage exists.
   - Profile fields beyond usrName: avatars, pronouns, bio,
-    contact info. These are per-usrId properties on the act row.
+    contact info. These are per-usrId properties on the account.
     Out of v1 - keep the manage page small.
   - First-class app-catalog discovery: today the Login app's
     "Add login" form has a hard-coded list of available appIds.

@@ -38,7 +38,7 @@ At the end state we are aiming for, every interaction looks like this:
     back into the LLM's next turn.
   - The loop continues until the LLM emits a final answer, the
     iteration budget is exhausted, or the user intervenes.
-  - Every step is persisted in the obj/lnk store as ordinary rows.
+  - Every step is persisted as ordinary objects and links.
     The Navigator and any other interested app see the conversation,
     the tool calls, and their results without any agent-specific code.
 
@@ -71,7 +71,7 @@ Three properties hold today and must continue to hold at every
 milestone:
 
   1. Domatar-native storage. Conversations, messages, tool calls,
-     and tool replies are all real obj rows linked into the user's
+     and tool replies are all real objects linked into the user's
      per-user host. The agent's history is queryable in the same
      way every other Domatar object is queryable. The Navigator
      ([Navigator](Navigator.md) PART 5) sees the agent's tree for free.
@@ -155,7 +155,7 @@ boundary is enforced at the destination, not at the source.
 2.4  Cross-prv re-verification
 
 When a message crosses a prv boundary, the receiving prv runs
-its OWN verifyLogin against its OWN act table using the wire
+its OWN verifyLogin against its OWN account store using the wire
 envelope's (usrId, token) ([Domatar](../Domatar.md) PART 6.1). It does
 not trust the sender's claim about identity; it derives identity
 locally and stamps verified=true|false from its own records.
@@ -186,9 +186,9 @@ Domatar already has it.
 
 The agent's "memory" is not a special agent-only data structure.
 It is the same graph the Navigator browses, persisted in the
-same obj/lnk store every other app uses. Cross-conversation
+same objects and links every other app uses. Cross-conversation
 memory (which the LLM cannot maintain across requests) becomes
-a database query. When account replication / migration lands
+a query. When account replication / migration lands
 ([Login protocol](Login-Protocol.md) PART 14 / [Domatar](../Domatar.md) PART 17), the user's
 agent history travels with the rest of their data.
 
@@ -217,9 +217,9 @@ per-app integration work.
                                 central hosts).
   per-user host  : aiagent-<actId>   (e.g. aiagent-dave@quippin)
   hosting prv    : the user's home prv (the prv that owns the
-                                        user's account row).
+                                        user's account).
 
-The hst row for aiagent-<actId> is created by ActManagerImpl on
+The host record for aiagent-<actId> is created by ActManagerImpl on
 first sign-up via AiagentInstall.install (PART 11).
 
 The central host "aiagent" is registered for parity with the other
@@ -260,7 +260,7 @@ tool_calls)". The class is constructed from four env vars:
                                         as PART 18.5 alternatives)
   AIAGENT_API_URL        e.g. "https://api.groq.com/openai/v1/chat/completions"
   AIAGENT_API_KEY        e.g. "gsk_..."  (the bearer token; never
-                                          stored in the database)
+                                          stored on objects)
   AIAGENT_MODEL          e.g. "llama-3.3-70b-versatile"
 
 A switch on AIAGENT_PROVIDER maps to one of {GroqAdapter,
@@ -271,7 +271,7 @@ case.
 
 4.3  Why an env var, not the database
 
-API keys are SECRETS. Storing them in the obj table - which is
+API keys are SECRETS. Storing them on ordinary objects - which are
 queryable by any verified caller via Open / GetObj, and replicable
 across prvs - is the wrong shape. They live exclusively in the
 Tomcat process's environment, set by docker-compose, and read
@@ -284,9 +284,9 @@ the same problem) plus per-user JCE wrapping.
 
 ## PART 5 — DATA MODEL
 
-The AI Agent reuses the obj/lnk conventions every other Domatar
+The AI Agent reuses the object and link conventions every other Domatar
 app uses ([Domatar](../Domatar.md) PART 7): one singleton container per
-logical collection, one obj row per item, with persistent lnks
+logical collection, one object per item, with persistent lnks
 linking them so the Navigator can traverse the tree.
 
 Implementation status: 5.1, 5.2 (without Mode/Policy/budget
@@ -696,7 +696,7 @@ are deferred (PART 18.1, 18.3).
                                   "msg-", null, 1000) filtered by
         attrs.ConvId == dst.objId. (Faster path: walk the conv's
         outgoing lnks via obj.getLnks(... tag="msg" ...) and pull
-        the msg obj rows by DomId. v1 ships the simple prefix scan;
+        the msg objects by DomId. v1 ships the simple prefix scan;
         the lnk-based path is a one-line refactor.)
         Sort by attrs.Time ascending.
         Project each msg as { Role, Text, Time, Model, TokensIn,
@@ -1005,7 +1005,7 @@ is just code that emits messages on a verified user's behalf.
 When the agent issues a tool call to a DomId on another prv,
 HttpClient.dispatch ([Domatar](../Domatar.md) PART 5) takes the sendHttp
 path. The receiving prv's Msg.doAction runs verifyLogin against
-ITS act table and stamps verified=true|false based on its own
+ITS account store and stamps verified=true|false based on its own
 records ([Domatar](../Domatar.md) PART 6.1). The receiving handler's
 hasRights then decides admit/deny.
 
@@ -1033,7 +1033,7 @@ posted today?"
      HTTP POST to prv2/domatar/Msg.
 
   4. Prv2's Msg.doAction runs verifyLogin for the calling user
-     against its act table. The user has a verified row (because
+     against its account store. The user is verified (because
      accounts are issued by quippin's central host and that
      authority's verdict is the same on both prvs). verified=true.
 
@@ -1167,15 +1167,15 @@ other installs follow).
 
 mySQL/dump-2024-01-20-aiagent.sql:
 
-  - hst rows:
+  - hosts:
       aiagent                  -> tomcat1:8080, prv1
       aiagent-dave@quippin     -> tomcat1:8080, prv1
       aiagent-micha@quippin    -> tomcat2:8080, prv2
 
-  - obj rows on aiagent-<actId> (per user):
+  - objects on aiagent-<actId> (per user):
       conversations
 
-  - obj rows on navigator-<actId> (per user):
+  - objects on navigator-<actId> (per user):
       app-aiagent
 
   - lnks (per user):
@@ -1937,7 +1937,7 @@ behaviour is described, and what the prerequisite work is.
   - Ollama adapter (local LLM, no egress, no quota).
   - Gemini adapter.
   - Per-user API keys (per-user-paid quota; encrypted-at-rest;
-    same JCE wrapping the act table needs).
+    same JCE wrapping accounts need).
   - Rate-limit handling with backoff on 429.
   - Markdown rendering on the chat pane.
   - Per-turn cost accounting / quotas surfacing in the Settings

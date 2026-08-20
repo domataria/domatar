@@ -48,7 +48,7 @@ Design principles (inherited by every Domatar app)
       reaching into each followed account's own container.
   P2. Containers and leaves. Each app node owns a small set of singleton
       "container" objects (quips, follows, bans, logs); each container holds
-      many "leaf" objects (quip, follow, banAct, log) reachable via lnk rows.
+      many "leaf" objects (quip, follow, banAct, log) reachable via links.
   P3. Everything is a Domatar object addressable by DomId and browsable in the
       Navigator; the same objects power both the web UI and the LLM facade.
   P4. Cross-prv is transparent. Following a user on another provider works the
@@ -78,9 +78,9 @@ Design principles (inherited by every Domatar app)
 
   The sub-host holds all of that user's Quippin objects: the app node, the
   four containers (follows, quips, bans, logs), the sentiments index, and
-  every quip / follow / ban / log leaf. The quippin-<actId> hst row is created
-  by ActDb.addAct (the signing-up user's act row); QuippinInstall then adds the
-  object rows on it (PART 8).
+  every quip / follow / ban / log leaf. The quippin-<actId> host is created
+  by ActDb.addAct (the signing-up user's account); QuippinInstall then adds the
+  objects on it (PART 8).
 
 2.3  System account
 -------------------
@@ -399,7 +399,7 @@ reply, and requip logic.
     the granular handlers calls Log.add(...) which dispatches here.
   GetLogs                → up to 1000 recent entries.
   Housekeeping: on each Log call (throttled to once/minute) entries older than
-    one hour are purged from both the obj and lnk tables.
+    one hour are purged from both objects and links.
 
 ## PART 7 — WEB UI SERVLETS
 
@@ -513,7 +513,7 @@ PNGs for the sentiment button.
 Legacy simulation users (dave@quippin on prv1, micha@quippin on prv2) predate
 the directory. The migration mySQL/dump-2024-01-21-quippin-directory.sql seeds:
 
-  * the quippin@quippin system act row (both db1 and db2);
+  * the quippin@quippin system account (both db1 and db2);
   * the directory container obj on hstId="quippin";
   * a dir-<actId> entry obj per legacy user;
   * the directory→dirEntry lnks and the dirEntry→app-quippin lnks.
@@ -556,8 +556,8 @@ Defining properties:
     prv they are on.
 
   * Entries are plain Domatar objects.  The directory has a container obj
-    and one entry obj per registered user; edges between them are rows in
-    the lnk table.  Nothing is synthesised at query time.
+    and one entry obj per registered user; edges between them are
+    links.  Nothing is synthesised at query time.
 
   * Population is automatic.  QuippinInstall.install() (run at sign-up)
     registers the new user in the directory as part of its install
@@ -592,7 +592,7 @@ Defining properties:
   system the password should be replaced with a strong random value or the
   account should be disabled for interactive login altogether.
 
-  The act row must appear in BOTH db1 and db2 (like all other seeded rows)
+  The account must appear in BOTH db1 and db2 (like all other seeded data)
   since both MySQL containers run the init script on first boot.
 
 2.1 Directory container object
@@ -645,7 +645,7 @@ Defining properties:
   SeqNum        = <timestamp-ms when registered>
 
 The lnk lets the Navigator tree (and any future tools) walk the directory
-without loading each entry's obj row individually.
+without loading each entry individually.
 
 2.4 Link: dirEntry -> app-quippin  (the "Quippin link")
 
@@ -681,7 +681,7 @@ without loading each entry's obj row individually.
 2.5 seqNum considerations
 
 The directory container and all dirEntry lnks live on the quippin central
-host's lnk table.  The directory -> dirEntry SeqNum is the registration
+host.  The directory -> dirEntry SeqNum is the registration
 timestamp (milliseconds since epoch), giving natural chronological
 ordering; duplicate timestamps are allowed by the primary key because
 Val (=actId) distinguishes them.  The dirEntry -> app-quippin SeqNum is

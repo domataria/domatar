@@ -707,11 +707,12 @@ both.
 
   Authorization (ObjImpl.hasRights, [Domatar](../Domatar.md) PART 6.3), routing
   by hstId (PART 5), the class envelope and service qualifier (PART 6.2 /
-  PART 8), and the obj/lnk persistence shapes (PART 7) are unchanged.
+  PART 8), and object/link persistence ([Domatar](../Domatar.md) PART 7) are
+  unchanged.
   Verification is signatures + delegations + Binding
-  ([Identifiers](Identifiers.md) PART 11). The `act` table holds
-  `OwnPrvKey` (PART 5.4) and the `hst` table holds `PubKey` /
-  `RecordSig` (PART 10.1).
+  ([Identifiers](Identifiers.md) PART 11). This realisation stores
+  `OwnPrvKey` on `act` (PART 5.4) and `PubKey` / `RecordSig` on `hst`
+  (PART 10.1).
 
 ## PART 12 - OPERATIONS
 

@@ -31,9 +31,10 @@ clicking Install in the App Store. Anyone may publish an application;
 anyone may run a provider; anyone may sign up. Domatar is the substrate
 that lets those three populations cooperate.
 
-Today the substrate is realised as a single Tomcat 10.1 / Jakarta EE 10
-/ Java 17 web application, persisted in MySQL 8, exchanging JSON
-messages over HTTP. Nine applications ship in the reference
+The protocol is objects, classes, hosts, accounts, links, and messages.
+How those are stored is realisation-specific. Today the reference
+substrate is a single Tomcat 10.1 / Jakarta EE 10 / Java 17 web
+application, persisted in MySQL 8, exchanging JSON messages over HTTP. Nine applications ship in the reference
 distribution (Navigator, Login, Desktop, AppStore, Quippin, Bookstore,
 Spreadsheet, Money, AI Agent), plus the platform's own self-described
 application (Domatar). The architecture is positioned for, but does not
@@ -45,10 +46,11 @@ machine (see PART 16).
 The platform is built from a small set of named things. Every other
 notion in the system is composed from these.
 
-  * Object         An addressable actor with persistent state. Every
-                   object is a row in the `obj` table. Objects are
+  * Object         An addressable actor with persistent state,
                    identified by a DomId (below). All behaviour
-                   reaches an object through messages.
+                   reaches an object through messages. Persistence is
+                   realisation-specific; this tree stores objects in
+                   MySQL (PART 7).
 
   * Class          A code unit, identified by the pair (clsAppId, clsId),
                    that implements an object's behaviour. Many objects
@@ -119,11 +121,11 @@ notion in the system is composed from these.
                    The `actId` is the stable identity; the `usrId` is
                    the mutable login label.
 
-                   The account row physically lives on whichever
-                   provider the user was on when the account was
-                   created (or on additional providers if the user has
-                   explicitly replicated it). Login is always against
-                   the local prv's `act` table and is routed by `usrId`.
+                   The account lives on whichever provider the user
+                   was on when it was created (or on additional
+                   providers if the user has explicitly replicated it).
+                   Login is always against the local prv's account
+                   store and is routed by `usrId`.
 
                    Direction: Account replication / migration across
                    providers so a user can keep the same account on
@@ -133,31 +135,37 @@ notion in the system is composed from these.
 
   * Host           A first-class entity, identified by `hstId`, with a
                    network address (`Domain`) and a provider (`PrvId`,
-                   which is itself a hstId). Every row in the `hst`
-                   table is a host. Hosts and applications share a
-                   namespace: a typical application has a central host
-                   whose hstId equals the appId. When an application
-                   installs itself for an account, it also creates an
-                   abstract per-user sub-host named `appId-actId`
-                   using `-` as separator (e.g. `quippin-<fingerprint>`).
-                   `-` is `DomId.HOST_SEP`; it is not in the fingerprint
+                   which is itself a hstId). Hosts and applications
+                   share a namespace: a typical application has a
+                   central host whose hstId equals the appId. When an
+                   application installs itself for an account, it also
+                   creates an abstract per-user sub-host named
+                   `appId-actId` using `-` as separator
+                   (e.g. `quippin-<fingerprint>`). `-` is
+                   `DomId.HOST_SEP`; it is not in the fingerprint
                    alphabet, so a host id cannot be ambiguous with an
                    encoded actId.
 
                    The hstId is opaque to the runtime; the
-                   appId / appId-actId convention is what populates
-                   the `hst` table in practice. Routing uses only the
-                   hst row; the runtime does not parse hstId strings.
+                   appId / appId-actId convention is what registers
+                   hosts in practice. Routing uses only the host
+                   record; the runtime does not parse hstId strings.
+
+  * Link           A directed edge from one object to another (parent
+                   → child in the Navigator tree, membership, catalog
+                   entries, …). Links are first-class: if the Navigator
+                   can show an edge, that link exists. Tag, SeqNum, and
+                   Val name and order them ([Navigator](apps/Navigator.md);
+                   PART 7 for this realisation's columns).
 
   * Provider       A role a host plays when it physically hosts other
-                   hosts. A provider is just a host whose hstId appears
-                   in the `PrvId` column of one or more other host
-                   rows. A provider runs the JVM, owns the local DB,
-                   and serves messages addressed to any of the hsts
-                   whose PrvId is its own hstId. A self-hosting host
-                   (one that provides itself) has PrvId == HstId. One
-                   provider commonly serves many hsts at many distinct
-                   domains.
+                   hosts. A provider is a host whose hstId is the
+                   `PrvId` of one or more other hosts. A provider runs
+                   the server, owns the local store, and serves
+                   messages addressed to any of the hsts whose PrvId
+                   is its own hstId. A self-hosting host (one that
+                   provides itself) has PrvId == HstId. One provider
+                   commonly serves many hsts at many distinct domains.
 
                    Each physical provider has its own administrator
                    account, `<prvId>@<prvId>` (e.g. `prv1@prv1`), and
@@ -167,7 +175,7 @@ notion in the system is composed from these.
 
   * Domain         An internet address (host:port) at which a single
                    host can be reached for Msg / hst publish. Stored
-                   per-host in the `hst` table. May be Docker-internal
+                   on the host record. May be Docker-internal
                    in local stacks (e.g. `tomcat2:8080`). A hosting-
                    service provider commonly serves many domain names
                    from one machine, one per tenant host, so per-host
@@ -238,44 +246,45 @@ issued on prv1 is recognised on prv2 ([Login protocol](apps/Login-Protocol.md) P
 
 ## PART 4 - HOSTS AND THE GLOBAL DIRECTORY
 
-4.1  The hst table
+4.1  Host records
 
-Every host known to the network has a row in the directory's `hst`
-table:
+Every host known to the network has a record in the directory:
 
-    hst (HstId     varchar PK,
-         Domain    varchar,    -- this host's network address
-         PrvId     varchar,    -- another HstId in this table;
-                               --   may equal HstId for self-hosting
-         Version   bigint,     -- monotonic version of this record
-         FetchedAt bigint,     -- millis-since-epoch of last refresh
-                               --   into a cache; 0 in the directory
-         PubKey    varchar(64),-- provider operational Ed25519 public key
-                               --   (Base64Encoder, 43 chars). NULL for
-                               --   sub-hosts; set at provider bootstrap.
-         RecordSig varchar(128))-- directory-root Ed25519 signature over
-                               --   canonical JSON {HstId,Domain,PrvId,
-                               --   Version,PubKey}. NULL until the
-                               --   directory node signs.
+    HstId, Domain, PrvId, Version, FetchedAt, PubKey, RecordSig
 
-Every provider also keeps a local cache of `hst` rows with the same
-schema; FetchedAt is the cache freshness column on cached rows.
+  HstId      this host's identifier (primary key)
+  Domain     this host's network address
+  PrvId      another HstId; may equal HstId for self-hosting
+  Version    monotonic version of this record
+  FetchedAt  millis-since-epoch of last refresh into a cache;
+             0 in the directory
+  PubKey     provider operational Ed25519 public key
+             (Base64Encoder, 43 chars). Absent for sub-hosts;
+             set at provider bootstrap.
+  RecordSig  directory-root Ed25519 signature over canonical
+             JSON {HstId, Domain, PrvId, Version, PubKey}.
+             Absent until the directory node signs.
+
+Every provider also keeps a local cache of host records with the
+same fields; FetchedAt is the cache freshness on cached records.
 PubKey and RecordSig are cached together with the routing data.
 
-Today's `hst` rows in a typical reference distribution include:
-  - per-provider rows                e.g. `prv1`, `prv2`
-  - per-app central host rows        e.g. `quippin`, `login`,
+This realisation stores those records as rows in MySQL `hst`
+(PART 7). A typical reference distribution includes:
+  - per-provider hosts               e.g. `prv1`, `prv2`
+  - per-app central hosts            e.g. `quippin`, `login`,
                                           `navigator`, `aiagent`,
                                           `bookstore`, `spreadsheet`,
                                           `money`, `appstore`,
                                           `desktop`
-  - per-user sub-host rows           e.g. `quippin-<fingerprint>`,
+  - per-user sub-hosts               e.g. `quippin-<fingerprint>`,
                                           `navigator-<fingerprint>`,
                                           `desktop-<fingerprint>`,
                                           `domatar-<prvFingerprint>`
 
-The set of app central host rows is open-ended: any new application
-that needs a central host adds a row at provider-level install time.
+The set of app central hosts is open-ended: any new application
+that needs a central host registers one at provider-level install
+time.
 
 4.2  The directory service
 
@@ -313,18 +322,18 @@ Direction:
     HttpClient.shouldRefreshAndRetry; no server actually issues
     "Hst moved" today.
 
-4.3  Local hst cache
+4.3  Local host cache
 
-Each provider's MySQL contains the same `hst` schema as the
-authoritative directory, used as a local read cache. Behaviour
-(implemented in `HstDb` plus `HttpClient.getHst` / `refreshHst`):
+Each provider caches host records locally, with the same fields as
+the authoritative directory. In this realisation that cache is the
+MySQL `hst` table (`HstDb` plus `HttpClient.getHst` / `refreshHst`):
 
-  * Local lookup first. If a row exists and FetchedAt is within
+  * Local lookup first. If a record exists and FetchedAt is within
     HST_TTL_MILLIS (60s by default), it is returned as-is.
-  * Otherwise the directory's GetHst is called and the row is
+  * Otherwise the directory's GetHst is called and the record is
     upserted with FetchedAt = now.
-  * If the directory is unreachable but a stale row exists, the
-    stale row is used. The local cache is a soft fallback, not a
+  * If the directory is unreachable but a stale record exists, the
+    stale record is used. The local cache is a soft fallback, not a
     hard consistency boundary.
   * On a send failure, refresh-and-retry runs once for any of
     transport failure, "Hst not found", or (eventually) "Hst moved".
@@ -366,7 +375,7 @@ Routing lives in `com.domatar.core.HttpClient.dispatch`. Two branches:
          the same context.
 
   On any "Hst not found", "Hst moved", or generic transport failure,
-  the runtime refreshes the destination's hst row from the directory
+  the runtime refreshes the destination's host record from the directory
   and retries the dispatch once.
 
 A "to me" shortcut: if the caller leaves `dstDomId.hstId` empty, the
@@ -446,16 +455,16 @@ Direction (Option C):
 6.2  Class identification
 
   The message envelope optionally carries (clsAppId, clsId). If
-  present, it identifies the handler and the obj row is NOT loaded —
-  the handler receives obj=null. If absent, the obj row is loaded
-  by DomId and (clsAppId, clsId) is taken from the row. If neither
-  yields a class, dispatch fails with "Obj not found".
+  present, it identifies the handler and the destination object is
+  NOT loaded — the handler receives obj=null. If absent, the object
+  is loaded by DomId and (clsAppId, clsId) is taken from it. If
+  neither yields a class, dispatch fails with "Obj not found".
 
   This makes container services (quips, news, follows, sentiments,
-  bans, logs, accounts, hosts, …) work without per-instance rows:
-  the browser sets clsId in the envelope, the handler runs with
-  obj=null, and it queries the obj/lnk tables internally for the
-  per-instance rows it needs.
+  bans, logs, accounts, hosts, …) work without a per-instance
+  object: the browser sets clsId in the envelope, the handler runs
+  with obj=null, and it queries objects and links for the instances
+  it needs.
 
   The envelope also carries an OPTIONAL service qualifier
   (srvAppId, srvId). Dispatch never uses it — a message always
@@ -556,9 +565,13 @@ Direction (Option C):
   authority. ActWui detects this by `parseAppId(usrId) ==
   parseHstId(usrId)`.
 
-## PART 7 - PERSISTENCE
+## PART 7 - PERSISTENCE (this realisation)
 
-MySQL 8. Schema is materialised by the init scripts under `mySQL/` and
+This PART is the reference Java / MySQL 8 store. Other realisations
+may persist objects, accounts, links, and hosts differently; the
+protocol in PART 2 does not require these tables.
+
+Schema is materialised by the init scripts under `mySQL/` and
 is loaded automatically via `/docker-entrypoint-initdb.d` on first DB
 startup in the local simulation. The schema is identical on every
 provider; per-row data is partitioned by hstId.
@@ -697,17 +710,18 @@ owning app's own queries and for future filtering operations — the
 Navigator does not filter by them.
 
 Persistence direction:
-  - Per-host partitioning of obj/act/lnk seeds: today every provider's
-    seed contains the same rows for convenience. A follow-up should
-    split the seed by HstId so each server only carries the data for
-    the hsts it actually serves.
+  - Per-host partitioning of object / account / link seeds: today every
+    provider's MySQL dump contains the same rows for convenience. A
+    follow-up should split the seed by HstId so each server only
+    carries the data for the hsts it actually serves.
   - Object-level migration tooling (export/import of one host's
-    obj/act/lnk rows plus its per-host files), to support MoveHst.
+    objects, accounts, and links plus its per-host files), to support
+    MoveHst.
 
 ## PART 8 - CLASS OBJECTS AND SERVICES
 
 The schema layer of Domatar is made of two kinds of self-describing
-obj row, and they are deliberately separate. A SERVICE declares an
+object, and they are deliberately separate. A SERVICE declares an
 INTERFACE — what attributes an object has and what messages it
 understands. A CLASS declares an IMPLEMENTATION — which handler runs,
 which services it implements, how instances are named, and what
@@ -722,8 +736,8 @@ are authoritative; the summary that matters at platform level:
 
   * A service is identified by the pair (srvAppId, srvId), where
     srvAppId is the application that DEFINES the service (not the one
-    that installs it). It is a row in `obj` with ClsAppId="domatar",
-    ClsId="srv", obj AppId = srvAppId, and ObjId = "<srvId>Srv"
+    that installs it). It is an object with ClsAppId="domatar",
+    ClsId="srv", AppId = srvAppId, and ObjId = "<srvId>Srv"
     (e.g. the (bookstore, book) service has ObjId "bookSrv").
 
   * Its Attrs JSON is
@@ -802,7 +816,7 @@ are authoritative; the summary that matters at platform level:
     Navigator ([Navigator](apps/Navigator.md)), WUI builders, and the AI
     Agent tool catalogue ([AI Agent](apps/AIAgent.md)) consume.
 
-  * Resolution is LOCAL: it reads only obj rows on the host where the
+  * Resolution is LOCAL: it reads only objects on the host where the
     class descriptor lives. The runtime caches resolved descriptors in
     ClsMap, an in-memory registry analogous to ImplMap. Unlike ImplMap
     (which maps to code fixed at startup), ClsMap caches DATA and so
@@ -1428,7 +1442,7 @@ Services:
 
   nginx         Reverse proxy on host port 80 over domatar_net.
 
-After the first /Setup, the directory's hst table contains rows for
+After the first /Setup, the directory contains host records for
 both providers, all central hosts, the domatar- sub-host for each
 provider account, plus per-user sub-hosts for the seed accounts.
 A message from a handler on prv1 to a DomId on `quippin-micha@quippin`
@@ -1557,7 +1571,7 @@ deliberately positioned for a further split into per-app processes
   app's icon. Icons are loaded from the asset origin that has the JAR
   (absolute IconPath / AssetOrigin URLs); see [Icons](platform/Icons.md) PART 7.
   Reference distribution may still ship every JAR everywhere as a
-  convenience for relative same-origin URLs. The `hst` row decides who
+  convenience for relative same-origin URLs. The host record decides who
   runs the handlers; icon display does not require the JAR on the
   page's provider.
 
@@ -1571,12 +1585,12 @@ deliberately positioned for a further split into per-app processes
 
 16.3  Account replication and migration
 
-  An account row lives on whichever provider issued or imported it.
+  An account lives on whichever provider issued or imported it.
   Direction ([Login protocol](apps/Login-Protocol.md) PART 14):
     - Account replication: a user signals "also keep this account on
-      provider X"; provider X stores a copy of the act row and the
+      provider X"; provider X stores a copy of the account and the
       issuing app's central host trusts both replicas.
-    - Account migration: an account row moves from prv1 to prv2; the
+    - Account migration: an account moves from prv1 to prv2; the
       issuing app's central host updates its routing.
 
 16.4  Security
@@ -1645,10 +1659,10 @@ Hosts / directory
     object (PART 4 / [Platform App](platform/Platform-App.md) T1).
   * Server-side emission of "Hst moved" replies; client-side retry
     already exists.
-  * Make `hst.hsts` itself a real obj row instead of a static DomId
+  * Make `hst.hsts` itself a real object instead of a static DomId
     ([Platform App](platform/Platform-App.md) T2).
-  * Split the simulation seed so non-directory DBs start with an
-    empty `hst` cache, exercising the miss-then-fetch path.
+  * Split the simulation seed so non-directory stores start with an
+    empty host cache, exercising the miss-then-fetch path.
 
 Class / service layer
   * Done: the interface / implementation split — immutable service
@@ -1690,11 +1704,11 @@ Authorization
     (PART 6.2).
 
 Persistence / migration
-  * Per-host partitioning of the obj/act/lnk seed; today every
-    provider's DB receives the same dump for convenience.
+  * Per-host partitioning of the object / account / link seed; today
+    every provider's MySQL receives the same dump for convenience.
   * Object-level migration tooling (export / import of one
-    host's obj / act / lnk rows plus per-host files), to support
-    MoveHst.
+    host's objects, accounts, and links plus per-host files), to
+    support MoveHst.
   * Per-host data root at `/var/domatar/hosts/<hstId>/`, plumbed
     through Context, so handler-written files do not live under
     the WAR directory.

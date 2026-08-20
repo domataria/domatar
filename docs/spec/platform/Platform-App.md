@@ -46,7 +46,7 @@ Goals:
       App alongside the four shell apps (Navigator, Login, Desktop, App
       Store) and any other installed apps.
 
-  G3. The hosts table becomes browsable: the administrator can see all
+  G3. Hosts become browsable: the administrator can see all
       registered hosts, their domains, and their providers.
 
   G4. Registering a new host and moving a host between providers become
@@ -54,7 +54,7 @@ Goals:
 
 Non-goals for this version:
 
-  - Automated host migration (moving obj/act/lnk rows between providers).
+  - Automated host migration (moving objects, accounts, and links between providers).
   - Multi-administrator roles or ACLs.
   - Centralized provider federation or replication.
 
@@ -100,7 +100,7 @@ Non-goals for this version:
   DomatarConfig.getPrvActId().
 
   The usrId "@<prvId>" suffix still routes login to the provider's own
-  domatar central host. The provider's act row lives on the provider's
+  domatar central host. The provider's account lives on the provider's
   own host (principle P1: no remote dependency for login).
 
 3.2 How ActManagerImpl handles @<prvId> accounts
@@ -263,8 +263,8 @@ that pattern with the live prvId suffix.
 
   Link: app-domatar → hosts  (tagAppId: navigator, tag: container, seqNum: 1)
 
-  Children: one (domatar, host) obj row per hst entry in the local
-  hst table, at ObjId = "host-<hstId>" (e.g. "host-prv1",
+  Children: one (domatar, host) object per host in the local
+  cache, at ObjId = "host-<hstId>" (e.g. "host-prv1",
   "host-quippin-dave@quippin"). Created by DomatarProviderInstall for
   every hst already in the directory. Created/removed by RegisterHst /
   DeregisterHst (PART 7) thereafter.
@@ -282,7 +282,7 @@ that pattern with the live prvId suffix.
 
   Link: app-domatar → clss  (tagAppId: navigator, tag: container, seqNum: 2)
 
-  Children (all are (domatar, cls) obj rows, see PART 8):
+  Children (all are (domatar, cls) objects, see PART 8):
     hstsCls       actManagerCls   actCacheCls
     clsCls        appCls          clssCls
     hostsCls      hostCls
@@ -328,7 +328,7 @@ provider layer (extra objects only in the provider's Login sub-host).
       ObjName  : ActManager
       ObjDesc  : "Account manager for <prvId>"
 
-    DomatarProviderInstall creates this obj row in Phase 2 (Step 5, along
+    DomatarProviderInstall creates this object in Phase 2 (Step 5, along
     with the other domatar sub-host objects) so that ImplMap can dispatch
     to ActManagerImpl.
 
@@ -345,7 +345,7 @@ provider layer (extra objects only in the provider's Login sub-host).
 
     A (login, accounts) container listing every account registered on
     this provider.  Each child obj is a (login, account) record with
-    attrs matching the act table row (ActId, UsrId, UsrName, Email, …).
+    attrs matching the account (ActId, UsrId, UsrName, Email, …).
 
       HstId    : login-<prvActId>
       AppId    : login
@@ -371,7 +371,7 @@ provider layer (extra objects only in the provider's Login sub-host).
 6.3  hst.hsts
 
   The static DomId used by HttpClient (domatar / hst / domatar@hst / hsts)
-  remains unchanged. Adding a real obj row for it is a PART 12 TODO.
+  remains unchanged. Adding a real object for it is a PART 12 TODO.
 
 ## PART 7 — CLASSES
 
@@ -402,14 +402,14 @@ provider layer (extra objects only in the provider's Login sub-host).
 
     RegisterHst(HstId, Domain, PrvId)
       -> { HstId : String }
-      Inserts or updates the hst row in the local cache and in the global
+      Inserts or updates the host record in the local cache and in the global
       directory (via UpdateHst on the directory's hsts object). Creates a
-      (domatar, host) child obj row and a hosts→child lnk.
+      (domatar, host) child object and a hosts→child lnk.
       Authorization: verified + owner-match.
 
     DeregisterHst(HstId)
       -> {}
-      Removes the hst row, the (domatar, host) child obj row, and the lnk.
+      Removes the host record, the (domatar, host) child object, and the lnk.
       Guard: refuse if HstId equals the provider's own prvId or "domatar".
       Authorization: verified + owner-match.
 
@@ -432,8 +432,8 @@ provider layer (extra objects only in the provider's Login sub-host).
 
     UpdateHst(Domain, PrvId)
       -> {}
-      Updates Domain and/or PrvId in both the local hst table and the
-      global directory. Updates the Attrs on this obj row to match.
+      Updates Domain and/or PrvId in both the local host cache and the
+      global directory. Updates the Attrs on this object to match.
       Authorization: verified + owner-match.
 
 ## PART 8 — CLASS DESCRIPTOR OBJECTS
@@ -483,7 +483,7 @@ independent. No data migration is needed.
 
   -- Phase 1: standard account bootstrap (same as ActManagerImpl.addAct) --
 
-  Step 1 — Provider account in the local act table.
+  Step 1 — Provider account.
     ActDb.addAct(prvId, domain, prvId,
                  prvActId, prvActId, prvId, password, "127.0.0.1")
     (ActManagerImpl bootstraps itself: at this point the actManager obj
@@ -523,7 +523,7 @@ independent. No data migration is needed.
 
   -- Phase 2: provider-layer additions (specific to DomatarProviderInstall) --
 
-  Step 5 — actManager obj row on the Domatar App's sub-host.
+  Step 5 — actManager object on the Domatar App's sub-host.
     DomId actMgrId = new DomId(ssHstId, "domatar", prvActId, "actManager")
     ObjDb.addObjIfMissing(actMgrId,
       "act", "actManager", "ActManager", "Account manager for " + prvId)
@@ -582,7 +582,7 @@ independent. No data migration is needed.
   with a different password.
 
   Option B: a first-run lifecycle hook in Msg.init() that detects the
-  absence of the actManager obj row and runs the install automatically
+  absence of the actManager object and runs the install automatically
   with a default password printed to the server log.
 
   The install is separate from ActManagerImpl.addAct (which is per-user
@@ -604,13 +604,13 @@ on prv1 and prv2 respectively, so we seed one provider account per prv):
 
 Contents:
 
-  1. actManager obj rows on each provider's Domatar App sub-host:
+  1. actManager objects on each provider's Domatar App sub-host:
        INSERT IGNORE INTO obj (HstId, AppId, ActId, ObjId, ClsAppId, ClsId, ...)
        VALUES
          ('domatar-<fingerprint>', 'domatar', 'prv1@prv1', 'actManager', 'act', 'actManager', ...),
          ('domatar-prv2@prv2', 'domatar', 'prv2@prv2', 'actManager', 'act', 'actManager', ...)
 
-  2. Provider act rows (one per prv, password hash for a known setup password):
+  2. Provider accounts (one per prv, password hash for a known setup password):
        INSERT IGNORE INTO act (HstId, ActId, UsrId, UsrName, PwdHash, ...)
        VALUES
          ('prv1', 'prv1@prv1', 'prv1@prv1', 'prv1', <hash>, ...),
@@ -627,7 +627,7 @@ Contents:
          ('domatar-<fingerprint>',        'tomcat1:8080', 'prv1', ...),
          (... repeat for prv2 ...)
 
-  4. All obj rows for the provider tree:
+  4. All objects for the provider tree:
        - root on navigator-<prvActId>-<prvId>
        - app-navigator, app-login, app-desktop, app-appstore on their
          respective shell sub-hosts (created by the standard install chain)
@@ -635,7 +635,7 @@ Contents:
          on domatar-<prvActId>
      Use INSERT IGNORE.
 
-  5. All lnk rows, using INSERT IGNORE.
+  5. All links. This realisation: INSERT IGNORE into `lnk`.
 
   Note on the password: for the seed script, a known test password is
   hashed using the same algorithm as ActDb.addAct. In production, the
@@ -663,9 +663,9 @@ T1. AddHst / RegisterHst as a directory-level operation.
     RegisterHst message on the directory object, with proper deduplication
     and versioning, is deferred.
 
-T2. hst.hsts as a real obj row.
+T2. hst.hsts as a real object.
     The static DomId (domatar / hst / domatar@hst / hsts) used by
-    HttpClient is not yet a real obj row.  Adding it makes it addressable
+    HttpClient is not yet a real object.  Adding it makes it addressable
     via ObjDb.getObj and allows it to be linked from the Navigator.
 
 T3. Host child expansion.
@@ -680,7 +680,7 @@ T4. HstDb.getAllHsts().
 
 T5. Provider account replication.
     If the provider's host goes down, the provider cannot log in (the
-    act row is local).  Replication is part of the general account-
+    account is local).  Replication is part of the general account-
     replication TODO in [Login protocol](../apps/Login-Protocol.md) PART 14.
 
 T6. Multiple administrator accounts.
@@ -698,7 +698,7 @@ T7. Navigator sub-host for other apps.
     needed; the existing install routines already support any actId.
 
 T8. Automated first-run detection.
-    If no actManager obj row exists for the provider's own host, run
+    If no actManager object exists for the provider's own host, run
     DomatarProviderInstall automatically at Msg.init() time and log the
     generated password. This removes the need for a manual setup step
     in simple deployments.

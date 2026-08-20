@@ -16,9 +16,9 @@ own local class (library, book).
 
 ## PART 1 — PURPOSE
 
-Every Domatar class is identified by the pair (ClsAppId, ClsId). For every
-class an application defines, it stores a self-describing class object in
-the obj table. GetCls returns the resolved schema (attributes and messages
+Every Domatar class is identified by the pair (ClsAppId, ClsId). Every
+class an application defines is stored as a self-describing
+class object. GetCls returns the resolved schema (attributes and messages
 from the implemented services, plus the class's policy) so a runtime, a UI
 builder, or another application can learn the class without reading Java.
 
@@ -29,7 +29,7 @@ descriptor so the two registries converge ([Service](Service.md) PART 17).
 
 ## PART 2 — CLASS OBJECT IDENTITY
 
-A class object is an ordinary row in the obj table. Its DomId fields are
+A class object is an ordinary Domatar object. Its DomId fields are
 (as implemented in com.domatar.install.ClsInstall and looked up by
 com.domatar.cls.ClsImpl.GetCls):
 
@@ -115,7 +115,7 @@ Navigator, WUI builders, and the AI Agent see one schema per class.
 Fields:
 
   ClsAppId     The application that defines the class (the namespace owner).
-               This is the ClsAppId used in the obj table and in ImplMap.
+               This is the ClsAppId used on the object and in ImplMap.
 
   ClsId        The class identifier within that application's namespace.
 
@@ -127,7 +127,7 @@ Fields:
                for both human readers and AI agents that need to address objects
                correctly (see PART 3.1).
 
-  Attrs        The persistent attributes stored in the obj row's Attrs JSON
+  Attrs        The persistent attributes stored on the object (Attrs JSON
                for every instance of this class. Order is informational only.
                Each entry's "Description" (optional) gives a one-line summary
                of that attribute's meaning.
@@ -276,7 +276,7 @@ service descriptor instead ([Service](Service.md) PART 3 / PART 15).
 ## PART 6 — QUERYING A CLASS DEFINITION
 
 Any object can be queried to determine its class definition. The standard
-GetObj message (handled by ObjImpl) returns the full obj row including
+GetObj message (handled by ObjImpl) returns the full object including
 ClsAppId, ClsId, and Attrs for any object, including a class object.
 
 To retrieve the class definition for a given (ClsAppId, ClsId) pair on a
@@ -306,7 +306,7 @@ This enables:
 ## PART 7 — EXAMPLE: BOOKSTORE CLASS OBJECTS
 
 The following class objects are created by BookstoreInstall for each user.
-All have ClsAppId="domatar", ClsId="cls" in the obj row itself.
+All have ClsAppId="domatar", ClsId="cls" on the object itself.
 
 The examples below use the full agent-friendly shape (PART 3.1) so that app
 authors can see every optional field populated at least once.

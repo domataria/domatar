@@ -2,7 +2,9 @@
 
 These documents are the living **how**: objects, hosts, messages,
 identity, and the apps. Present-tense text is the system as built.
-**Direction** sections are future work.
+**Direction** sections are future work. Persistence as SQL tables
+(`obj`, `lnk`, `act`, `hst`) is this Java / MySQL realisation
+([Domatar](spec/Domatar.md) PART 7), not the protocol.
 
 If you want the argument first — why an ownership internet instead of
 a storefront internet — read [Why Domatar](Why-Domatar.md). Then come

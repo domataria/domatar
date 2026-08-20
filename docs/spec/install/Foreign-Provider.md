@@ -2,7 +2,7 @@
 
 A user signed in on home provider H may install an application onto
 ANY offering provider N that lists an Active offer for that app,
-including N where the user has no act row, no password, and no
+including N where the user has no local account, no password, and no
 sign-in handle. N becomes an OBJECT-ONLY host for that account
 ([Identifiers](../platform/Identifiers.md) PART 5.4 / PART 8), not a login home.
 
@@ -28,7 +28,7 @@ Present-tense statements describe the live system.
   Those are two different jobs:
 
     * HOSTING an app's data (portable sub-host on N)
-    * SIGNING IN through N (act row, password, shells, optional
+    * SIGNING IN through N (account, password, shells, optional
       ownership-key copy)
 
   Hosting does not require a door. A user on prv1 can put Bookstore on
@@ -101,7 +101,7 @@ Present-tense statements describe the live system.
   A provider that stores some of the account's OBJECTS and can operate
   them under a Delegation, but:
 
-    * has NO act row / password for this actId
+    * has NO local account / password for this actId
     * does NOT hold the ownership private key
     * is NOT a sign-in path ([Identifiers](../platform/Identifiers.md) PART 8.4)
 
@@ -114,19 +114,22 @@ Present-tense statements describe the live system.
 
 ## PART 3 - INVARIANTS
 
-3.1  actId on objects ≠ local act row
+3.1  actId on objects ≠ local account
 
-  `obj.ActId` is the global owner fingerprint. The `act` table is the
-  login/password directory for THIS node (and, for verification, the
-  usrId suffix's central host — [Login protocol](../apps/Login-Protocol.md) C3). There is no foreign
-  key from `obj` to `act`.
+  The object's ActId is the global owner fingerprint. The local
+  account store is the login/password directory for THIS node (and,
+  for verification, the usrId suffix's central host —
+  [Login protocol](../apps/Login-Protocol.md) C3). An object need not
+  have a matching local account.
 
   Foreign install MAY create objects on N whose ActId has no matching
-  `act` row on N. That is required, not accidental. The account still
-  has an act row on at least one login home. Identity on N is the
-  Binding object, not `act`.
+  local account on N. That is required, not accidental. The account still
+  has a login on at least one login home. Identity on N is the
+  Binding object, not a local account.
 
-  Code that calls `ActDb.getAct(actId)` / `ActDb.getOwnPrvKey(actId)`
+  This realisation stores objects in `obj` and accounts in `act`;
+  there is no foreign key from `obj` to `act`. Code that calls
+  `ActDb.getAct(actId)` / `ActDb.getOwnPrvKey(actId)`
   on N MUST treat a missing row as object-only, not as "account does
   not exist".
 
@@ -211,7 +214,7 @@ actId.
 
 6.1  Why a new operation
 
-  AttachProvision today REQUIRES a local act row ("run link-mode AddAct
+  AttachProvision today REQUIRES a local account ("run link-mode AddAct
   first"), stores binding/delegation/own key ON `act`, AddPeer with a
   usrId, then Mandatory KD8: full substrate + default shell InstallUser
   on N.
@@ -255,7 +258,7 @@ actId.
   2. UserSubstrateInstall.ensureObjectOnlySubstrate (domatar-<actId>-N;
      membership + binding; no shells — PART 7.2).
   3. Persist Binding and Delegation on the substrate binding object
-     (NOT on the act table). GetBinding / SetBinding already exist on
+     (NOT on a local account). GetBinding / SetBinding already exist on
      that graph (Mandatory-App-Rewrite).
   4. MembershipMigrator.upsertObjectOnlyPeer (PART 8) on N's membership;
      fan-out so H's replica also lists N (MembershipFanout / AddPeer on
@@ -306,13 +309,13 @@ actId.
 
 7.3  On N — the app
 
-  * hst row: portable `<appId>-<actId>` (or hook extension), PrvId=N,
+  * host record: portable `<appId>-<actId>` (or hook extension), PrvId=N,
     Domain=N's domain; directory-registered
   * InstallUser side-effects (forsale, library, …) owned by ctx.actId
 
 7.4  Explicitly NOT on N
 
-  * act row for this user
+  * local account for this user
   * OwnPrvKey
   * login-<actId>-N / desktop-<actId>-N / navigator-<actId>-N
     as a new login home (those exist only after AttachProvider)
@@ -402,7 +405,7 @@ bug/gap to close; it is not solved by minting `…@login` on N.
 - [App Store](../apps/AppStore.md) — Foreign InstallApp requires presence (login-home OR object-only peer); if missing, HostProvision then InstallUser. Do not require a linked login. Do not AddAct inside InstallApp. Default presence is HostProvision, not AttachProvider.
 - [Platform App](../platform/Platform-App.md) — Substrate replicas exist on every object-hosting provider; shells only on login homes. This spec is how N gets presence without becoming a login home.
 - [Login protocol](../apps/Login-Protocol.md) — PART 8 remains AttachProvider (login home). App hosting on N without a door is this document. ListMembership sign-in views ignore object-only peers.
-- [Identifiers](../platform/Identifiers.md) — HostProvision is the install-time way an object-only Login/domatar peer appears. Binding and delegation live on the substrate, not `act`, when there is no act row.
+- [Identifiers](../platform/Identifiers.md) — HostProvision is the install-time way an object-only Login/domatar peer appears. Binding and delegation live on the substrate, not a local account, when there is no local account.
 
 ## PART 13 - SIM ACCEPTANCE
 

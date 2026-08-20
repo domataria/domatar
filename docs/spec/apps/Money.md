@@ -615,7 +615,7 @@ to the handler.  Omitting it lets the dispatcher load the object normally.)
 
 File: mySQL/dump-2024-01-24-money.sql
 
-  1. System account in the act table:
+  1. System account:
        actId   = "money@money"
        usrId   = "money@money"
        usrName = "Money"
