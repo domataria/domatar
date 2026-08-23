@@ -5,9 +5,7 @@
 package com.domatar.install;
 
 import com.domatar.db.HstDb;
-import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
-import com.domatar.util.Lnk;
 import com.domatar.util.Obj;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
@@ -52,15 +50,8 @@ public final class NavigatorReplica
     ObjDb.addObjIfMissing(rootId, "navigator", "root", "Root", "Root");
     ensureRootDisplayName(rootId);
 
-    ObjDb.addObjIfMissing(appNavId, "domatar", "app",
-        "Navigator", "Browse your Domatar objects");
-
-    if (LnkDb.getLnk(rootId, appNavId, "navigator", "app") == null)
-      LnkDb.addLnk(new Lnk(rootId, appNavId,
-                            "domatar", "app",
-                            "Navigator", "Browse your Domatar objects",
-                            "navigator", "app",
-                            null, 4));
+    NavAppEntry.ensureRootLnk(rootId, appNavId, "navigator",
+        "Navigator", "Browse your Domatar objects", 4);
 
     SrvInstall.ensureSrvsContainer(appNavId,
         "Service descriptors for Navigator", "navigator", 1);

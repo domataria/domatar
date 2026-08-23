@@ -571,10 +571,11 @@ This PART is the reference Java / MySQL 8 store. Other realisations
 may persist objects, accounts, links, and hosts differently; the
 protocol in PART 2 does not require these tables.
 
-Schema is materialised by the init scripts under `mySQL/` and
-is loaded automatically via `/docker-entrypoint-initdb.d` on first DB
-startup in the local simulation. The schema is identical on every
-provider; per-row data is partitioned by hstId.
+Schema is materialised by `mySQL/schema.sql` and is loaded
+automatically via `/docker-entrypoint-initdb.d` on first DB startup.
+The schema is tables only; `/Setup` creates the provider account and
+hosts. The schema is identical on every provider; per-row data is
+partitioned by hstId.
 
 Tables, with the columns that matter to the runtime:
 
@@ -1347,9 +1348,8 @@ The Maven multi-module build at the repo root:
                                 target/domatar/WEB-INF/apps/ at
                                 the package phase.
 
-  mySQL/                        SQL init scripts loaded by both
-                                local-simulation MySQL containers
-                                on first boot.
+  mySQL/                        `schema.sql` loaded by MySQL
+                                containers on first boot.
 
   tomcat/                       Tomcat configuration (context.xml)
                                 shared between the simulation
@@ -1443,8 +1443,8 @@ Services:
   nginx         Reverse proxy on host port 80 over domatar_net.
 
 After the first /Setup, the directory contains host records for
-both providers, all central hosts, the domatar- sub-host for each
-provider account, plus per-user sub-hosts for the seed accounts.
+both providers, all central hosts, and the domatar- sub-host for
+each provider account. Additional people sign up through Login.
 A message from a handler on prv1 to a DomId on `quippin-micha@quippin`
 is routed: tomcat1 (DOMATAR_HSTID=prv1) looks up the destination,
 sees PrvId=prv2, and HTTP-POSTs to `tomcat2:8080/domatar/Msg` over
@@ -1495,10 +1495,10 @@ read-only.
 
 Step 3b: deploy to a real server.
     1. Provision Linux + JDK 17 + Tomcat 10.1 + MySQL 8.
-    2. Create database `domatar` and load the init scripts under
-       mySQL/. On a node that is NOT the directory, you can leave
-       the `hst` table empty; the cache populates from the
-       directory at first use.
+    2. Create database `domatar` and load `mySQL/schema.sql`. On a
+       node that is NOT the directory, you can leave the `hst`
+       table empty; the cache populates from the directory at
+       first use.
     3. Resolve the JDBC hostname `db` (the literal in web.xml) to
        the local MySQL (via /etc/hosts, Docker DNS, or set
        DOMATAR_DB_URL).

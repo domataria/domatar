@@ -13,13 +13,12 @@ import com.domatar.install.DesktopReplica;
 import com.domatar.install.DesktopSyncCutover;
 import com.domatar.install.DesktopTombstonePurge;
 import com.domatar.install.NavigatorReplica;
+import com.domatar.install.NavAppEntry;
 import com.domatar.install.OwnIdsMigration;
 import com.domatar.install.OwnIdsRebind;
 import com.domatar.install.SecurityMigration;
 import com.domatar.install.MembershipMigrator;
 import com.domatar.install.UserSubstrateInstall;
-import com.domatar.db.LnkDb;
-import com.domatar.util.Lnk;
 import com.domatar.util.DomId;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletContext;
@@ -444,12 +443,8 @@ public abstract class SetupServlet extends HttpServlet
         final DomId rootId    = new DomId(navRepId,     "navigator", actId, "root");
         final DomId appDeskId = new DomId(desktopRepId, "desktop",   actId, "app-desktop");
 
-        if (LnkDb.getLnk(rootId, appDeskId, "navigator", "app") == null)
-          LnkDb.addLnk(new Lnk(rootId, appDeskId,
-                                "domatar", "app",
-                                "Desktop", "Your home screen",
-                                "navigator", "app",
-                                null, 3));
+        NavAppEntry.ensureRootLnk(rootId, appDeskId, "desktop",
+            "Desktop", "Your home screen", 3);
 
         res.setStatus(HttpServletResponse.SC_OK);
         out.println("ensure-desktop-replica ok actId=" + actId

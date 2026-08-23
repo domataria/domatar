@@ -66,6 +66,7 @@ public final class UserSubstrateInstall
 
     ObjDb.addObjIfMissing(appDomatar, "domatar", "app",
         "Domatar", "Account substrate");
+    ObjDb.reclassObj(appDomatar, "domatar", "app");
 
     ObjDb.addObjIfMissing(userApps, "domatar", "userApps",
         "User apps", "Installed-app registry");
@@ -147,6 +148,7 @@ public final class UserSubstrateInstall
 
     ObjDb.addObjIfMissing(appDomatar, "domatar", "app",
         "Domatar", "Account substrate");
+    ObjDb.reclassObj(appDomatar, "domatar", "app");
 
     ObjDb.addObjIfMissing(userApps, "domatar", "userApps",
         "User apps", "Installed-app registry");

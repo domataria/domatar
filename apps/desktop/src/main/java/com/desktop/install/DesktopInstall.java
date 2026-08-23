@@ -4,12 +4,11 @@
 
 package com.desktop.install;
 
-import com.domatar.db.LnkDb;
 import com.domatar.install.AppInstall;
 import com.domatar.install.CatalogInstall;
 import com.domatar.install.DesktopReplica;
+import com.domatar.install.NavAppEntry;
 import com.domatar.install.NavigatorReplica;
-import com.domatar.util.Lnk;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
@@ -60,12 +59,7 @@ public class DesktopInstall implements AppInstall
     final DomId rootId    = new DomId(navRepId,     "navigator", actId, "root");
     final DomId appDeskId = new DomId(desktopRepId, "desktop",   actId, "app-desktop");
 
-    // root -> app-desktop (seqNum 3: Desktop third)
-    if (LnkDb.getLnk(rootId, appDeskId, "navigator", "app") == null)
-      LnkDb.addLnk(new Lnk(rootId, appDeskId,
-                            "domatar", "app",
-                            "Desktop", "Your home screen",
-                            "navigator", "app",
-                            null, 3));
+    NavAppEntry.ensureRootLnk(rootId, appDeskId, "desktop",
+        "Desktop", "Your home screen", 3);
   }
 }

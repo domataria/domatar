@@ -298,29 +298,17 @@ Routed to by ImplMap entry (desktop, apps) -> AppsImpl.
 
 ## PART 7 — POST-LOGIN REDIRECT
 
-Today the post-login flow is:
-
-  remoteLogin.html  -- on success -- postMessage("GoTo", "quips")
-                                                          --> login.html
-  login.html        -- if value is in allowedRedirects --> location.replace(value)
-
-  login.html line 59:
-    var allowedRedirects = ["quips"];
-
-The Desktop changes the landing target. After a successful login the
-browser must end up on /<context>/desktop, not /<context>/quips. Two
-edits, both in src/main/webapp:
-
-  remoteLogin.html : change the GoTo value the iframe posts after a
-                     successful login from "quips" to "desktop".
-  login.html       : change the allowedRedirects whitelist from
-                     ["quips"] to ["desktop"]. (Adding "desktop"
-                     while leaving "quips" in place is fine for a
-                     transition window.)
+After a successful login the iframe posts `GoTo` with
+`/domatar/desktop/desktop.html`. `login.html` allows that path (and
+the context-stripped `/desktop/desktop.html` used behind nginx) and
+`location.replace`s a URL that keeps the WAR context when the
+browser is already under `/domatar/`. Direct Tomcat
+(`http://localhost:9080/domatar/...`) therefore lands on
+`/domatar/desktop/desktop.html`; the nginx front door that strips
+`/domatar` lands on `/desktop/desktop.html`.
 
 The whitelist exists to stop a compromised iframe from turning the
-login page into an open redirector; it stays a whitelist, just with
-a different sole entry. Nothing else in the auth flow changes.
+login page into an open redirector.
 
 ## PART 8 — INITIAL APP CATALOG
 

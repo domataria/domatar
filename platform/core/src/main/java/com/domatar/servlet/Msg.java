@@ -27,6 +27,7 @@ import com.domatar.db.DbConnection;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
 import com.domatar.install.DirectoryLookup;
+import com.domatar.install.OfferedHostsInstall;
 import com.domatar.util.Base64Encoder;
 import com.domatar.util.Hst;
 import com.domatar.util.JsonMap;
@@ -67,6 +68,15 @@ public class Msg extends HttpServlet
     dbConnection = (dbOverride != null) ? dbOverride : servletContext.getInitParameter("DbConnection");
 
     DbConnection.setConnectStr(dbConnection);
+
+    try
+    {
+      OfferedHostsInstall.ensure();
+    }
+    catch (DomatarException e)
+    {
+      System.out.println("WARN: OfferedHostsInstall.ensure failed: " + e);
+    }
   }
 
   @Override

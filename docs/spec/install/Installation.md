@@ -259,11 +259,13 @@ once per server by the system administrator.
   Step 1. Edit `provider.config.txt` (and optionally
           `default-apps-config.txt`) with site-specific values.
 
-  Step 2. Provision the MySQL database `domatar`. Load the schema and
-          seed scripts under `mySQL/` from the source distribution. On
-          a node that is NOT the directory, the `hst` table can be
-          left empty — the local cache will populate from the
-          directory at first dispatch.
+  Step 2. Provision the MySQL database `domatar`. Load
+          `mySQL/schema.sql` from the source distribution (Compose
+          bind-mounts it into `/docker-entrypoint-initdb.d` on first
+          DB boot). The file creates tables only; `/Setup` creates
+          the provider account and hosts. On a node that is NOT the
+          directory, the `hst` table can be left empty — the local
+          cache will populate from the directory at first dispatch.
 
   Step 3. Drop `domatar.war` into Tomcat's `webapps/` (or bind-mount
           the exploded `target/domatar/` directory, as
@@ -1107,11 +1109,14 @@ why.
   R10.3.d  Each provider's `hst` table needs `quippin`, `login`, etc.
            rows for the per-app central hosts.
 
-           Why it's coupled: the reference simulation seeds these
-           via SQL init scripts (`mySQL/`) when the DB containers
-           first boot. Adding a new central host today requires
-           either an SQL edit or a `RegisterHst` call against the
-           directory after deploy.
+           Why it's coupled: `/Setup` and `OfferedHostsInstall`
+           (env `DOMATAR_OFFERED_HOSTS`) upsert this node's offered
+           central-host names into `hst`. The two-provider sim also
+           loads `deploy/mysql/02-central-hosts.sql` so both
+           databases know the full topology. Adding a new central
+           host still requires a `RegisterHst` / `UpdateHst` call
+           against the directory (or an equivalent install step)
+           after deploy.
 
            Direction ([Domatar](../Domatar.md) PART 4.2): make RegisterHst
            a first-class protocol operation that each app's

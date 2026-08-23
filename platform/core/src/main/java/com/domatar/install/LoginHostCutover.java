@@ -115,8 +115,8 @@ public final class LoginHostCutover
     final DomId appLoginRep  = new DomId(loginRepId, "login",     actId, "app-login");
     final DomId membershipId = new DomId(loginRepId, "login",     actId, "membership");
 
-    // 1. Ensure app-login on replica + link to membership.
-    ObjDb.addObjIfMissing(appLoginRep, "domatar", "app", "Login",
+    // 1. Ensure app-login on replica (class login/app) + link to membership.
+    NavAppEntry.ensureObj(appLoginRep, "login", "Login",
         "Manage your Domatar identity");
 
     if (LnkDb.getLnk(appLoginRep, membershipId, "navigator", "container") == null)
@@ -158,12 +158,8 @@ public final class LoginHostCutover
         LnkDb.deleteLnks(rootId, existing.lnkDomId, "navigator", "app", null, null);
       }
 
-      if (LnkDb.getLnk(rootId, appLoginRep, "navigator", "app") == null)
-        LnkDb.addLnk(new Lnk(rootId, appLoginRep,
-                              "domatar", "app",
-                              "Login", "Manage your Domatar identity",
-                              "navigator", "app",
-                              null, 2));
+      NavAppEntry.ensureRootLnk(rootId, appLoginRep, "login",
+          "Login", "Manage your Domatar identity", 2);
     }
 
     // 3. DELETE entire old login-<actId> host (lnks first, then objs, then hst).

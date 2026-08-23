@@ -657,7 +657,8 @@ usrId; actId is never shown.
 11.6 Login form (post-login redirect)
 
   login.html / remoteLogin.html send the browser to Desktop after
-  sign-in ([Desktop](Desktop.md) PART 7).
+  sign-in, keeping the `/domatar` WAR context when present
+  ([Desktop](Desktop.md) PART 7).
 
 11.7 actId must not leak in the UI
 

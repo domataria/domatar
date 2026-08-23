@@ -79,6 +79,65 @@ public class LnkDb
     }
   }
 
+  /**
+   * Rewrite LnkClsAppId / LnkClsId on an existing edge. No-op when the
+   * row is missing. Used so install can repair {@code (domatar, app)}
+   * root links to {@code (<appId>, app)} without deleting the lnk.
+   */
+  public static void reclassLnk(final DomId domId,
+                                final DomId lnkId,
+                                final String tagAppId,
+                                final String tag,
+                                final String newClsAppId,
+                                final String newClsId) throws DomatarException
+  {
+    DbConnection conn = null;
+    PreparedStatement pstmt = null;
+
+    try
+    {
+      conn = new DbConnection(LnkDb.class, "reclassLnk");
+      pstmt = conn.prepareStatement(
+          "update lnk set LnkClsAppId=?, LnkClsId=? where "
+              + "HstId=? and AppId=? and ActId=? and ObjId=? and "
+              + "LnkHstId=? and LnkAppId=? and LnkActId=? and LnkObjId=? and "
+              + "TagAppId=? and Tag=?");
+
+      pstmt.setString(1, newClsAppId);
+      pstmt.setString(2, newClsId);
+      pstmt.setString(3, domId.hstId);
+      pstmt.setString(4, domId.appId);
+      pstmt.setString(5, domId.actId);
+      pstmt.setString(6, domId.objId);
+      pstmt.setString(7, lnkId.hstId);
+      pstmt.setString(8, lnkId.appId);
+      pstmt.setString(9, lnkId.actId);
+      pstmt.setString(10, lnkId.objId);
+      pstmt.setString(11, tagAppId);
+      pstmt.setString(12, tag);
+      pstmt.executeUpdate();
+    }
+    catch (SQLException e)
+    {
+      throw new DomatarException(e);
+    }
+    finally
+    {
+      try
+      {
+        if (pstmt != null)
+          pstmt.close();
+
+        if (conn != null)
+          conn.close();
+      }
+      catch (SQLException e)
+      {
+        throw new DomatarException(e);
+      }
+    }
+  }
+
   public static Lnk getLnk(DomId domId,
                            DomId lnkId,
                            String tagAppId,

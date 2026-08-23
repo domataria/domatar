@@ -163,9 +163,25 @@
 
     AssetPaths.prototype.url = function (appId, assetPath)
     {
-        var origin = sameHost(this.origin) ? "" : this.origin;
+        var origin = this.origin;
+        var ctx = this.contextPath;
+        var path = (global.location && global.location.pathname) || "";
+        var onWar = path === WIRE_CONTEXT
+            || path.indexOf(WIRE_CONTEXT + "/") === 0;
 
-        return url(origin, this.contextPath, appId, assetPath);
+        if (onWar)
+        {
+            // Direct Tomcat / WAR URL (e.g. localhost:9081/domatar/...).
+            // Open may still emit PublicDomain + empty context for nginx;
+            // that host is not this page, so class icons would 404 and
+            // fall back to the default hollow-circle glyph.
+            origin = "";
+            ctx = WIRE_CONTEXT;
+        }
+        else if (sameHost(origin))
+            origin = "";
+
+        return url(origin, ctx, appId, assetPath);
     };
 
     AssetPaths.prototype.launcher = function (appId)

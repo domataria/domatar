@@ -206,17 +206,9 @@ public class DomatarProviderInstall
 
     // Step 9 — app-domatar obj on domatar-<prvActId>.
     final DomId appDomatarId = new DomId(ssHstId, "domatar", prvActId, "app-domatar");
-    ObjDb.addObjIfMissing(appDomatarId,
-        "domatar", "app", "Domatar", "Platform infrastructure for this provider");
-
-    // Step 10 — root → app-domatar link (seqNum 10: after all user-facing apps).
     final DomId rootId = new DomId(DomId.subHstId("navigator", prvActId, prvId), "navigator", prvActId, "root");
-    if (LnkDb.getLnk(rootId, appDomatarId, "navigator", "app") == null)
-      LnkDb.addLnk(new Lnk(rootId, appDomatarId,
-                            "domatar", "app",
-                            "Domatar", "Platform infrastructure for this provider",
-                            "navigator", "app",
-                            null, 10));
+    NavAppEntry.ensureRootLnk(rootId, appDomatarId, "domatar",
+        "Domatar", "Platform infrastructure for this provider", 10);
 
     // Step 11 — Hosts container.
     final DomId hostsId = new DomId(ssHstId, "domatar", prvActId, "hosts");
@@ -268,6 +260,8 @@ public class DomatarProviderInstall
     // via loopback HTTP after this method returns (onSetupComplete).
     CatalogInstall.ensureAppCatalog(prvId, domain);
     CatalogInstall.registerInCatalog(prvId, "domatar");
+
+    OfferedHostsInstall.ensure();
 
     // Step 15 (Phase 3) — Publish this provider's operational public key into
     // the directory for the provider's own routable hstId.  The key is stored

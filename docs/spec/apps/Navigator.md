@@ -493,6 +493,10 @@ metadata). Icons live in each app JAR and are served at:
 
   /domatar/<ClsAppId>/icons/cls/<ClsId>.svg
 
+Installed-app rows are class `(<appId>, app)`. That app's
+`cls/app.svg` is the identity tile (same art as the launcher).
+Navigator does not special-case ClsId `app`.
+
 (see [Icons](../platform/Icons.md) PART 3 / 5). Unknown classes fall back to
 `/domatar/domatar/icons/cls/default/obj.svg`. New apps add SVG
 files under their own `assets/icons/cls/`; Navigator needs no code
@@ -508,12 +512,17 @@ Open GetLnks responses include:
 Navigator resolution ([Icons](../platform/Icons.md) PART 7.3):
 
   1. Absolute IconUrl on the node if present (deferred; not used yet).
-  2. Else if AssetOrigin's host differs from the page origin, use
+  2. Else if the page URL is under `/domatar/` (direct WAR / Tomcat),
+     use the same-origin WAR path
+     `/domatar/<ClsAppId>/icons/cls/<ClsId>.svg`. Open's PublicDomain
+     AssetOrigin is ignored here so localhost:9080/9081 still loads
+     icons when the hosts file does not map the front-door name.
+  3. Else if AssetOrigin's host differs from the page origin, use
      AssetOrigin + path, where path is
      `/domatar/<ClsAppId>/icons/cls/<ClsId>.svg` unless
      AssetContextPath is `""` (then strip `/domatar`).
-  3. Else same-origin relative path.
-  4. onerror → default object glyph.
+  4. Else same-origin relative path.
+  5. onerror → default object glyph.
 
 Children inherit the parent's AssetOrigin / AssetContextPath until
 their own Open supplies a different one (cross-host edge).

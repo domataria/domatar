@@ -61,6 +61,7 @@ apps/<appId>/     application JARs (navigator, login, desktop, …)
 docs/             Why-Domatar.md, Specification.md
 docs/spec/        living specifications (Markdown)
 deploy/           Docker Compose + Tomcat config
+mySQL/            schema.sql (loaded on first MySQL boot)
 ```
 
 Maven is one parent POM (`com.domatar:domatar`) so a change can touch

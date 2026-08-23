@@ -122,15 +122,9 @@ public final class NavRootReconcile
 
       final DomId entry = entryDomId(actId, appId, appHstId);
 
-      if (LnkDb.getLnk(rootId, entry, "navigator", "app") != null)
-        continue;
-
-      LnkDb.addLnk(new Lnk(rootId, entry,
-          appId, "app",
-          displayName, "Installed application",
-          "navigator", "app",
-          null, seq));
-      seq++;
+      if (NavAppEntry.repairRootLnk(rootId, entry, appId, displayName,
+          "Installed application", seq))
+        seq++;
     }
   }
 }

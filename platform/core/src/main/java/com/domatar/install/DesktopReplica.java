@@ -50,7 +50,7 @@ public final class DesktopReplica
         "Apps", "Installed applications");
 
     // Intrinsic Desktop tile — seeded locally per provider (PART 4.4a).
-    ObjDb.addObjIfMissing(appDeskId, "domatar", "app",
+    ObjDb.addObjIfMissing(appDeskId, "desktop", "app",
         "Desktop", "Your home screen");
     ObjDb.reclassObj(appDeskId, "desktop", "app");
 

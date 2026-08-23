@@ -76,7 +76,7 @@ import com.domatar.install.AssetPaths;
  * first wins).
  *
  * Environment variable aliases (override config file):
- *   DOMATAR_HSTID, DOMATAR_PRVID, DOMATAR_DOMAIN, DOMATAR_PUBLIC_DOMAIN,
+ *   DOMATAR_HSTID, DOMATAR_PRVID, DOMATAR_DOMAIN, DOMATAR_OFFERED_HOSTS, DOMATAR_PUBLIC_DOMAIN,
  *   DOMATAR_ASSET_CONTEXT_PATH, DOMATAR_DB_URL,
  *   DOMATAR_DEFAULT_APPS, DOMATAR_DEFAULT_APPS_CONFIG, DOMATAR_ADMIN_PASSWORD,
  *   DOMATAR_DIRECTORY, DOMATAR_PRV_ACTID, DOMATAR_MASTER_KEY,
@@ -126,6 +126,21 @@ public class DomatarConfig
   public static String getDomain()
   {
     return resolve("DOMATAR_DOMAIN", "Domain", null);
+  }
+
+  /**
+   * Comma-separated central host ids this node offers (e.g.
+   * {@code quippin,login,navigator,aiagent}). Each is upserted into
+   * {@code hst} with this node's Domain and PrvId. Null/empty means none.
+   */
+  public static String getOfferedHosts()
+  {
+    final String v = resolve("DOMATAR_OFFERED_HOSTS", "OfferedHosts", null);
+
+    if (v == null || v.trim().isEmpty())
+      return null;
+
+    return v.trim();
   }
 
   /**

@@ -137,12 +137,13 @@
         .tree-expander:hover { color: var(--text); }
 
         .tree-icon {
-            width: 14px;
-            height: 14px;
-            margin: 0 4px 0 2px;
+            width: 18px;
+            height: 18px;
+            margin: 0 6px 0 2px;
             flex-shrink: 0;
             vertical-align: middle;
-            opacity: .85;
+            border-radius: 4px;
+            opacity: .95;
         }
 
         .tree-label {
@@ -443,7 +444,8 @@
         $li.children(".tree-row").find(".tree-icon")
             .off("error")
             .on("error", function() { iconFallback(this); })
-            .attr("src", classIconUrl(clsAppId, clsId, d.assetOrigin, d.assetContextPath));
+            .attr("src", classIconUrl(clsAppId, clsId,
+                d.assetOrigin, d.assetContextPath));
 
         // Render children from the lnks list.
         var lnks     = attrs.Lnks || [];

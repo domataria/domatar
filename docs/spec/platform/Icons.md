@@ -74,9 +74,13 @@ launcher URLs are in the live system (PART 7–11).
     <appId>/assets/icons/app.svg           launcher icon (REQUIRED for
                                            any app that appears on Desktop
                                            or in App Store grids)
+    <appId>/assets/icons/cls/app.svg       identity tile for class
+                                           `(<appId>, app)` (REQUIRED for
+                                           any app that appears in Navigator;
+                                           same art as the launcher)
     <appId>/assets/icons/cls/<clsId>.svg   per-class icon (one file per
-                                           ClsId the app wants a distinct
-                                           glyph for)
+                                           other ClsId the app wants a
+                                           distinct glyph for)
     <appId>/assets/icons/<name>.svg        optional concept icons owned by
                                            that app (e.g. platform
                                            placeholders)
@@ -238,9 +242,13 @@ launcher URLs are in the live system (PART 7–11).
   For each tree node, JS builds a class icon URL from (ClsAppId, ClsId)
   via `classIconUrl`, then `<img onerror=fallback>`.
 
-  Local form today:
+  Local form:
 
     /domatar/<ClsAppId>/icons/cls/<ClsId>.svg
+
+  App objects (and their root lnks) are class `(<appId>, app)`, so that
+  path is `/domatar/<appId>/icons/cls/app.svg`. That file is the app's
+  identity tile (same art as `icons/app.svg`).
 
   On any load failure → Default icon (PART 5.1). Fallback must run only
   once (avoid loops).
@@ -304,15 +312,20 @@ launcher URLs are in the live system (PART 7–11).
   Resolution order for each tree node (implement in navigator.html):
 
     1. If the node carries an absolute `IconUrl` (http/https), use it.
-    2. Else if the node (or its Open response context) carries
-       `AssetOrigin` (`{scheme}://{browserDomain}`), use
-         AssetOrigin + path
-       where path is `/domatar/<ClsAppId>/icons/cls/<ClsId>.svg`
-       unless `AssetContextPath` is `""` (nginx front door), in which
-       case strip `/domatar` from the path.
-    3. Else use the relative class path (PART 5.1) — same-origin /
-       local-JAR case.
-    4. onerror → Default icon.
+    2. Else if the page is under `/domatar/`, use the WAR-relative
+       class path (PART 5.1 / 6.2)
+       `/domatar/<ClsAppId>/icons/cls/<ClsId>.svg`. This covers
+       localhost Tomcat when Open still names a PublicDomain the
+       browser is not using.
+    3. Else if the node (or its Open response context) carries
+       `AssetOrigin` (`{scheme}://{browserDomain}`) whose host differs
+       from the page, use AssetOrigin + path, where path is
+       `/domatar/<ClsAppId>/icons/cls/<ClsId>.svg` unless
+       `AssetContextPath` is `""` (nginx front door), in which case
+       strip `/domatar` from the path.
+    4. Else use the relative class path (PART 5.1) — same-origin /
+       local-JAR / matching front door.
+    5. onerror → Default icon.
 
   How `AssetOrigin` / `IconUrl` is supplied (server side):
 
@@ -334,10 +347,11 @@ launcher URLs are in the live system (PART 7–11).
   `IconUrl`. If both are present, IconUrl wins (step 1).
 
   KD7: the answering host always emits AssetOrigin when a browser
-  Domain is set. The Navigator client compares AssetOrigin's host to
-  `window.location.host` and keeps a relative class URL when they
-  match (same-provider / reference distribution); otherwise it builds
-  an absolute URL (honouring AssetContextPath).
+  Domain is set. `asset-paths.js` then: if the page path is under
+  `/domatar/`, uses same-origin WAR paths (localhost Tomcat); else if
+  AssetOrigin's host equals `window.location.host`, keeps a relative
+  URL (nginx front door); otherwise builds an absolute URL (honouring
+  AssetContextPath).
 
 7.4  App Store grids (cross-provider listings)
 

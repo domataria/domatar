@@ -313,12 +313,8 @@ public final class DesktopSyncCutover
         LnkDb.deleteLnks(rootId, bareAppDesk, "navigator", "app", null, null);
     }
 
-    if (LnkDb.getLnk(rootId, appDeskId, "navigator", "app") == null)
-      LnkDb.addLnk(new Lnk(rootId, appDeskId,
-                            "domatar", "app",
-                            "Desktop", "Your home screen",
-                            "navigator", "app",
-                            null, 3));
+    NavAppEntry.ensureRootLnk(rootId, appDeskId, "desktop",
+        "Desktop", "Your home screen", 3);
   }
 
   private static void deleteBareHost(final String hstId) throws DomatarException

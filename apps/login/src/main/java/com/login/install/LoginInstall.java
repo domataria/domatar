@@ -5,11 +5,11 @@
 package com.login.install;
 
 import com.domatar.db.LnkDb;
-import com.domatar.db.ObjDb;
 import com.domatar.install.AppInstall;
 import com.domatar.install.CatalogInstall;
 import com.domatar.install.ClsInstall;
 import com.domatar.install.MembershipReplica;
+import com.domatar.install.NavAppEntry;
 import com.domatar.install.SrvInstall;
 import com.domatar.util.Lnk;
 import com.domatar.util.DomId;
@@ -62,17 +62,9 @@ public class LoginInstall implements AppInstall
     final DomId appLoginId   = new DomId(loginRepId, "login",     actId, "app-login");
     final DomId membershipId = new DomId(loginRepId, "login",     actId, "membership");
 
-    // 2. app-login tile ON the replica (K11).
-    ObjDb.addObjIfMissing(appLoginId, "domatar", "app", "Login",
-        "Manage your Domatar identity");
-
-    // 3. root(navigator) -> app-login@replica (seqNum 2: Login second).
-    if (LnkDb.getLnk(rootId, appLoginId, "navigator", "app") == null)
-      LnkDb.addLnk(new Lnk(rootId, appLoginId,
-                            "domatar", "app",
-                            "Login", "Manage your Domatar identity",
-                            "navigator", "app",
-                            null, 2));
+    // 2–3. app-login on the replica, class (login, app), linked from root.
+    NavAppEntry.ensureRootLnk(rootId, appLoginId, "login",
+        "Login", "Manage your Domatar identity", 2);
 
     // 4. app-login -> membership (seqNum 1).
     if (LnkDb.getLnk(appLoginId, membershipId, "navigator", "container") == null)

@@ -63,8 +63,21 @@ var trustedLoginOrigins = [
 // against /domatar/quips), but the iframe defaults to "desktop".
 var allowedRedirects = [
   "/desktop/desktop.html",
-  "/quippin/news.html"
+  "/domatar/desktop/desktop.html",
+  "/quippin/news.html",
+  "/domatar/quippin/news.html"
 ];
+
+function platformHref(appPath)
+{
+  var rest = appPath.indexOf("/domatar/") === 0
+      ? appPath.substring("/domatar".length)
+      : appPath;
+  var prefix = window.location.pathname.indexOf("/domatar/") === 0
+      ? "/domatar"
+      : "";
+  return prefix + rest;
+}
 
 // Listen for login events from the login iframe.
 //
@@ -109,7 +122,7 @@ eventer(messageEvent, function(e)
     // 3) Redirect target must be one we've pre-approved.
     if (allowedRedirects.indexOf(msg.value) !== -1)
     {
-      location.replace(msg.value);
+      location.replace(platformHref(msg.value));
     }
   }
 }, false);
