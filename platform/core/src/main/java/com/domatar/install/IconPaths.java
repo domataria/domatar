@@ -68,17 +68,45 @@ public final class IconPaths
   }
 
   public static String forInstall(final boolean remote, final String scheme,
+                                  final String appUrl,
+                                  final String browserOrigin,
                                   final String publicDomain,
                                   final String wireDomain, final String appId)
   {
-    return AssetPaths.forInstall(remote, scheme, publicDomain, wireDomain,
+    if (!remote && AppUrls.isBlank(appUrl))
+      return launcher(appId);
+
+    final String base = AppUrls.resolve(appUrl, scheme, browserOrigin,
+        publicDomain, wireDomain);
+
+    if (base == null)
+    {
+      if (!remote)
+        return launcher(appId);
+
+      if (AppUrls.isBrowserReachable(publicDomain)
+          || AppUrls.isBrowserReachable(wireDomain))
+        return AssetPaths.forInstall(remote, scheme, publicDomain, wireDomain,
+            appId);
+
+      return launcher(appId);
+    }
+
+    return AppUrls.iconPath(base, appId);
+  }
+
+  public static String forInstall(final boolean remote, final String scheme,
+                                  final String publicDomain,
+                                  final String wireDomain, final String appId)
+  {
+    return forInstall(remote, scheme, null, null, publicDomain, wireDomain,
         appId);
   }
 
   public static String forInstall(final boolean remote, final String scheme,
                                   final String domain, final String appId)
   {
-    return AssetPaths.forInstall(remote, scheme, domain, appId);
+    return forInstall(remote, scheme, domain, domain, appId);
   }
 
   public static String assetOrigin(final String scheme, final String domain)

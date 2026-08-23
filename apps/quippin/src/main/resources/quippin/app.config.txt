@@ -2,6 +2,7 @@ AppId=quippin
 AppName=Quippin
 AppDesc=Microblogging and social feed
 Version=1.0
+LaunchPage=news.html
 DependsOn=navigator,login,desktop
 # No provider-level hosts currently. A per-provider aggregation host
 # (quippin~{PrvId}) will be added when news-feed optimisation is implemented.

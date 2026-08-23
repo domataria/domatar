@@ -4,6 +4,10 @@
 
 package com.domatar.install;
 
+import com.domatar.app.App;
+import com.domatar.app.AppRegistry;
+import com.domatar.core.AppConfig;
+
 /**
  * App Store / Desktop launch URL helpers (Spec-AppStore KD8).
  */
@@ -11,13 +15,41 @@ public final class LaunchPaths
 {
   private LaunchPaths() {}
 
-  /** Relative precursor path: {@code /domatar/<appId>/<appId>.html}. */
+  /**
+   * Launcher HTML filename from {@code app.config.txt LaunchPage},
+   * else {@code <appId>.html}.
+   */
+  public static String launchPage(final String appId)
+  {
+    if (appId == null || appId.isEmpty())
+      return "";
+
+    ClassLoader cl = Thread.currentThread().getContextClassLoader();
+    final App app = AppRegistry.get(appId);
+
+    if (app != null && app.classLoader != null)
+      cl = app.classLoader;
+
+    final AppConfig cfg = AppConfig.load(appId, cl);
+
+    if (cfg != null && cfg.getLaunchPage() != null)
+      return cfg.getLaunchPage();
+
+    // Quippin's home feed is news.html (no quippin.html asset). Home
+    // providers often do not load the offering JAR, so config is absent.
+    if ("quippin".equals(appId))
+      return "news.html";
+
+    return appId + ".html";
+  }
+
+  /** Relative precursor path: {@code /domatar/<appId>/<LaunchPage>}. */
   public static String relative(final String appId)
   {
     if (appId == null || appId.isEmpty())
       return AssetPaths.WIRE_CONTEXT + "/";
 
-    return AssetPaths.url(null, AssetPaths.WIRE_CONTEXT, appId, appId + ".html");
+    return AppUrls.launchPath(null, appId, launchPage(appId));
   }
 
   /**
@@ -71,16 +103,45 @@ public final class LaunchPaths
   }
 
   /**
+   * Relative for same-provider installs with no AppUrl; otherwise
+   * {@link AppUrls#resolve} then {@link AppUrls#launchPath}.
+   */
+  public static String forInstall(final boolean remote, final String scheme,
+                                  final String appUrl,
+                                  final String browserOrigin,
+                                  final String publicDomain,
+                                  final String wireDomain, final String appId)
+  {
+    if (!remote && AppUrls.isBlank(appUrl))
+      return relative(appId);
+
+    final String base = AppUrls.resolve(appUrl, scheme, browserOrigin,
+        publicDomain, wireDomain);
+
+    if (base == null)
+    {
+      if (!remote)
+        return relative(appId);
+
+      if (AppUrls.isBrowserReachable(publicDomain)
+          || AppUrls.isBrowserReachable(wireDomain))
+        return browserAbsolute(scheme, publicDomain, wireDomain, appId);
+
+      return relative(appId);
+    }
+
+    return AppUrls.launchPath(base, appId, launchPage(appId));
+  }
+
+  /**
    * Relative for same-provider installs; absolute browser URL when remote.
    */
   public static String forInstall(final boolean remote, final String scheme,
                                   final String publicDomain,
                                   final String wireDomain, final String appId)
   {
-    if (!remote)
-      return relative(appId);
-
-    return browserAbsolute(scheme, publicDomain, wireDomain, appId);
+    return forInstall(remote, scheme, null, null, publicDomain, wireDomain,
+        appId);
   }
 
   /**

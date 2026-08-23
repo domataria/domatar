@@ -7,8 +7,13 @@ package com.domatar.objimpl;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.domatar.act.MarketplaceInstall;
 import com.domatar.core.Auth;
 import com.domatar.core.Context;
+import com.domatar.core.DomatarConfig;
+import com.domatar.install.AppUrls;
+import com.domatar.install.IconPaths;
+import com.domatar.install.LaunchPaths;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
 import com.domatar.util.Base64Encoder;
@@ -56,6 +61,8 @@ public class UserAppsImpl extends ObjImpl
       reconcileUserApps(opr, inMsg, outMsg);
     else if ("InstallUserApp".equals(opr))
       installUserApp(opr, inMsg, outMsg);
+    else if ("SetAppUrl".equals(opr))
+      setAppUrl(opr, inMsg, outMsg);
     else if ("UninstallUserApp".equals(opr))
       uninstallUserApp(opr, inMsg, outMsg);
     else
@@ -92,14 +99,7 @@ public class UserAppsImpl extends ObjImpl
       final JsonMap entry = new JsonHashMap();
       final String version = a != null ? a.getAttr("Version") : null;
 
-      entry.put("AppId", extractAppId(row.domId.objId));
-      entry.put("DisplayName", a != null ? a.getAttr("DisplayName") : null);
-      entry.put("IconPath", a != null ? a.getAttr("IconPath") : null);
-      entry.put("LaunchPath", a != null ? a.getAttr("LaunchPath") : null);
-      entry.put("Position", a != null ? a.getAttr("Position") : null);
-      entry.put("Version", version);
-      putOptional(entry, a, "HostPrvId");
-      putOptional(entry, a, "AppHstId");
+      fillAppEntry(entry, row, false);
       apps.add(entry);
       maxVersion = maxVersion(maxVersion, version);
     }
@@ -137,15 +137,7 @@ public class UserAppsImpl extends ObjImpl
       final ObjAttrs a = row.attrs;
       final JsonMap entry = new JsonHashMap();
 
-      entry.put("AppId", extractAppId(row.domId.objId));
-      entry.put("DisplayName", a != null ? a.getAttr("DisplayName") : null);
-      entry.put("IconPath", a != null ? a.getAttr("IconPath") : null);
-      entry.put("LaunchPath", a != null ? a.getAttr("LaunchPath") : null);
-      entry.put("Position", a != null ? a.getAttr("Position") : null);
-      entry.put("Version", a != null ? a.getAttr("Version") : null);
-      entry.put("Tombstone", a != null ? a.getAttr("Tombstone") : "False");
-      putOptional(entry, a, "HostPrvId");
-      putOptional(entry, a, "AppHstId");
+      fillAppEntry(entry, row, true);
       apps.add(entry);
     }
 
@@ -246,6 +238,11 @@ public class UserAppsImpl extends ObjImpl
     rowAttrs.addAttr("Version", version);
     rowAttrs.addAttr("Tombstone", tombstone);
 
+    copyAttr(inMsg, rowAttrs, "AppUrl");
+    copyAttr(inMsg, rowAttrs, "HostBrowserOrigin");
+    copyAttr(inMsg, rowAttrs, "HostPublicDomain");
+    copyAttr(inMsg, rowAttrs, "HostDomain");
+
     if (hostPrvId != null && !hostPrvId.isEmpty())
       rowAttrs.addAttr("HostPrvId", hostPrvId);
 
@@ -267,6 +264,70 @@ public class UserAppsImpl extends ObjImpl
     final ObjAttrs outAttrs = new ObjAttrs();
 
     outAttrs.addAttr("Installed", "True");
+    outMsg.addResponseBody(opr, outAttrs);
+  }
+
+  private void setAppUrl(final String opr, final JsonMsg inMsg, final JsonMsg outMsg)
+      throws DomatarException
+  {
+    final DomId dst = inMsg.getDstId();
+    final String appId = inMsg.getAttr("AppId");
+    final String appUrl = inMsg.getAttr("AppUrl");
+
+    if (appId == null || appId.isEmpty())
+    {
+      outMsg.addError(opr, "Missing AppId");
+      return;
+    }
+
+    final DomId rowDomId = new DomId(dst.hstId, "domatar", dst.actId,
+        IdGen.createId("app", appId));
+    final Obj existing = ObjDb.getObj(rowDomId);
+
+    if (existing == null)
+    {
+      outMsg.addError(opr, "App not installed: " + appId);
+      return;
+    }
+
+    final String now = IdGen.getCurTimeBase64();
+    final ObjAttrs rowAttrs = existing.attrs != null ? existing.attrs : new ObjAttrs();
+    final String hostPrvId = rowAttrs.getAttr("HostPrvId");
+    final boolean remote = hostPrvId != null && !hostPrvId.isEmpty()
+        && !hostPrvId.equals(DomatarConfig.getPrvId());
+    final String scheme = DomatarConfig.getWireScheme();
+
+    if (appUrl == null || appUrl.isEmpty())
+    {
+      rowAttrs.addAttr("AppUrl", "");
+      rowAttrs.addAttr("IconPath", IconPaths.forInstall(remote, scheme, null,
+          rowAttrs.getAttr("HostBrowserOrigin"),
+          rowAttrs.getAttr("HostPublicDomain"),
+          rowAttrs.getAttr("HostDomain"), appId));
+      rowAttrs.addAttr("LaunchPath", LaunchPaths.forInstall(remote, scheme, null,
+          rowAttrs.getAttr("HostBrowserOrigin"),
+          rowAttrs.getAttr("HostPublicDomain"),
+          rowAttrs.getAttr("HostDomain"), appId));
+    }
+    else
+    {
+      final String base = AppUrls.trimSlash(AppUrls.withScheme(scheme, appUrl));
+
+      rowAttrs.addAttr("AppUrl", base != null ? base : appUrl);
+      rowAttrs.addAttr("IconPath", AppUrls.iconPath(base, appId));
+      rowAttrs.addAttr("LaunchPath",
+          AppUrls.launchPath(base, appId, LaunchPaths.launchPage(appId)));
+    }
+
+    rowAttrs.addAttr("Version", now);
+    ObjDb.modifyObj(existing.modify(null, null, null, null, null, rowAttrs));
+    bumpContainerVersion(dst, now);
+
+    final ObjAttrs outAttrs = new ObjAttrs();
+
+    outAttrs.addAttr("AppUrl", rowAttrs.getAttr("AppUrl"));
+    outAttrs.addAttr("IconPath", rowAttrs.getAttr("IconPath"));
+    outAttrs.addAttr("LaunchPath", rowAttrs.getAttr("LaunchPath"));
     outMsg.addResponseBody(opr, outAttrs);
   }
 
@@ -341,6 +402,11 @@ public class UserAppsImpl extends ObjImpl
     attrs.addAttr("Position", position);
     attrs.addAttr("Version", candidateVersion);
     attrs.addAttr("Tombstone", tombstone);
+
+    copyRowAttr(row, attrs, "AppUrl");
+    copyRowAttr(row, attrs, "HostBrowserOrigin");
+    copyRowAttr(row, attrs, "HostPublicDomain");
+    copyRowAttr(row, attrs, "HostDomain");
 
     final String hostPrvId = row.getString("HostPrvId");
     final String appHstId = row.getString("AppHstId");
@@ -461,6 +527,112 @@ public class UserAppsImpl extends ObjImpl
 
     if (val != null && !val.isEmpty())
       entry.put(key, val);
+  }
+
+  private static void fillAppEntry(final JsonMap entry, final Obj row,
+                                   final boolean includeTombstone)
+      throws DomatarException
+  {
+    final ObjAttrs a = row.attrs;
+    final String appId = extractAppId(row.domId.objId);
+
+    entry.put("AppId", appId);
+    entry.put("DisplayName", a != null ? a.getAttr("DisplayName") : null);
+
+    String iconPath = reachableOrRelative(
+        a != null ? a.getAttr("IconPath") : null);
+    String launchPath = reachableOrRelative(
+        a != null ? a.getAttr("LaunchPath") : null);
+    final String appUrlStoredRaw = a != null ? a.getAttr("AppUrl") : null;
+    final String appUrlStored =
+        (appUrlStoredRaw != null && AppUrls.isBrowserReachable(appUrlStoredRaw))
+            ? appUrlStoredRaw : null;
+    final String hostPrvId = a != null ? a.getAttr("HostPrvId") : null;
+    final boolean remote = hostPrvId != null && !hostPrvId.isEmpty()
+        && !hostPrvId.equals(DomatarConfig.getPrvId());
+    final String hostBrowserOrigin =
+        a != null ? a.getAttr("HostBrowserOrigin") : null;
+    final String hostPublicDomain =
+        a != null ? a.getAttr("HostPublicDomain") : null;
+    final String hostDomain = a != null ? a.getAttr("HostDomain") : null;
+    String base = AppUrls.resolve(appUrlStored,
+        DomatarConfig.getWireScheme(),
+        hostBrowserOrigin, hostPublicDomain, hostDomain);
+
+    if (base == null && remote && !AppUrls.isBlank(hostDomain))
+    {
+      final String fetched =
+          MarketplaceInstall.fetchOfferingBrowserOrigin(hostDomain);
+
+      if (fetched != null)
+        base = AppUrls.resolve(null, DomatarConfig.getWireScheme(),
+            fetched, hostPublicDomain, hostDomain);
+    }
+
+    final String launchPage = LaunchPaths.launchPage(appId);
+
+    if (base != null && (!AppUrls.isBlank(appUrlStored) || remote))
+    {
+      iconPath = AppUrls.iconPath(base, appId);
+      launchPath = AppUrls.launchPath(base, appId, launchPage);
+    }
+    else
+    {
+      if (iconPath == null)
+        iconPath = AppUrls.iconPath(null, appId);
+      if (launchPath == null)
+        launchPath = AppUrls.launchPath(null, appId, launchPage);
+    }
+
+    entry.put("IconPath", iconPath);
+    entry.put("LaunchPath", launchPath);
+
+    if (!AppUrls.isBlank(appUrlStored))
+      entry.put("AppUrl", appUrlStored);
+    else if (base != null && remote)
+      entry.put("AppUrl", base);
+
+    entry.put("Position", a != null ? a.getAttr("Position") : null);
+    entry.put("Version", a != null ? a.getAttr("Version") : null);
+
+    if (includeTombstone)
+      entry.put("Tombstone", a != null ? a.getAttr("Tombstone") : "False");
+
+    putOptional(entry, a, "HostPrvId");
+    putOptional(entry, a, "AppHstId");
+    putOptional(entry, a, "HostBrowserOrigin");
+    putOptional(entry, a, "HostPublicDomain");
+    putOptional(entry, a, "HostDomain");
+  }
+
+  private static void copyAttr(final JsonMsg inMsg, final ObjAttrs attrs,
+                               final String key) throws DomatarException
+  {
+    final String v = inMsg.getAttr(key);
+
+    if (v != null && !v.isEmpty())
+      attrs.addAttr(key, v);
+  }
+
+  private static void copyRowAttr(final JsonMap row, final ObjAttrs attrs,
+                                  final String key) throws DomatarException
+  {
+    final String v = row.getString(key);
+
+    if (v != null && !v.isEmpty())
+      attrs.addAttr(key, v);
+  }
+
+  /** Keep relative paths; drop Docker-only absolute URLs. */
+  private static String reachableOrRelative(final String path)
+  {
+    if (path == null || path.isEmpty())
+      return null;
+
+    if (path.startsWith("/"))
+      return path;
+
+    return AppUrls.isBrowserReachable(path) ? path : null;
   }
 
   private static String extractAppId(final String objId)

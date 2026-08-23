@@ -35,4 +35,21 @@ public class IconPathsInstallPolicyTest
         IconPaths.forInstall(true, "http",
             "domatar.avatarvia.com", "tomcat2:8080", "bookstore"));
   }
+
+  @Test
+  public void remoteInstallUsesBrowserOriginNotPublicDomain()
+  {
+    assertEquals("http://localhost:9080/domatar/quippin/icons/app.svg",
+        IconPaths.forInstall(true, "http", null, "http://localhost:9080",
+            "domatar.quippin.com", "quippin:8080", "quippin"));
+  }
+
+  @Test
+  public void remoteInstallExplicitAppUrl()
+  {
+    assertEquals("https://quippin.example.com/quippin/icons/app.svg",
+        IconPaths.forInstall(true, "http", "https://quippin.example.com",
+            "http://localhost:9080", "domatar.quippin.com", "quippin:8080",
+            "quippin"));
+  }
 }

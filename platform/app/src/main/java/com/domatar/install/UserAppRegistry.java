@@ -35,6 +35,27 @@ public final class UserAppRegistry
                                    final JsonMsg inMsg)
       throws DomatarException
   {
+    upsertUserApp(actId, homePrvId, appId, displayName, iconPath, launchPath,
+        null, null, null, null, hostPrvId, appHstId, position, msgClient, inMsg);
+  }
+
+  public static void upsertUserApp(final String actId,
+                                   final String homePrvId,
+                                   final String appId,
+                                   final String displayName,
+                                   final String iconPath,
+                                   final String launchPath,
+                                   final String appUrl,
+                                   final String hostBrowserOrigin,
+                                   final String hostPublicDomain,
+                                   final String hostDomain,
+                                   final String hostPrvId,
+                                   final String appHstId,
+                                   final String position,
+                                   final DomatarMsgClient msgClient,
+                                   final JsonMsg inMsg)
+      throws DomatarException
+  {
     if (msgClient == null || actId == null || homePrvId == null || appId == null)
       return;
 
@@ -75,6 +96,18 @@ public final class UserAppRegistry
         displayName != null ? displayName : appId);
     attrs.addAttr("IconPath", iconPath != null ? iconPath : "");
     attrs.addAttr("LaunchPath", launchPath != null ? launchPath : "");
+
+    if (appUrl != null && !appUrl.isEmpty())
+      attrs.addAttr("AppUrl", appUrl);
+
+    if (hostBrowserOrigin != null && !hostBrowserOrigin.isEmpty())
+      attrs.addAttr("HostBrowserOrigin", hostBrowserOrigin);
+
+    if (hostPublicDomain != null && !hostPublicDomain.isEmpty())
+      attrs.addAttr("HostPublicDomain", hostPublicDomain);
+
+    if (hostDomain != null && !hostDomain.isEmpty())
+      attrs.addAttr("HostDomain", hostDomain);
 
     if (hostPrvId != null && !hostPrvId.isEmpty())
       attrs.addAttr("HostPrvId", hostPrvId);

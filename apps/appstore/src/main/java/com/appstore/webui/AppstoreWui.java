@@ -10,7 +10,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.domatar.core.Context;
 import com.domatar.core.DomatarConfig;
 import com.domatar.db.ActDb;
-import com.domatar.install.AssetPaths;
 import com.domatar.servlet.DomatarServlet;
 import com.domatar.util.Act;
 import com.domatar.util.JsonMsg;
@@ -42,6 +41,12 @@ public class AppstoreWui extends DomatarServlet
   private static volatile String cachedRegistryActId;
 
   @Override
+  protected boolean isAnonymousAccess(final HttpServletRequest req)
+  {
+    return "SiteRole".equals(getParam(req, "Action"));
+  }
+
+  @Override
   protected JsonMsg getMsg(final HttpServletRequest req,
                            final DomId srcDomId,
                            final Context context,
@@ -67,10 +72,12 @@ public class AppstoreWui extends DomatarServlet
       final String pub = DomatarConfig.getPublicDomain();
       if (pub != null)
         attrs.addAttr("PublicDomain", pub);
-      final String origin = AssetPaths.assetOrigin(
-          DomatarConfig.getWireScheme(), DomatarConfig.getBrowserDomain());
+      final String origin = DomatarConfig.getAssetOrigin();
       if (origin != null)
         attrs.addAttr("AssetOrigin", origin);
+      final String browserOrigin = DomatarConfig.getBrowserOrigin();
+      if (browserOrigin != null)
+        attrs.addAttr("BrowserOrigin", browserOrigin);
       attrs.addAttr("AssetContextPath", DomatarConfig.getAssetContextPath());
       msg.addResponseBody(opr, attrs);
       return msg;
@@ -124,11 +131,16 @@ public class AppstoreWui extends DomatarServlet
         final String pub = DomatarConfig.getPublicDomain();
         if (pub != null)
           attrs.addAttr("PublicDomain", pub);
+        final String bo = DomatarConfig.getBrowserOrigin();
+        if (bo != null)
+          attrs.addAttr("BrowserOrigin", bo);
       }
       else
       {
         putIfPresent(attrs, "Domain", getParam(req, "Domain"));
         putIfPresent(attrs, "PublicDomain", getParam(req, "PublicDomain"));
+        putIfPresent(attrs, "BrowserOrigin", getParam(req, "BrowserOrigin"));
+        putIfPresent(attrs, "AppUrl", getParam(req, "AppUrl"));
         putIfPresent(attrs, "PrvActId", getParam(req, "PrvActId"));
       }
 
@@ -171,6 +183,9 @@ public class AppstoreWui extends DomatarServlet
       final String pub = DomatarConfig.getPublicDomain();
       if (pub != null)
         attrs.addAttr("PublicDomain", pub);
+      final String browserOrigin = DomatarConfig.getBrowserOrigin();
+      if (browserOrigin != null)
+        attrs.addAttr("BrowserOrigin", browserOrigin);
       attrs.addAttr("PrvActId", DomatarConfig.getPrvActId());
 
       if ("RegisterOffer".equals(opr))

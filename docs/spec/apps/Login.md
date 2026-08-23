@@ -38,12 +38,14 @@ Two design constraints are worth stating up front:
       Login app sends AddAct to spreadsheet.domatar.com; renaming a
       Quippin usrId sends UpdateAct to quippin.domatar.com.
 
-  C2. The Login app has its own central host ("login") and its own
-      account store on that host, just like every other app. A user who
-      "just wants a Domatar identity, no specific app in mind" signs
-      up via the Login app and gets a key-fingerprint actId minted
-      server-side. From that root, they can later link Quippin /
-      Spreadsheet / etc. logins.
+  C2. The Login app has its own central host ("login") and can store
+      linked logins, but **login is a shell** — it is not a valid
+      identity AppId for Create account. First sign-up must name a
+      content app this provider offers (e.g. quippin, bookstore,
+      spreadsheet, money, aiagent). The stored usrId is
+      `<handle>@<that-appId>`. Shell ids (`login`, `desktop`,
+      `navigator`, `appstore`) and `domatar` are rejected. There is
+      no default AppId; omitting it fails the request.
 
 ## PART 2 — APP IDENTITY
 
@@ -171,10 +173,10 @@ current actId, and creates the directory row.
 
   /<context>/signup
       Public first-time sign-up page. Form fields: localname,
-      usrName, password. POSTs to AccountsWui with Action=SignUp,
-      which dispatches AddAct to the Login app's central host
-      (or, if the user picks a different app from a dropdown, that
-      app's central host).
+      usrName, password, **required AppId** (content app this
+      provider offers; no default). POSTs to AccountsWui with
+      Action=SignUp, which dispatches AddAct to that app's
+      central host. Shell AppIds are rejected.
 
   /<context>/account
       Logged-in management page. Shows:
@@ -324,9 +326,13 @@ just expose previously-implicit edits as first-class messages.
 8.1 First sign-up via the Login app
 
   1. Anonymous user visits /<context>/signup. Form fields:
-     localname, usrName, password, [appId-selector default "login"].
+     localname, usrName, password, appId (required; no default;
+     content apps only — not login/desktop/navigator/appstore).
   2. AccountsWui builds AddAct addressed to (<appId>, "act",
      "act@act", "actManager"). The wire Context is unverified.
+     ActWui / ActManagerImpl refuse missing AppId, unknown AppId,
+     shell/platform ids, and (at the signup edge) apps this
+     provider does not offer.
   3. The <appId> central host's ActManagerImpl.addAct:
        - validates uniqueness of <localname>@<appId> (PART 4.4 of
          [Login protocol](Login-Protocol.md)).

@@ -192,6 +192,7 @@ public class AppstoreRegistryImpl extends ObjImpl
     final String prvId         = inMsg.getAttr("PrvId");
     final String domain        = inMsg.getAttr("Domain");
     final String publicDomain  = inMsg.getAttr("PublicDomain");
+    final String browserOrigin = inMsg.getAttr("BrowserOrigin");
     final String prvActId      = inMsg.getAttr("PrvActId");
 
     if (appId == null || appId.isEmpty())
@@ -241,7 +242,8 @@ public class AppstoreRegistryImpl extends ObjImpl
 
     final DomId regId     = registryId(inMsg, obj);
     final DomId listingId = ensureListing(regId, appId, appName, appDesc, version, prvId);
-    ensureOffer(listingId, prvId, domain, publicDomain, version, prvActId, "Active");
+    ensureOffer(listingId, prvId, domain, publicDomain, browserOrigin, version,
+        prvActId, "Active");
 
     final Obj listing = ObjDb.getObj(listingId);
 
@@ -366,6 +368,7 @@ public class AppstoreRegistryImpl extends ObjImpl
       row.put("PrvId",        nz(oa.getAttr("PrvId"), ""));
       row.put("Domain",       nz(oa.getAttr("Domain"), ""));
       row.put("PublicDomain", nz(oa.getAttr("PublicDomain"), ""));
+      row.put("BrowserOrigin", nz(oa.getAttr("BrowserOrigin"), ""));
       row.put("AppVersion",   nz(oa.getAttr("AppVersion"), ""));
       row.put("Status",       status);
       row.put("PrvActId",     nz(oa.getAttr("PrvActId"), ""));
@@ -382,6 +385,7 @@ public class AppstoreRegistryImpl extends ObjImpl
           prev.put("PrvId",        oa.getAttr("PrvId"));
           prev.put("Domain",       oa.getAttr("Domain"));
           prev.put("PublicDomain", oa.getAttr("PublicDomain"));
+          prev.put("BrowserOrigin", oa.getAttr("BrowserOrigin"));
           preview.add(prev);
         }
       }
@@ -445,6 +449,7 @@ public class AppstoreRegistryImpl extends ObjImpl
 
   private void ensureOffer(final DomId listingId, final String prvId,
                            final String domain, final String publicDomain,
+                           final String browserOrigin,
                            final String appVersion,
                            final String prvActId, final String status)
       throws DomatarException
@@ -461,6 +466,9 @@ public class AppstoreRegistryImpl extends ObjImpl
 
     if (publicDomain != null && !publicDomain.isEmpty())
       attrs.addAttr("PublicDomain", publicDomain);
+
+    if (browserOrigin != null && !browserOrigin.isEmpty())
+      attrs.addAttr("BrowserOrigin", browserOrigin);
 
     if (prvActId != null && !prvActId.isEmpty())
       attrs.addAttr("PrvActId", prvActId);

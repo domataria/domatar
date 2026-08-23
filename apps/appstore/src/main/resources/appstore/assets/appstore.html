@@ -667,6 +667,7 @@
 
         var domain = "";
         var publicDomain = "";
+        var browserOrigin = "";
         var prvActId = "";
         var offers = selectedListing.Offers || [];
         for (var i = 0; i < offers.length; i++)
@@ -675,6 +676,7 @@
             {
                 domain = offers[i].Domain || "";
                 publicDomain = offers[i].PublicDomain || "";
+                browserOrigin = offers[i].BrowserOrigin || "";
                 prvActId = offers[i].PrvActId || "";
                 break;
             }
@@ -691,6 +693,8 @@
             };
         if (publicDomain)
             installParams.PublicDomain = publicDomain;
+        if (browserOrigin)
+            installParams.BrowserOrigin = browserOrigin;
 
         callWui("InstallApp", installParams,
             function() {

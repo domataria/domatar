@@ -488,8 +488,14 @@ new ops may be added rather than overloading GetApps beyond recognition.
   If `<appId>-<actId>` (plus any app extension) is already registered to
   provider A and the user asks InstallApp(..., PrvId=B):
 
-    * Refuse (default): "Already installed on provider A" — user uninstalls
-      or uses a future MoveInstall.
+    * If the home launcher is gone (UninstallApp tombstoned the userApps
+      row and Navigator link): retarget to A and restore the tile. Data
+      was preserved on A; do not create a second host on B. Catalog
+      probe is skipped (the host already exists; home may lack A's
+      PrvActId). Tile AppUrl is taken from the prior userApps row
+      (HostBrowserOrigin) when the offer listing is unavailable.
+    * If the launcher is still live: refuse "Already installed on
+      provider A" — user uninstalls or uses a future MoveInstall.
     * Do NOT silently create `<appId>-<actId>-B`.
 
   MoveInstall (export host → import on B → rewrite hst Domain/PrvId) is
@@ -548,23 +554,29 @@ new ops may be added rather than overloading GetApps beyond recognition.
     HstId,           // portable <appId>-<actId>[ -<ext> ] — PART 9
     LaunchPath       // see 11.2
 
-11.2  LaunchPath
+11.2  LaunchPath / AppUrl
 
-  Local precursor tiles use relative paths (`/domatar/<app>/...`) served by
-  the page's own origin. Cross-provider tiles MUST launch against the
-  offering provider's browser-facing host:
+  Each tile stores AppUrl (browser base). IconPath and LaunchPath are
+  derived from it ([Icons](../platform/Icons.md) PART 7.2).
 
-    Prefer PublicDomain (nginx front door) when set and distinct from
-    Domain — strip `/domatar` because the front door re-adds context:
-      http(s)://<PublicDomain>/<appId>/<appId>.html
-    Else wire Domain with context:
-      http(s)://<Domain>/domatar/<appId>/<appId>.html
-    Alternative: store Domain + relative path; the Desktop shell resolves
-      at click time via directory lookup of HstId.
+  At install, AppUrl is: request/app.config AppUrl if set; else the
+  offering provider's BrowserOrigin; else PublicDomain front door.
+  Wire Domain is not a browser URL. Local installs with no AppUrl keep
+  relative `/domatar/<app>/...` paths.
 
-  Cross-provider tiles MUST store absolute IconPath with the same
-  PublicDomain / Domain policy as LaunchPath ([Icons](../platform/Icons.md) PART 5.2 /
-  7.2). Local tiles use relative `/domatar/<appId>/icons/app.svg`.
+  Cross-provider examples:
+
+    BrowserOrigin `http://localhost:9080`:
+      http://localhost:9080/domatar/<appId>/<LaunchPage>
+      (LaunchPage from app.config.txt; default `<appId>.html`;
+      Quippin uses `news.html`)
+    PublicDomain only (nginx front door):
+      http(s)://<PublicDomain>/<appId>/<LaunchPage>
+
+  SetAppUrl after install updates AppUrl; GetUserApps re-derives both
+  paths. Offers publish BrowserOrigin so a home node can inherit the
+  offering provider's reachable origin.
+
   Authority: [Icons](../platform/Icons.md) PART 7.2.
 
 11.3  Sync

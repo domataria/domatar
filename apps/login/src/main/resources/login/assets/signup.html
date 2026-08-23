@@ -134,9 +134,13 @@
         </div>
         <div class="field">
           <label for="attNewAppId">App for the new login</label>
-          <select id="attNewAppId">
-            <option value="login" selected>login</option>
+          <select id="attNewAppId" required>
+            <option value="" selected disabled>Choose an app</option>
             <option value="quippin">quippin</option>
+            <option value="bookstore">bookstore</option>
+            <option value="spreadsheet">spreadsheet</option>
+            <option value="money">money</option>
+            <option value="aiagent">aiagent</option>
           </select>
         </div>
         <div class="field">
@@ -179,10 +183,15 @@
         </div>
         <div class="field">
           <label for="suAppId">Sign up with</label>
-          <select id="suAppId" name="AppId">
-            <option value="login">Login (identity hub)</option>
-            <option value="quippin" selected>Quippin</option>
+          <select id="suAppId" name="AppId" required>
+            <option value="" selected disabled>Choose an app</option>
+            <option value="quippin">Quippin</option>
+            <option value="bookstore">Bookstore</option>
+            <option value="spreadsheet">Spreadsheet</option>
+            <option value="money">Money</option>
+            <option value="aiagent">AI Agent</option>
           </select>
+          <div class="hint">Content app this provider offers. Shells (Login, Desktop, Navigator, App Store) are not valid.</div>
         </div>
         <div class="field">
           <label for="suPwd">Password</label>
@@ -335,11 +344,11 @@
     var pwd2      = $("#suPwd2").val();
 
     if (!localname || !pwd) { showMsg($("#suMsg"), "Handle and password are required."); return; }
+    if (!appId)              { showMsg($("#suMsg"), "Choose an app.");                    return; }
     if (pwd !== pwd2)        { showMsg($("#suMsg"), "Passwords don't match.");           return; }
 
     var data = {
       Action:  "AddAct",
-      ActId:   localname,
       UsrId:   localname,
       UsrName: usrName || localname,
       AppId:   appId,

@@ -207,6 +207,13 @@ launcher URLs are in the live system (PART 7–11).
                           (e.g. `domatar.avatarvia.com`).
                           When unset, browser URLs use Domain.
 
+    BrowserOrigin          DOMATAR_BROWSER_ORIGIN / BrowserOrigin
+                          Optional full origin browsers actually open
+                          (`http://localhost:9080`). Wins over
+                          PublicDomain when minting AppUrl / AssetOrigin.
+                          Appends `/domatar` unless the value already
+                          includes a path.
+
   browserAbsolute(scheme, publicDomain, wireDomain, relativePath):
 
     * When PublicDomain is set and differs from Domain, mint
@@ -276,31 +283,48 @@ launcher URLs are in the live system (PART 7–11).
 
 7.2  Desktop / marketplace tiles
 
-  Mirror LaunchPath policy ([App Store](../apps/AppStore.md) PART 11.2):
+  Each installed app has an AppUrl (browser base). At install:
 
-    Local install (app data on the same provider as the Desktop host):
-      IconPath = relative launcher path
-                 /domatar/<appId>/icons/app.svg
+    1. Use the request / app.config.txt AppUrl if set.
+    2. Else inherit the offering provider: BrowserOrigin
+       (DOMATAR_BROWSER_ORIGIN, e.g. http://localhost:9080) when set;
+       else PublicDomain front door. Do not mint Docker-only wire
+       Domain (e.g. `quippin:8080`) as AppUrl — the user's browser
+       cannot resolve it. Home fetches SiteRole from the wire host
+       to obtain BrowserOrigin when the offer row lacks it.
+    3. AppUrl may be changed later (SetAppUrl). IconPath and LaunchPath
+       are derived from the resolved base:
 
-    Cross-provider install (offering provider ≠ Desktop's provider):
-      IconPath = absolute browser URL via IconPaths.forInstall
-                 Prefer PublicDomain when set (PART 5.2):
-                   {scheme}://{PublicDomain}/<appId>/icons/app.svg
-                 Else wire Domain with context:
-                   {scheme}://{Domain}/domatar/<appId>/icons/app.svg
+         {AppUrl}/<appId>/icons/app.svg
+         {AppUrl}/<appId>/<LaunchPage>
 
-  `MarketplaceInstall` (or equivalent InstallApp path) already chooses
-  absolute LaunchPath when `remote` is true. It MUST apply the same
-  `remote` + offering Domain / PublicDomain to IconPath.
+       LaunchPage comes from app.config.txt (default `<appId>.html`).
+       Quippin's launcher is `news.html` (there is no quippin.html).
 
-  Desktop HTML stays dumb: `src=IconPath` works for both relative and
-  absolute values. No Desktop code change beyond ensuring sync replicas
-  carry the absolute IconPath unchanged (already true for attrs).
+    Local install with no AppUrl: relative paths
+      /domatar/<appId>/icons/app.svg
+      /domatar/<appId>/<LaunchPage>
 
-  Optional hardening (same change set if cheap): if IconPath is relative
-  AND the tile has HostPrvId / offering Domain metadata AND that
-  provider is not local, Desktop MAY rewrite to absolute at render time.
-  Prefer storing absolute at install time so all replicas agree.
+    Cross-provider with inherited BrowserOrigin:
+      http://localhost:9080/domatar/quippin/icons/app.svg
+      http://localhost:9080/domatar/quippin/news.html
+
+    Cross-provider with only PublicDomain (nginx front door):
+      {scheme}://{PublicDomain}/<appId>/icons/app.svg
+
+  GetUserApps re-derives IconPath / LaunchPath from stored AppUrl or
+  inherited HostBrowserOrigin / HostPublicDomain. Docker-only HostDomain
+  is never used as a browser URL; GetUserApps may SiteRole-fetch
+  BrowserOrigin from that wire host. A later SetAppUrl updates both
+  the tile image and the click target.
+
+  Desktop HTML: prefer AppUrl; else IconPath / LaunchPath. On a direct
+  WAR page, if IconPath is absolute to another host, fall back to the
+  same-origin launcher path so existing tiles still paint.
+
+  `MarketplaceInstall` applies the same resolve to LaunchPath and
+  IconPath. Offers carry BrowserOrigin so the home node can inherit
+  the offering provider's browser-reachable origin.
 
 7.3  Navigator class icons
 

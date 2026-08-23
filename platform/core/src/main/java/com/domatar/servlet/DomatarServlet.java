@@ -60,6 +60,12 @@ public abstract class DomatarServlet extends HttpServlet
     return false;
   }
 
+  /** Per-request override; default is {@link #isAnonymousAccess()}. */
+  protected boolean isAnonymousAccess(final HttpServletRequest req)
+  {
+    return isAnonymousAccess();
+  }
+
   @Override
   public void init(ServletConfig config)
     throws ServletException
@@ -154,7 +160,7 @@ public abstract class DomatarServlet extends HttpServlet
 
       Act act;
 
-      if (isAnonymousAccess())
+      if (isAnonymousAccess(req))
         act = new Act("act@act", "act@act", "Act", null);
       else
       {

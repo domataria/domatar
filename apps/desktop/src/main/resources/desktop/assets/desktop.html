@@ -739,8 +739,8 @@
             html +=
                 '<a class="desktop-tile" draggable="true" target="_blank" rel="noopener"' +
                                       ' data-app-id="' + escapeAttr(app.AppId) + '"' +
-                                      ' href="' + escapeAttr(app.LaunchPath) + '">' +
-                  '<div class="icon"><img src="' + escapeAttr(app.IconPath) +
+                                      ' href="' + escapeAttr(tileHref(app)) + '">' +
+                  '<div class="icon"><img src="' + escapeAttr(tileIcon(app)) +
                                           '" alt="' + escapeAttr(app.DisplayName) +
                                           '" onerror="iconFallback(this)"/></div>' +
                   '<div class="label">' + escapeText(app.DisplayName) + '</div>' +
@@ -882,6 +882,104 @@
     function pageAssets()
     {
         return new AssetPaths("", null);
+    }
+
+    function onWarPage()
+    {
+        var p = (window.location && window.location.pathname) || "";
+        return p === "/domatar" || p.indexOf("/domatar/") === 0;
+    }
+
+    function joinAppUrl(base, appId, asset)
+    {
+        var b = String(base || "").replace(/\/$/, "");
+        var a = String(asset || "").replace(/^\/+/, "");
+        return b + "/" + appId + "/" + a;
+    }
+
+    function isBrowserReachable(hostOrUrl)
+    {
+        if (!hostOrUrl)
+            return false;
+
+        var host = String(hostOrUrl).trim();
+        var scheme = host.indexOf("://");
+
+        if (scheme >= 0)
+            host = host.substring(scheme + 3);
+
+        var slash = host.indexOf("/");
+
+        if (slash >= 0)
+            host = host.substring(0, slash);
+
+        var colon = host.lastIndexOf(":");
+
+        if (colon > 0 && host.indexOf(":") === colon)
+            host = host.substring(0, colon);
+
+        if (!host)
+            return false;
+
+        if (host.toLowerCase() === "localhost" || host === "127.0.0.1")
+            return true;
+
+        return host.indexOf(".") >= 0;
+    }
+
+    function launchAsset(app)
+    {
+        var p = String((app && app.LaunchPath) || "").split("?")[0];
+        var slash = p.lastIndexOf("/");
+        var file = slash >= 0 ? p.substring(slash + 1) : p;
+
+        if (file && /\.html$/i.test(file))
+        {
+            if (app && app.AppId === "quippin" && file === "quippin.html")
+                return "news.html";
+            return file;
+        }
+
+        if (app && app.AppId === "quippin")
+            return "news.html";
+
+        return (app && app.AppId ? app.AppId : "app") + ".html";
+    }
+
+    function tileHref(app)
+    {
+        if (isBrowserReachable(app.AppUrl))
+            return joinAppUrl(app.AppUrl, app.AppId, launchAsset(app));
+
+        var launch = app.LaunchPath || "";
+
+        if (launch.charAt(0) === "/" || isBrowserReachable(launch))
+            return launch;
+
+        return "#";
+    }
+
+    function tileIcon(app)
+    {
+        if (isBrowserReachable(app.AppUrl))
+            return joinAppUrl(app.AppUrl, app.AppId, "icons/app.svg");
+
+        var p = app.IconPath || "";
+
+        if (p && p.charAt(0) !== "/" && !isBrowserReachable(p))
+            p = "";
+
+        if (onWarPage() && /^https?:\/\//i.test(p))
+        {
+            try
+            {
+                if ((new URL(p, window.location.href)).host !== window.location.host)
+                    return pageAssets().launcher(app.AppId);
+            }
+            catch (e) { /* keep stored path */ }
+        }
+
+        return p;
     }
 
     /** On 404 (or other load failure), swap to the generic object glyph once. */

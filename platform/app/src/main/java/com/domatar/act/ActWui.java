@@ -32,11 +32,11 @@ import com.domatar.util.DomId;
  *   Logout       -> (parseAppId(usrId), ...)
  *   VerifyLogin  -> (parseAppId(usrId), ...)
  *
- * For v1 there is exactly one app (Quippin). targetAppId for AddAct is
- * therefore hard-coded to "quippin"; once a Login app exists (per
- * Spec-LoginApp.txt) the form will pick the appId. The per-user
- * sub-host's HstId is built as "<appId>-<actId>" (DomId.subHstId /
- * HOST_SEP '-') — e.g. "quippin-<fingerprint>".
+ * AddAct requires an explicit content AppId (no default). Shell ids
+ * (login, desktop, navigator, appstore) and the platform app (domatar)
+ * are rejected — see {@link SignupAppId}. The per-user sub-host HstId
+ * is "<appId>-<actId>" (DomId.subHstId / HOST_SEP '-') — e.g.
+ * "quippin-<fingerprint>" or "bookstore-<fingerprint>".
  */
 @WebServlet("/ActWui")
 public class ActWui extends DomatarServlet
@@ -48,12 +48,6 @@ public class ActWui extends DomatarServlet
   {
     return true;
   }
-
-  // The signup form may pick a target appId via the "AppId" request
-  // param. This is what Spec-LoginApp.txt's signup.html does (PART 4).
-  // If no AppId is supplied (e.g. the legacy login.html path), we fall
-  // back to this default so the existing flow keeps working.
-  private static final String DEFAULT_SIGNUP_APP_ID = "quippin";
 
   @Override
   protected JsonMsg getMsg(final HttpServletRequest req,
@@ -73,22 +67,41 @@ public class ActWui extends DomatarServlet
     {
       // ActId: absent/empty for sign-up (server mints it); a fingerprint for link mode.
       final String actId   = getParam(req, "ActId");
-      final String usrId   = getParam(req, "UsrId");
-      final String usrName = getParam(req, "UsrName");
-      final String pwd     = getParam(req, "Pwd");
-      final String prvId   = srcDomId.hstId;
-      String appId         = getParam(req, "AppId");
+      final String usrIdParam = getParam(req, "UsrId");
+      final String usrName    = getParam(req, "UsrName");
+      final String pwd        = getParam(req, "Pwd");
+      final String prvId      = srcDomId.hstId;
+      String appId = getParam(req, "AppId");
+      if (appId != null)
+        appId = appId.trim();
 
-      if (appId == null || appId.length() == 0)
-        appId = DEFAULT_SIGNUP_APP_ID;
+      final String appIdErr = SignupAppId.rejectSignup(appId);
+      if (appIdErr != null)
+      {
+        msg.addError(opr, appIdErr);
+        return msg;
+      }
 
       final String domain = DomatarConfig.getDomain();
       final String ip     = context.usrIp;
 
-      if (usrId == null)
+      if (usrIdParam == null)
       {
         msg.addError(opr, "Unknown UsrId");
         return msg;
+      }
+
+      String usrId = usrIdParam;
+      final int at = usrId.lastIndexOf('@');
+      if (at > 0)
+      {
+        final String suffix = usrId.substring(at + 1);
+        if (!appId.equals(suffix))
+        {
+          msg.addError(opr, "UsrId suffix does not match AppId");
+          return msg;
+        }
+        usrId = usrId.substring(0, at);
       }
 
       if (usrName == null)
@@ -109,6 +122,7 @@ public class ActWui extends DomatarServlet
       attrs.addAttr("UsrId",   usrId);
       attrs.addAttr("UsrName", usrName);
       attrs.addAttr("Pwd",     pwd);
+      attrs.addAttr("AppId",   appId);
       attrs.addAttr("Domain",  domain);
       attrs.addAttr("PrvId",   prvId);
       attrs.addAttr("Ip",      ip);
@@ -207,7 +221,10 @@ public class ActWui extends DomatarServlet
 
       dstAppId = DomId.getAppId(usrId);
       if (dstAppId == null)
-        dstAppId = DEFAULT_SIGNUP_APP_ID;
+      {
+        msg.addError(opr, "UsrId must be of the form <localname>@<appId>");
+        return msg;
+      }
 
       attrs.addAttr("ActId", actId);
       attrs.addAttr("UsrId", usrId);

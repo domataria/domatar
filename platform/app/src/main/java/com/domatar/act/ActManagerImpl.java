@@ -170,6 +170,13 @@ public class ActManagerImpl extends ObjImpl
     if (appId == null || appId.length() == 0)
       throw new DomatarException("Missing appId on AddAct dispatch destination");
 
+    final String identityErr = SignupAppId.rejectIdentity(appId);
+    if (identityErr != null)
+    {
+      outMsg.addError(opr, identityErr);
+      return;
+    }
+
     if (usrHandle == null)
       throw new DomatarException("Missing usrId");
 

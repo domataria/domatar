@@ -220,14 +220,17 @@ Flow:
 
   1. User visits any prv's signup form, e.g.
      http://prv1.local:8080/quippin/signup
-     and picks the app they want as the root of their identity. (For
-     v1 there is exactly one app, Quippin, so this is implicit.)
+     and picks the app they want as the root of their identity.
+     AppId is required. Shell ids (login, desktop, navigator,
+     appstore) and the platform app (domatar) are not valid.
+     There is no implicit default (not quippin, not login).
 
   2. The user enters:
        - localname (e.g. "dave")
        - usrName   (display name)
        - password  (will be sent over TLS in production; cleartext on
                     the local sim)
+       - appId     (required content app this provider offers)
 
   3. The prv's signup servlet builds a Domatar AddAct message and
      dispatches it to (<appId>, "act", "act@act", "actManager"). The

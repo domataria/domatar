@@ -248,6 +248,18 @@
           <div class="hint">Your display handle — no @ symbol, e.g. <em>haya</em></div>
         </div>
         <div class="field">
+          <label for="newActAppId">App</label>
+          <select tabindex="4" id="newActAppId" name="newActAppId" required>
+            <option value="" selected disabled>Choose an app</option>
+            <option value="quippin">Quippin</option>
+            <option value="bookstore">Bookstore</option>
+            <option value="spreadsheet">Spreadsheet</option>
+            <option value="money">Money</option>
+            <option value="aiagent">AI Agent</option>
+          </select>
+          <div class="hint">Must be a content app this provider offers — not Login, Desktop, Navigator, or App Store.</div>
+        </div>
+        <div class="field">
           <label for="newActActId">Account ID</label>
           <input tabindex="5" id="newActActId" name="newActActId"
                  placeholder="hayay" />
@@ -353,9 +365,16 @@
 
     var usrName = encodeURIComponent($("input#newActUsername").val());
     var usrId   = encodeURIComponent($("input#newActHandle").val());
+    var appId   = $("select#newActAppId").val();
     var actId   = encodeURIComponent($("input#newActActId").val());
     var pwd     = encodeURIComponent($("input#newActPassword").val());
     var pwd2    = encodeURIComponent($("input#newActPassword2").val());
+
+    if (!appId)
+    {
+       showMsg($msg, "Choose an app for this account.");
+       return;
+    }
 
     if (pwd != pwd2)
     {
@@ -365,7 +384,9 @@
 
     setBusy($btn, true, "Creating\u2026");
 
-    var dataString = 'Action=AddAct&UsrName=' + usrName + '&UsrId=' + usrId + '&ActId=' + actId + '&Pwd=' + pwd;
+    var dataString = 'Action=AddAct&UsrName=' + usrName + '&UsrId=' + usrId
+                   + '&AppId=' + encodeURIComponent(appId)
+                   + '&ActId=' + actId + '&Pwd=' + pwd;
 
     $.ajax({
              type: "GET",

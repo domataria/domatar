@@ -32,6 +32,11 @@ import java.util.Properties;
  *                   (use {PrvId} as a placeholder for the provider ID)
  *   ShellRoles    - comma-separated role ids this app may fill
  *                   (login | desktop | navigator | appstore); KD7 / Spec PART 9
+ *   AppUrl        - optional browser base URL for this app; if unset,
+ *                   installs inherit the offering provider's BrowserOrigin
+ *                   / PublicDomain / Domain
+ *   LaunchPage    - HTML asset opened by the Desktop tile (default
+ *                   {@code <appId>.html}); Quippin uses {@code news.html}
  */
 public class AppConfig
 {
@@ -137,6 +142,42 @@ public class AppConfig
   public List<String> getShellRoles()
   {
     return splitList(props.getProperty("ShellRoles", ""));
+  }
+
+  /**
+   * Optional browser base for this app ({@code http://host[:port]/domatar}
+   * or a vanity origin). Empty when the app inherits the offering
+   * provider's URL.
+   */
+  public String getAppUrl()
+  {
+    final String v = props.getProperty("AppUrl", "").trim();
+
+    return v.isEmpty() ? null : v;
+  }
+
+  /**
+   * Filename of the launcher HTML page (e.g. {@code news.html}).
+   * Null when unset — callers default to {@code <appId>.html}.
+   */
+  public String getLaunchPage()
+  {
+    String v = props.getProperty("LaunchPage", "").trim();
+
+    if (v.isEmpty())
+      return null;
+
+    v = v.replace('\\', '/');
+
+    if (v.contains(".."))
+      return null;
+
+    final int slash = v.lastIndexOf('/');
+
+    if (slash >= 0)
+      v = v.substring(slash + 1);
+
+    return v.isEmpty() ? null : v;
   }
 
   // -------------------------------------------------------------------------

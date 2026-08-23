@@ -67,7 +67,9 @@ Present-tense statements describe the live system.
   * Creating login/desktop/navigator hosts or shell bindings on N.
   * Baking PrvId into portable app host ids ([App Store](../apps/AppStore.md) PART 9).
   * Moving an already-installed portable host from H to N (still
-    refuse "Already installed on provider …"; MoveInstall is Direction).
+    refuse "Already installed on provider …" while the launcher is live;
+    after UninstallApp, InstallApp restores the tile on the existing host.
+    MoveInstall is Direction).
   * Changing offer discovery (SearchApps / RegisterOffer).
   * Multi-install of the same AppId on two providers under two HstIds.
 
@@ -349,8 +351,9 @@ with matching PrvId, whether `peer-<usrId>` or `peer-prv-<prvId>`.
 
 ## PART 9 - LAUNCH AND SESSION
 
-  * LaunchPath / IconPath: existing remote policy
-    (PublicDomain front door when set, else wire Domain + /domatar).
+  * LaunchPath / IconPath: AppUrl on the userApps row — app-owned URL
+    if set, else inherit the offering provider's BrowserOrigin, else
+    PublicDomain front door. Do not use wire Domain as a browser URL.
     [App Store](../apps/AppStore.md) PART 11.2 / [Icons](../platform/Icons.md) PART 7.2.
   * The user still authenticates on H. Opening the app on N's origin
     uses [Login protocol](../apps/Login-Protocol.md) world-wide session / SSO iframe — NOT a new

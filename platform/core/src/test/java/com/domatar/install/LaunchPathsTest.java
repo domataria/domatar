@@ -42,7 +42,7 @@ public class LaunchPathsTest
   {
     assertEquals("/domatar/money/money.html",
         LaunchPaths.forInstall(false, "http", "quippin:8080", "money"));
-    assertEquals("http://tomcat2:8080/domatar/money/money.html",
+    assertEquals("/domatar/money/money.html",
         LaunchPaths.forInstall(true, "http", "tomcat2:8080", "money"));
   }
 
@@ -52,6 +52,30 @@ public class LaunchPathsTest
     assertEquals("http://domatar.avatarvia.com/bookstore/bookstore.html",
         LaunchPaths.forInstall(true, "http",
             "domatar.avatarvia.com", "tomcat2:8080", "bookstore"));
+  }
+
+  @Test
+  public void forInstallRemoteUsesBrowserOrigin()
+  {
+    assertEquals("http://localhost:9080/domatar/quippin/news.html",
+        LaunchPaths.forInstall(true, "http", null, "http://localhost:9080",
+            "domatar.quippin.com", "quippin:8080", "quippin"));
+  }
+
+  @Test
+  public void forInstallExplicitAppUrl()
+  {
+    assertEquals("https://quippin.example.com/quippin/news.html",
+        LaunchPaths.forInstall(true, "http", "https://quippin.example.com",
+            "http://localhost:9080", "domatar.quippin.com", "quippin:8080",
+            "quippin"));
+  }
+
+  @Test
+  public void quippinLaunchPageIsNewsHtml()
+  {
+    assertEquals("news.html", LaunchPaths.launchPage("quippin"));
+    assertEquals("/domatar/quippin/news.html", LaunchPaths.relative("quippin"));
   }
 
   @Test

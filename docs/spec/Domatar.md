@@ -185,8 +185,15 @@ notion in the system is composed from these.
                    door), e.g. `domatar.avatarvia.com`. Distinct from
                    Domain when the wire address is not browser-
                    resolvable. Used for absolute IconPath / LaunchPath
-                   / AssetOrigin ([Icons](platform/Icons.md) PART 5.2). Config:
+                   / AssetOrigin when BrowserOrigin is unset
+                   ([Icons](platform/Icons.md) PART 5.2). Config:
                    DOMATAR_PUBLIC_DOMAIN / PublicDomain.
+
+  * BrowserOrigin  Optional full origin browsers open for this node
+                   (`http://localhost:9080`). Wins over PublicDomain
+                   when minting AppUrl / AssetOrigin so Tomcat-direct
+                   access does not require the nginx hostname. Config:
+                   DOMATAR_BROWSER_ORIGIN / BrowserOrigin.
 
   * DomId          A 4-tuple (hstId, appId, actId, objId) that
                    addresses one Object. The actId itself has the form

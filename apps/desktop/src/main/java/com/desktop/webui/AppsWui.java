@@ -32,8 +32,8 @@ import com.domatar.util.DomatarMsgClient;
  *   GetApps / GetAppsVersion / PullApps / MergeApps / ReconcileApps /
  *   InstallApp / UninstallApp — desktop tiles (legacy).
  *   GetTileOrder / SetTileOrder — Desktop UI launcher layout.
- *   GetUserApps / GetUserAppsVersion / ReconcileUserApps — domatar
- *   userApps registry (preferred launcher source).
+ *   GetUserApps / GetUserAppsVersion / ReconcileUserApps / SetAppUrl —
+ *   domatar userApps registry (preferred launcher source).
  */
 @WebServlet("/AppsWui/*")
 public class AppsWui extends DomatarServlet
@@ -70,6 +70,18 @@ public class AppsWui extends DomatarServlet
 
       msg.addRequestHead(srcDomId, userApps, context);
       msg.addRequestBody(opr, null);
+      msg.addClsId("domatar", "userApps");
+    }
+    else if ("SetAppUrl".equals(opr))
+    {
+      final DomId userApps = UserSubstrateIds.userApps(actId, prvId);
+      final ObjAttrs attrs = new ObjAttrs();
+
+      attrs.addAttr("AppId", getParam(req, "AppId"));
+      attrs.addAttr("AppUrl", getParam(req, "AppUrl"));
+
+      msg.addRequestHead(srcDomId, userApps, context);
+      msg.addRequestBody(opr, attrs);
       msg.addClsId("domatar", "userApps");
     }
     else if ("GetApps".equals(opr)

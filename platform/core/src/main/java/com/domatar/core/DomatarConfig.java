@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.logging.Logger;
 
+import com.domatar.install.AppUrls;
 import com.domatar.install.AssetPaths;
 
 /**
@@ -43,6 +44,9 @@ import com.domatar.install.AssetPaths;
  *   PrvId                  - provider ID, defaults to HstId
  *   Domain                 - public domain or host:port of this server
  *   PublicDomain           - optional browser hostname (front door)
+ *   BrowserOrigin          - optional full browser origin (scheme://host:port)
+ *                            for Tomcat-direct access; wins over PublicDomain
+ *                            when minting AppUrl / AssetOrigin
  *   AssetContextPath       - browser path prefix for app assets (/domatar or empty)
  *   DbUrl                  - JDBC connection URL
  *   DefaultApps            - (legacy) comma-separated appIds; prefer default-apps-config.txt
@@ -77,6 +81,7 @@ import com.domatar.install.AssetPaths;
  *
  * Environment variable aliases (override config file):
  *   DOMATAR_HSTID, DOMATAR_PRVID, DOMATAR_DOMAIN, DOMATAR_OFFERED_HOSTS, DOMATAR_PUBLIC_DOMAIN,
+ *   DOMATAR_BROWSER_ORIGIN,
  *   DOMATAR_ASSET_CONTEXT_PATH, DOMATAR_DB_URL,
  *   DOMATAR_DEFAULT_APPS, DOMATAR_DEFAULT_APPS_CONFIG, DOMATAR_ADMIN_PASSWORD,
  *   DOMATAR_DIRECTORY, DOMATAR_PRV_ACTID, DOMATAR_MASTER_KEY,
@@ -161,7 +166,8 @@ public class DomatarConfig
 
   /**
    * Host for browser absolute URLs: {@link #getPublicDomain()} when set,
-   * otherwise {@link #getDomain()}.
+   * otherwise {@link #getDomain()}. Prefer {@link #getAssetOrigin()} when
+   * a full origin (including port) is needed.
    */
   public static String getBrowserDomain()
   {
@@ -174,10 +180,53 @@ public class DomatarConfig
   }
 
   /**
+   * Browser-reachable origin for this node ({@code http://localhost:9080}),
+   * distinct from {@link #getPublicDomain()} (nginx hostname without port).
+   * Env {@code DOMATAR_BROWSER_ORIGIN} / {@code BrowserOrigin}. Null when unset.
+   */
+  public static String getBrowserOrigin()
+  {
+    final String v = resolve("DOMATAR_BROWSER_ORIGIN", "BrowserOrigin", null);
+
+    if (v == null || v.trim().isEmpty())
+      return null;
+
+    return v.trim();
+  }
+
+  /**
+   * {@code scheme://host[:port]} browsers should use for this node's
+   * assets. {@link #getBrowserOrigin()} when set, else PublicDomain / Domain.
+   */
+  public static String getAssetOrigin()
+  {
+    final String bo = getBrowserOrigin();
+
+    if (bo != null)
+    {
+      final String origin = AppUrls.withScheme(getWireScheme(), bo);
+
+      if (origin == null)
+        return AssetPaths.assetOrigin(getWireScheme(), getBrowserDomain());
+
+      final int auth = origin.indexOf("://");
+      final int slash = origin.indexOf('/', auth + 3);
+
+      if (slash > 0)
+        return origin.substring(0, slash);
+
+      return origin;
+    }
+
+    return AssetPaths.assetOrigin(getWireScheme(), getBrowserDomain());
+  }
+
+  /**
    * Path prefix browsers use to reach app assets ({@code /domatar} on
    * the WAR, {@code ""} when a reverse proxy remounts at {@code /}).
    * Env {@code DOMATAR_ASSET_CONTEXT_PATH} / {@code AssetContextPath};
-   * use {@code -} for an explicit empty prefix. When unset, distinct
+   * use {@code -} for an explicit empty prefix. When unset,
+   * {@link #getBrowserOrigin()} implies WAR context; else distinct
    * {@link #getPublicDomain()} implies empty (front door).
    */
   public static String getAssetContextPath()
@@ -187,6 +236,9 @@ public class DomatarConfig
 
     if (v != null)
       return AssetPaths.normalizeContext(v);
+
+    if (getBrowserOrigin() != null)
+      return AssetPaths.WIRE_CONTEXT;
 
     return AssetPaths.contextPath(getPublicDomain(), getDomain());
   }

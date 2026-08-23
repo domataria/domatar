@@ -5,7 +5,6 @@ import java.util.List;
 import com.domatar.core.DomatarConfig;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
-import com.domatar.install.AssetPaths;
 
 public class ObjImpl implements DomatarInterface
 {
@@ -137,7 +136,7 @@ public class ObjImpl implements DomatarInterface
    *                        "TagAppId","Tag","Val","SeqNum" }, ... ],
    *       "HasMore":  "true"|"false",
    *       "NextSeqNum": "<cursor, present only when HasMore>",
-   *       "AssetOrigin": "{scheme}://{domain}"  (browser host when configured),
+   *       "AssetOrigin": "{scheme}://{host[:port]}"  (BrowserOrigin, else PublicDomain / Domain),
    *       "AssetContextPath": "" | "/domatar"   (front door vs wire paths)
    *     }
    *   }
@@ -245,9 +244,7 @@ public class ObjImpl implements DomatarInterface
     if (hasMore)
       outAttrs.addAttr("NextSeqNum", String.valueOf(nextSeqNum));
 
-    final String origin = AssetPaths.assetOrigin(
-        DomatarConfig.getWireScheme(),
-        DomatarConfig.getBrowserDomain());
+    final String origin = DomatarConfig.getAssetOrigin();
 
     if (origin != null)
       outAttrs.addAttr("AssetOrigin", origin);

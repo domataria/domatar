@@ -171,12 +171,24 @@
 
         if (onWar)
         {
-            // Direct Tomcat / WAR URL (e.g. localhost:9081/domatar/...).
-            // Open may still emit PublicDomain + empty context for nginx;
-            // that host is not this page, so class icons would 404 and
-            // fall back to the default hollow-circle glyph.
-            origin = "";
-            ctx = WIRE_CONTEXT;
+            var originIsLocal = false;
+            try
+            {
+                if (origin)
+                {
+                    var h = (new URL(origin, global.location.href)).hostname;
+                    originIsLocal = h === "localhost" || h === "127.0.0.1";
+                }
+            }
+            catch (e) { originIsLocal = false; }
+
+            if (origin && !sameHost(origin) && originIsLocal)
+                ctx = WIRE_CONTEXT;
+            else
+            {
+                origin = "";
+                ctx = WIRE_CONTEXT;
+            }
         }
         else if (sameHost(origin))
             origin = "";

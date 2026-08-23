@@ -89,19 +89,24 @@ ReconcileApps) follow in PART 4–8.
 Notes on the attrs:
 
   - DisplayName : human-readable label rendered under the icon.
+  - AppUrl      : optional browser base for this app (`http://host/domatar`
+                  or a vanity origin). Empty means inherit the offering
+                  provider ([Icons](../platform/Icons.md) PART 7.2). Changeable
+                  after install via SetAppUrl. GetUserApps derives
+                  IconPath and LaunchPath from the resolved base.
   - IconPath    : same-origin path (`/domatar/<appId>/icons/app.svg`) or
                   a full http(s) URL to the offering provider's icon for
                   cross-provider marketplace tiles ([Icons](../platform/Icons.md)
                   PART 7.2). The icon asset itself is owned by the target
                   app's JAR. Desktop never bundles other apps' icons; it
-                  renders `<img src=IconPath>` and on error falls back to
+                  renders `<img src=IconPath>` (or AppUrl + convention)
+                  and on error falls back to
                   `/domatar/domatar/icons/cls/default/obj.svg`.
   - LaunchPath  : the URL the browser is sent to when the icon is
-                  clicked. Also absolute. For Quippin the natural
-                  landing page is /quippin/news (the social home).
-                  Marketplace cross-provider installs may store an
-                  absolute `{scheme}://{offeringDomain}/domatar/...`
-                  path ([App Store](AppStore.md) PART 11 / KD8).
+                  clicked. Derived from AppUrl when set. Marketplace
+                  cross-provider installs store an absolute URL on the
+                  offering provider's BrowserOrigin or PublicDomain
+                  ([App Store](AppStore.md) PART 11).
   - HostPrvId / AppHstId (optional): offering provider and portable
                   app host id for marketplace installs
                   ([App Store](AppStore.md) PART 11). Emitted by GetApps /
