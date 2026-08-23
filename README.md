@@ -1,8 +1,37 @@
 # Domatar
 
+WHAT YOU GET (six results from one model)
+-----------------------------------------
+  * Own your data. Objects carry your identity, not the provider's. Leave a
+    host and take the authoritative objects with you — not a dead export.
+
+  * Own your data inside others' apps. Your bank account can live on the
+    bank's server yet belong to you, because possession and ownership are
+    separate and permission is enforced at the object.
+
+  * Free speech by construction. You are your own publisher on your own host;
+    the host is a neutral platform that owns nothing it carries. Because a
+    host is an abstract name, moving providers is invisible to your audience —
+    catastrophic deplatforming is not architecturally possible.
+
+  * Interoperability by default. Every object is addressed and describes
+    itself the same way, so apps by strangers cooperate with no prior
+    arrangement — a spreadsheet cell can cite a live price from a marketplace
+    listing on another server.
+
+  * Distribution for free. Uniform, location-transparent addressing means many
+    independent installs of an app form one system by exchanging ordinary
+    messages. No central instance, no single point of failure or control.
+
+  * The natural home for AI agents. One self-describing interface replaces a
+    thousand custom APIs. The agent acts AS the user, with exactly the user's
+    permissions, enforced where the data lives — so no one has to "trust the
+    agent," only the user they already trust.
+
+
 Domatar is a general, distributed, interoperable application environment.
-The platform speaks objects, classes, hosts, and messages — not a single
-built-in product. Independent servers on the public internet run the same
+The platform speaks objects, classes, hosts, and messages. Independent servers 
+on the public internet run the same
 artefact, own their own data, and can address one another. Applications
 are packaged and installed separately from the platform.
 
