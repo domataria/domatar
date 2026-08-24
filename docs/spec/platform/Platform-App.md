@@ -62,11 +62,12 @@ Non-goals for this version:
 
   appId          : "domatar"
 
-  central host   : none — there is no single central host for the Domatar
-                   App. Each provider IS its own central host for its own
-                   provider account (see PART 3). Whether an app has a
-                   central host, and how many, is an application design
-                   choice; the platform does not require it.
+  home host      : none in this version — there is no global `domatar`
+                   home host / `domatar@domatar`. Each provider is its
+                   own home host for its provider account `prvId@prvId`
+                   (see PART 3). Every other app has a home host named
+                   `appId` ([Domatar](../Domatar.md) PART 4.1.1). A global
+                   Domatar home host remains open, not forbidden.
 
   per-provider   : "domatar-<prvActId>"
   sub-host         e.g. "domatar-<fingerprint>" for provider prv1.
@@ -791,6 +792,9 @@ Companion specs (do not duplicate here):
   `GetShells` / `SetShell` on `(domatar, shells)`. Provider defaults
   for new accounts are DefaultShells on provider-config
   ([Provider customization](../install/Provider-Customization.md)).
+  If {@code PrvActId} is unset (pre-bootstrap, or `provider.config.txt`
+  lost on container recreate), GetShells uses stock role→AppId
+  bindings and still emits any shell rows already stored.
 
 13.4  Stock shell hosts
 

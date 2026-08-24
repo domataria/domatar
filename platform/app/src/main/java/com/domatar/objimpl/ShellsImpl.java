@@ -6,6 +6,8 @@ package com.domatar.objimpl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.domatar.core.Auth;
 import com.domatar.core.Context;
@@ -37,6 +39,8 @@ import com.domatar.util.DomatarMsgClient;
  */
 public class ShellsImpl extends ObjImpl
 {
+  private static final Logger LOG = Logger.getLogger(ShellsImpl.class.getName());
+
   @Override
   public String handleMsg(final String msg, final Obj obj, final String contextPath,
                           final String contextRealPath, final DomatarMsgClient msgClient)
@@ -85,8 +89,20 @@ public class ShellsImpl extends ObjImpl
       loginPrvId = DomatarConfig.getPrvId();
 
     // Ensure stock shells exist; also repairs login LaunchPath → account.html.
+    // Must not fail the read: missing PrvActId (lost provider.config after a
+    // container recreate) used to NPE here and Desktop painted no shells.
     if (dst != null && dst.actId != null && loginPrvId != null)
-      UserSubstrateInstall.ensureDefaultShells(dst.actId, loginPrvId);
+    {
+      try
+      {
+        UserSubstrateInstall.ensureDefaultShells(dst.actId, loginPrvId);
+      }
+      catch (final Exception e)
+      {
+        LOG.log(Level.WARNING, "ensureDefaultShells skipped for actId="
+            + dst.actId, e);
+      }
+    }
 
     final List<Obj> all = ObjDb.getObjPrefix(dst.hstId, "domatar", dst.actId, "shell",
         null, 1000);

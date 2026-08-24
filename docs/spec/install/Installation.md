@@ -526,13 +526,14 @@ PART 2.3 Direction).
   `installProvider` does NOT create per-user objects — those are
   produced by `installUser` at user-install time (PART 5).
 
-  Provider central hosts (e.g. `quippin`, `login`, `bookstore`) are a
-  related concept: they are the apps' authoritative servers for
-  federated identity and any other globally-shared data. In the
-  reference simulation, the central host's `hst` row is seeded by the
-  SQL init script alongside the provider rows. A first-class
-  RegisterHst protocol operation to register a new central host into
-  the directory is the Direction noted in [Domatar](../Domatar.md) PART 4.2.
+  Every app has a **home host** (`hstId = appId`) and a **home user**
+  `<appId>@<appId>` ([Domatar](../Domatar.md) PART 4.1.1). `/Setup` on the
+  node listed in `DOMATAR_OFFERED_HOSTS` upserts the `hst` row
+  (`OfferedHostsInstall`) and mints the home-user `act` row if it is
+  missing (`HomeHostInstall`). Shared objects the app actually has
+  are owned by that account. A first-class RegisterHst protocol
+  operation to publish a new home host into the directory is the
+  Direction noted in [Domatar](../Domatar.md) PART 4.2.
 
 4.6  Step by step: install a new application on a provider
 
@@ -1107,21 +1108,22 @@ why.
            code change.
 
   R10.3.d  Each provider's `hst` table needs `quippin`, `login`, etc.
-           rows for the per-app central hosts.
+           rows for the per-app home hosts, plus an `act` row
+           `<appId>@<appId>` on the offering node.
 
            Why it's coupled: `/Setup` and `OfferedHostsInstall`
            (env `DOMATAR_OFFERED_HOSTS`) upsert this node's offered
-           central-host names into `hst`. The two-provider sim also
-           loads `deploy/mysql/02-central-hosts.sql` so both
-           databases know the full topology. Adding a new central
-           host still requires a `RegisterHst` / `UpdateHst` call
-           against the directory (or an equivalent install step)
-           after deploy.
+           home-host names into `hst` and `HomeHostInstall` ensures
+           the home user. The two-provider sim also loads
+           `deploy/mysql/02-central-hosts.sql` so both databases know
+           the full topology. Adding a new home host still requires a
+           `RegisterHst` / `UpdateHst` call against the directory
+           (or an equivalent install step) after deploy.
 
            Direction ([Domatar](../Domatar.md) PART 4.2): make RegisterHst
            a first-class protocol operation that each app's
            `installProvider` can invoke. The seed becomes optional;
-           every central host is registered through the same code
+           every home host is registered through the same code
            path that user-installs use to register per-user sub-hosts.
 
   R10.3.e  Cross-provider icon DISPLAY does not require the app JAR on

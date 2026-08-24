@@ -156,7 +156,10 @@ asks to purge "app-" rows.
     1. POST UserSubstrateWui { Action: "GetShells" } and
        POST AppsWui { Action: "GetUserApps" } (fallback: GetApps)
        for launcher inventory. Shell AppIds are painted in the same
-       grid (Account / Desktop / App Store / Navigator).
+       grid (Account / Desktop / App Store / Navigator). GetShells
+       must still return existing shell rows when provider-config
+       {@code PrvActId} is unset (stock DefaultShells; do not fail
+       the launcher).
     2. POST AppsWui { Action: "GetTileOrder" } for Desktop-owned
        layout (CSV AppIds on the apps container).
     3. Merge for display only: keep saved AppIds that are still in

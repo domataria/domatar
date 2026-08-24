@@ -28,9 +28,9 @@ Tomcat, “the WAR I live in”, or a hardcoded context path.
 
 Five structural rules (product-independent):
 
-1. **Data is owned, not centralized.** User data lives on a per-user
-   sub-host. Shared directories, if any, live on an app-defined central
-   host.
+1. **Data is owned, not centralized.** User data lives on a sub-host.
+   Shared directories, if any, live on the app's home host, owned by
+   `<appId>@<appId>`.
 2. **Containers and leaves.** The app node owns a few singleton container
    objects; each container holds many leaf objects via `lnk` rows.
 3. **Everything is a Domatar object.** Addressable by `DomId`, browsable
@@ -83,19 +83,28 @@ Optional: `Version` (default `1.0`), `ProviderHosts`.
 `DomId.HOST_SEP` is `-` (do not use `~`; that character is in the
 fingerprint alphabet).
 
-**Per-user sub-host** (almost every app):
+**Home host** (every app): `hstId = appId`, with home user
+`<appId>@<appId>` — the owner of the app
+([Domatar](../Domatar.md) PART 4.1.1). `/Setup` on the offering provider
+creates both. Shared objects (directory, registry, catalog) live here
+if the app has any; they are owned by that account.
+
+**Sub-host** (`appId` + `-` + suffix): the suffix is the app's choice
+(printable ASCII except `.`). Common patterns:
 
 ```
 hstId = DomId.subHstId(appId, actId)           // <appId>-<actId>
         or DomId.subHstId(appId, actId, prvId) // replica on that provider
 ```
 
-Put the user's containers and leaves on this host. Shell UIs (login,
-desktop, navigator) use the provider-qualified form on each login home.
+Put the user's containers and leaves on a sub-host if that is how the
+app is structured. Shell UIs (login, desktop, navigator) use the
+provider-qualified form on each login home. An app may instead create
+hosts per directory, per function, or any other partition.
 
-**Central host** (optional): a well-known `hstId` such as `quippin` for a
-shared directory. The platform does not require one. The platform app
-itself has none; each provider is local for `domatar-<prvActId>`.
+The platform app `domatar` currently has no global home host; each
+provider uses local sub-hosts `domatar-<prvActId>`. That is open, not
+a prohibition.
 
 **Provider hosts** (optional): `ProviderHosts` in the manifest, e.g.
 aggregation hosts. Empty is fine.

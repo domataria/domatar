@@ -123,11 +123,14 @@ keys on actId, which never changes here.
 
 2.3  usrId - the login handle
 
-  usrId is a mutable "<localname>@<appId>" label that routes verification
-  to an app central host and authorizes nothing on its own
-  ([Login protocol](../apps/Login-Protocol.md) PART 3.2). Nothing authorizes
-  on the usrId; authorization is always against the actId via the
-  credential chain ([Security](Security.md) PART 7).
+  usrId is a mutable "<local>@<appId>" label that routes verification
+  to that app's home host and authorizes nothing on its own
+  ([Login protocol](../apps/Login-Protocol.md) PART 3.2,
+  [Domatar](../Domatar.md) PART 4.1.1). `@` is forbidden in `<local>`
+  and in `appId`, so a usrId contains exactly one `@`. `.` is forbidden
+  in every DomId field. Nothing authorizes on the usrId; authorization
+  is always against the actId via the credential chain
+  ([Security](Security.md) PART 7).
 
 2.4  Visibility ladder (who sees what)
 

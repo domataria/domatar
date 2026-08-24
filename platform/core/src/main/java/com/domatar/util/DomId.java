@@ -360,9 +360,19 @@ public class DomId
     return true;
   }
 
+  /**
+   * Host id and objId alphabet: printable ASCII except {@code '.'}
+   * (the DomId field separator). Wider than the actId fingerprint
+   * alphabet so an actId, home-host id, or usrId can be embedded.
+   */
+  static boolean isPrintableAsciiExceptDot(final char c)
+  {
+    return c >= 0x20 && c <= 0x7E && c != '.';
+  }
+
   static boolean isHstIdChar(char c)
   {
-    return c == '-' || c == '_' || c == '~' || c == '@' || (Character.isLetterOrDigit(c) && c < 128);
+    return isPrintableAsciiExceptDot(c);
   }
 
   static boolean isAppIdChar(char c)
@@ -377,6 +387,6 @@ public class DomId
 
   static boolean isObjIdChar(char c)
   {
-    return c == '-' || c == '_' || c == '~' || c == '@' || (Character.isLetterOrDigit(c) && c < 128);
+    return isPrintableAsciiExceptDot(c);
   }
 }

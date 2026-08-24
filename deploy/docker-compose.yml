@@ -45,7 +45,7 @@ services:
       DOMATAR_HSTID: prv1
       DOMATAR_PRVID: prv1
       DOMATAR_DOMAIN: tomcat:8080
-      DOMATAR_OFFERED_HOSTS: quippin,login,navigator,aiagent,bookstore,spreadsheet,money,appstore
+      DOMATAR_OFFERED_HOSTS: quippin,login,navigator,desktop,aiagent,bookstore,spreadsheet,money,appstore,search,chat,mail
       DOMATAR_DIRECTORY: tomcat:8080
       # DEV-ONLY default — change immediately after first /Setup.
       DOMATAR_ADMIN_PASSWORD: ${DOMATAR_ADMIN_PASSWORD:-admin}

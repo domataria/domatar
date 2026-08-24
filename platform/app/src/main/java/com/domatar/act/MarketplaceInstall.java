@@ -15,7 +15,6 @@ import com.domatar.app.AppRegistry;
 import com.domatar.core.AppConfig;
 import com.domatar.core.Context;
 import com.domatar.core.DomatarConfig;
-import com.domatar.db.ActDb;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
 import com.domatar.install.CatalogInstall;
@@ -23,12 +22,12 @@ import com.domatar.install.DirectoryLookup;
 import com.domatar.install.DirectoryRegister;
 import com.domatar.install.AssetPaths;
 import com.domatar.install.AppUrls;
+import com.domatar.install.HomeHostInstall;
 import com.domatar.install.IconPaths;
 import com.domatar.install.LaunchPaths;
 import com.domatar.install.UserAppRegistry;
 import com.domatar.install.UserInstallDispatch;
 import com.domatar.install.UserSubstrateIds;
-import com.domatar.util.Act;
 import com.domatar.util.Hst;
 import com.domatar.util.Obj;
 import com.domatar.util.Json;
@@ -48,10 +47,6 @@ import com.domatar.util.DomatarMsgClient;
  */
 public final class MarketplaceInstall
 {
-  /** Live sim ActId for appstore@appstore on db2 (Phase 0). */
-  private static final String REGISTRY_ACT_FALLBACK =
-      "Tocu5~rhqDF8ZylMvKJ9Q_Ulnnpq_IGY";
-
   private static volatile String cachedRegistryActId;
 
   private static final ConcurrentHashMap<String, String> browserOriginByWire =
@@ -590,27 +585,17 @@ public final class MarketplaceInstall
     }
   }
 
-  private static String registryActId()
+  private static String registryActId() throws DomatarException
   {
     if (cachedRegistryActId != null)
       return cachedRegistryActId;
 
-    try
-    {
-      final Act act = ActDb.getActByUsrId("appstore@appstore");
+    final String actId = HomeHostInstall.actId("appstore");
 
-      if (act != null && act.actId != null && !act.actId.isEmpty())
-      {
-        cachedRegistryActId = act.actId;
-        return cachedRegistryActId;
-      }
-    }
-    catch (final DomatarException e)
-    {
-      System.out.println("WARN: MarketplaceInstall registryActId lookup failed: "
-          + e);
-    }
+    if (actId == null)
+      throw new DomatarException("home user appstore@appstore not found");
 
-    return REGISTRY_ACT_FALLBACK;
+    cachedRegistryActId = actId;
+    return cachedRegistryActId;
   }
 }

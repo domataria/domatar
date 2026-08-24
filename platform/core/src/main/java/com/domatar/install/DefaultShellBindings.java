@@ -113,17 +113,27 @@ public final class DefaultShellBindings
 
   static String readRaw(final String prvActId) throws DomatarException
   {
-    final Obj o = ObjDb.getObj(providerConfigDomId(prvActId));
+    final DomId id = providerConfigDomId(prvActId);
+    if (id == null)
+      return null;
+    final Obj o = ObjDb.getObj(id);
     if (o == null || o.attrs == null)
       return null;
     return o.attrs.getAttr(ATTR_DEFAULT_SHELLS);
   }
 
+  /**
+   * Address of provider-config, or {@code null} when no provider actId is
+   * known yet (pre-bootstrap, or {@code provider.config.txt} lost on a
+   * container recreate). Callers must treat null as "use stock shells".
+   */
   public static DomId providerConfigDomId(final String prvActId)
       throws DomatarException
   {
     final String id = (prvActId != null && !prvActId.isEmpty())
                         ? prvActId : DomatarConfig.getPrvActId();
+    if (id == null || id.isEmpty())
+      return null;
     final String ss = DomId.subHstId("domatar", id);
     return new DomId(ss, "domatar", id, PROVIDER_CONFIG_OBJ_ID);
   }

@@ -84,12 +84,17 @@ Design principles (inherited by every Domatar app)
 
 2.3  System account
 -------------------
-  Account owning the shared directory object:
+  Home user of the app ([Domatar](../Domatar.md) PART 4.1.1). Owns the
+  shared directory object:
 
-    actId   : quippin@quippin
     usrId   : quippin@quippin
-    usrName : Quippin
-    password: 
+    actId   : fingerprint minted at `/Setup` on the offering provider
+    usrName : quippin
+    password: provider admin password (`DOMATAR_ADMIN_PASSWORD`)
+
+  Some directory DomIds still put the usrId string in the actId slot
+  (`quippin@quippin`); that is a leftover addressing form, not a second
+  account. 
 
 2.4  App identity / manifest
 ----------------------------
@@ -576,24 +581,24 @@ Defining properties:
 
 2.0 The quippin@quippin system account
 
-  The directory objects are owned by a dedicated system account whose
-  usrId is "quippin@quippin".  This account must exist in the `act` table
-  on the quippin central host (prv1 in the local simulation) before any
-  directory objects can be written.
+  The directory objects are owned by the Quippin home user. `/Setup` on
+  the offering provider (prv1 in the local simulation) mints the `act`
+  row before directory objects are written ([Domatar](../Domatar.md)
+  PART 4.1.1). Do not Create-account in the UI for this usrId.
 
-  The actId is a key fingerprint:
-    ActId   = "X_CkxbZFSQaGm_lApfc50oLRD1m5maMv" (fingerprint)
-    UsrId   = "quippin@quippin"                    (login label; unchanged)
-    UsrName = "Quippin"
-    Pwd     = SHA-1("123") in Domatar Base64 = GBp05MC8NxDHPJAUdVySNhkRkjx
+    UsrId   = "quippin@quippin"
+    ActId   = fingerprint minted at Setup (stable thereafter)
+    UsrName = "quippin"
+    Pwd     = provider admin password
 
   This account is not intended for everyday login; the password is simple
   only because the environment is a local test machine.  On a production
   system the password should be replaced with a strong random value or the
   account should be disabled for interactive login altogether.
 
-  The account must appear in BOTH db1 and db2 (like all other seeded data)
-  since both MySQL containers run the init script on first boot.
+  The `act` row lives on the offering provider (prv1 / db1 in the
+  simulation). Other providers verify `quippin@quippin` by dispatching
+  to the home host.
 
 2.1 Directory container object
 

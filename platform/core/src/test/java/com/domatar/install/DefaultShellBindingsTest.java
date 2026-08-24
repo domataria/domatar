@@ -47,6 +47,13 @@ class DefaultShellBindingsTest
   }
 
   @Test
+  void resolve_nullPrvActId_returnsStock() throws Exception
+  {
+    final Map<String, String> m = DefaultShellBindings.resolve(null);
+    assertEquals(DefaultShellBindings.stock(), m);
+  }
+
+  @Test
   void parse_ignoresMalformedPairs()
   {
     final Map<String, String> m =

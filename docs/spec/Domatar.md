@@ -34,10 +34,10 @@ that lets those three populations cooperate.
 The protocol is objects, classes, hosts, accounts, links, and messages.
 How those are stored is realisation-specific. Today the reference
 substrate is a single Tomcat 10.1 / Jakarta EE 10 / Java 17 web
-application, persisted in MySQL 8, exchanging JSON messages over HTTP. Nine applications ship in the reference
-distribution (Navigator, Login, Desktop, AppStore, Quippin, Bookstore,
-Spreadsheet, Money, AI Agent), plus the platform's own self-described
-application (Domatar). The architecture is positioned for, but does not
+application, persisted in MySQL 8, exchanging JSON messages over HTTP. The
+reference distribution ships Navigator, Login, Desktop, AppStore, Quippin,
+Bookstore, Spreadsheet, Money, AI Agent, Search, Chat, and Mail, plus the
+platform's own self-described application (Domatar). The architecture is positioned for, but does not
 yet require, splitting each application into its own process or its own
 machine (see PART 16).
 
@@ -99,11 +99,10 @@ notion in the system is composed from these.
                    across the system:
                      - as the appId field on every object the app owns;
                      - as the clsAppId of every class the app defines;
-                     - as the hstId of any logical host the app provides
-                       (typically the app's own "central host").
-                   The same appId binds the three roles together. The
-                   system does not enforce the binding; it is a naming
-                   convention realised by the app's install routine.
+                     - as the hstId of the app's **home host** (PART 4.1).
+                   The same appId binds the three roles together. Every
+                   application has a home host named `appId` and a home
+                   user `<appId>@<appId>` who is the owner of the app.
 
   * Account        The owner of objects. All activity is per-account.
                    Accounts are identified by an immutable `actId` that
@@ -114,12 +113,14 @@ notion in the system is composed from these.
                    does not encode who issued it.
 
                    Separately, every account has a human-readable `usrId`
-                   (login label) of the form `<localName>@<appId>`.
+                   (login label) of the form `<local>@<appId>`.
                    The `usrId` is used for login routing (the `@appId`
-                   suffix dispatches to that app's central host) and for
+                   suffix dispatches to that app's home host) and for
                    display; it can change without affecting the `actId`.
-                   The `actId` is the stable identity; the `usrId` is
-                   the mutable login label.
+                   `@` is forbidden in `<local>` and in `appId`, so a
+                   usrId contains exactly one `@`. The `actId` is the
+                   stable identity; the `usrId` is the mutable login
+                   label.
 
                    The account lives on whichever provider the user
                    was on when it was created (or on additional
@@ -135,21 +136,24 @@ notion in the system is composed from these.
 
   * Host           A first-class entity, identified by `hstId`, with a
                    network address (`Domain`) and a provider (`PrvId`,
-                   which is itself a hstId). Hosts and applications
-                   share a namespace: a typical application has a
-                   central host whose hstId equals the appId. When an
-                   application installs itself for an account, it also
-                   creates an abstract per-user sub-host named
-                   `appId-actId` using `-` as separator
-                   (e.g. `quippin-<fingerprint>`). `-` is
-                   `DomId.HOST_SEP`; it is not in the fingerprint
-                   alphabet, so a host id cannot be ambiguous with an
-                   encoded actId.
+                   which is itself a hstId). There are two kinds
+                   (PART 4.1):
 
-                   The hstId is opaque to the runtime; the
-                   appId / appId-actId convention is what registers
-                   hosts in practice. Routing uses only the host
-                   record; the runtime does not parse hstId strings.
+                     - **Home host** — `hstId` is exactly the `appId`
+                       (`quippin`, `appstore`, `prv1`, …). Lives on some
+                       provider; that provider may be the host itself
+                       (`PrvId == HstId`).
+                     - **Sub-host** — `hstId` is `appId` + `-` + suffix
+                       (`DomId.HOST_SEP` is `-`). The suffix is the
+                       app's choice: per user, per user per provider,
+                       per directory, per function, or any other
+                       partition that suits the app.
+
+                   The hstId is opaque to the runtime for routing:
+                   dispatch uses only the host record. Splitting on
+                   the first `-` is an app convention for "this is a
+                   sub-host of `appId`", not something the dispatcher
+                   must parse.
 
   * Link           A directed edge from one object to another (parent
                    → child in the Navigator tree, membership, catalog
@@ -167,11 +171,12 @@ notion in the system is composed from these.
                    provides itself) has PrvId == HstId. One provider
                    commonly serves many hsts at many distinct domains.
 
-                   Each physical provider has its own administrator
-                   account, `<prvId>@<prvId>` (e.g. `prv1@prv1`), and
-                   its own Domatar-app sub-host `domatar-<prvId>@<prvId>`
-                   that exposes provider-scoped infrastructure
-                   ([Platform App](platform/Platform-App.md)).
+                   A provider is the same shape as any other home host:
+                   host `prv1` with account `prv1@prv1`. It can also
+                   publish or be an application. It is not a special
+                   identity axis. Each provider also has a Domatar-app
+                   sub-host `domatar-<prvActId>` for provider-scoped
+                   infrastructure ([Platform App](platform/Platform-App.md)).
 
   * Domain         An internet address (host:port) at which a single
                    host can be reached for Msg / hst publish. Stored
@@ -242,12 +247,30 @@ Domatar has three independent identity axes:
     same actId resolvable on more than one provider.
 
   * `usrId` is the human-readable login label of the form
-    `<localName>@<appId>`. It is used for routing login verifications
-    to the right app's central host. The `usrId` can change (e.g. if
+    `<local>@<appId>`. It is used for routing login verifications
+    to the right app's home host. The `usrId` can change (e.g. if
     the user renames their login) without changing the `actId`.
+    `@` is forbidden in `<local>` and in `appId`.
+
+Identifier alphabets (so narrower ids can sit inside wider ones
+without escaping):
+
+  * `.` is forbidden in every DomId field (`hstId`, `appId`, `actId`,
+    `objId`). It is the wire separator of `hstId.appId.actId.objId`.
+  * `actId` (fingerprint) uses the `Base64Encoder` alphabet
+    (`0-9 A-Z _ a-z ~`). That alphabet contains neither `.` nor `@`
+    nor `-`.
+  * `appId` (and therefore a home-host `hstId`) contains neither `.`
+    nor `@` nor `-`.
+  * Host **suffixes** (the part after the first `-` of a sub-host)
+    and `objId`s are printable ASCII except `.`. That is why an
+    `actId`, a home-host id, or a full usrId can be embedded in a
+    sub-host name or an objId (`host-<hstId>`, `peer-<usrId>`,
+    `acct-<actId>`). `@` is allowed there for that reason; it is
+    not allowed in the two halves of a usrId.
 
 The federation rule is: login verification is routed by the `usrId`
-suffix (`@appId`) to that app's central host. Every Domatar provider
+suffix (`@appId`) to that app's home host. Every Domatar provider
 trusts the same authority for the same `usrId`, and a token
 issued on prv1 is recognised on prv2 ([Login protocol](apps/Login-Protocol.md) PART 6).
 
@@ -278,20 +301,57 @@ PubKey and RecordSig are cached together with the routing data.
 
 This realisation stores those records as rows in MySQL `hst`
 (PART 7). A typical reference distribution includes:
-  - per-provider hosts               e.g. `prv1`, `prv2`
-  - per-app central hosts            e.g. `quippin`, `login`,
-                                          `navigator`, `aiagent`,
-                                          `bookstore`, `spreadsheet`,
-                                          `money`, `appstore`,
-                                          `desktop`
-  - per-user sub-hosts               e.g. `quippin-<fingerprint>`,
-                                          `navigator-<fingerprint>`,
-                                          `desktop-<fingerprint>`,
+  - provider home hosts              e.g. `prv1`, `prv2`
+  - app home hosts                   e.g. `quippin`, `login`,
+                                          `navigator`, `desktop`,
+                                          `aiagent`, `bookstore`,
+                                          `spreadsheet`, `money`,
+                                          `appstore`, `chat`, `mail`,
+                                          `search`
+  - sub-hosts                        e.g. `quippin-<fingerprint>`,
+                                          `navigator-<fingerprint>-prv1`,
+                                          `desktop-<fingerprint>-prv2`,
                                           `domatar-<prvFingerprint>`
 
-The set of app central hosts is open-ended: any new application
-that needs a central host registers one at provider-level install
-time.
+4.1.1  Home host and home user
+
+Every application has a **home host** whose `hstId` equals the
+`appId`. That host lives on some provider (the host may also *be*
+its own provider: `PrvId == HstId`). `/Setup` on the node that
+offers the app (`DOMATAR_OFFERED_HOSTS`) upserts the `hst` row
+and ensures a **home user** `<appId>@<appId>` on that host.
+
+The home user is the owner of the app. Its `actId` is a normal
+fingerprint, minted once at bootstrap and then stable — not a
+dump constant, not whoever last used Create-account. Shared
+objects the app actually has (a directory, a registry, a catalog)
+are owned by that account. The account need not own user data:
+Spreadsheet and Money keep only the system account on the home
+host; human objects live on sub-hosts.
+
+A provider is this rule, not an exception: `prv1@prv1` on host
+`prv1`. A provider may publish applications. Shells (login,
+desktop, navigator, appstore) have a home host *and* per-login
+replicas; those are sub-hosts, not a second kind of home.
+
+The platform application `domatar` currently has no global home
+host `domatar` / `domatar@domatar`. Each provider uses local
+sub-hosts (`domatar-<prvActId>`, `domatar-<actId>-<prvId>`).
+Whether a global Domatar home host appears later is open; the
+platform does not forbid it.
+
+Sub-host architecture is the app's. Common patterns today:
+
+  * portable per-user     `appId-<actId>`           (Quippin, Bookstore)
+  * per-user per-provider `appId-<actId>-<prvId>`   (Login, Desktop,
+                                                      Navigator shells)
+  * per-provider          `domatar-<prvActId>`      (platform
+                                                      infrastructure)
+
+An app may instead create a host per directory, per function, or
+any other suffix of printable ASCII except `.`. The platform only
+requires the home host + home user; it does not require any
+particular sub-host layout.
 
 4.2  The directory service
 
@@ -402,7 +462,7 @@ Removed in the present iteration:
 
 Direction (Option C):
   - When apps eventually run in their own JVMs / containers
-    (PART 16), the same dispatch suffices: every app central host's
+    (PART 16), the same dispatch suffices: every app home host's
     `hst` row points to its own domain, and `sendHttp` reaches it
     directly. No code changes; only `hst` rows change.
   - Storing each peer's context path per-host in the directory
@@ -561,16 +621,14 @@ Direction (Option C):
   LoginRemote (VerifyLogin / GetAct) and ActWui (Login / AddAct /
   Logout / VerifyLogin) build their destination DomId with
   `hstId = parseAppId(usrId)` — i.e. they dispatch to the issuing
-  app's CENTRAL HOST, not to the local prv. This is what makes a
+  app's HOME HOST, not to the local prv. This is what makes a
   sign-in world-wide ([Login protocol](apps/Login-Protocol.md)): every prv asks the same
   authority for the same account, so one Login mints a single
   token that every prv recognises.
 
-  Provider accounts ([Platform App](platform/Platform-App.md) PART 3): for accounts of
-  the form `<prv>@<prv>` the central host IS the provider itself,
-  so the login is purely local and does not depend on any remote
-  authority. ActWui detects this by `parseAppId(usrId) ==
-  parseHstId(usrId)`.
+  Provider accounts (`<prvId>@<prvId>`) use the same rule: the home
+  host is the provider itself, so the login is purely local.
+  ActWui detects this by `parseAppId(usrId) == parseHstId(usrId)`.
 
 ## PART 7 - PERSISTENCE (this realisation)
 
@@ -580,9 +638,10 @@ protocol in PART 2 does not require these tables.
 
 Schema is materialised by `mySQL/schema.sql` and is loaded
 automatically via `/docker-entrypoint-initdb.d` on first DB startup.
-The schema is tables only; `/Setup` creates the provider account and
-hosts. The schema is identical on every provider; per-row data is
-partitioned by hstId.
+The schema is tables only; `/Setup` creates the provider account,
+each offered app's home host, and that app's home user
+`<appId>@<appId>`. The schema is identical on every provider; per-row
+data is partitioned by hstId.
 
 Tables, with the columns that matter to the runtime:
 
@@ -992,7 +1051,7 @@ here is which agent triggers each level and what each level produces.
               on the next /Setup (or the next AppRegistry iteration)
               the new app's `installProvider` runs.
       Result: the provider's App Catalog gains a new entry; the
-              new app's central host (if any) is created; AppStore
+              new app's home host and home user are created; AppStore
               can offer it to users.
 
   USER INSTALLATION  (per account, per app)
@@ -1037,7 +1096,7 @@ created.
 10.2  Direction
 
   - First-class RegisterHst / MoveHst operations on the directory,
-    so that adding a new central host or migrating a host to a
+    so that adding a new home host or migrating a host to a
     different provider becomes an in-protocol operation rather than
     an offline SQL edit.
   - The AppStore's InstallApp on a cross-provider target should
@@ -1409,14 +1468,17 @@ six hosts it represents in the directory:
                 this name).
   tomcat1       Its own provider role (registered in hst as
                 'prv1' → 'tomcat1:8080').
-  quippin       The Quippin app's central host.
-  login         The Login app's central host.
-  navigator     The Navigator app's central host.
-  aiagent       The AI Agent app's central host.
+  quippin       The Quippin app's home host.
+  login         The Login app's home host.
+  navigator     The Navigator app's home host.
+  desktop       The Desktop app's home host.
+  aiagent       The AI Agent app's home host.
+  chat, mail, search
+                Further app home hosts offered on prv1.
 
-tomcat2 likewise wears three central-host aliases for the apps
-whose central hosts live on prv2 in the reference simulation
-(bookstore, spreadsheet, money).
+tomcat2 likewise wears home-host aliases for the apps
+whose home hosts live on prv2 in the reference simulation
+(bookstore, spreadsheet, money, appstore).
 
 Services:
 
@@ -1450,8 +1512,9 @@ Services:
   nginx         Reverse proxy on host port 80 over domatar_net.
 
 After the first /Setup, the directory contains host records for
-both providers, all central hosts, and the domatar- sub-host for
-each provider account. Additional people sign up through Login.
+both providers, all home hosts, each home user `<appId>@<appId>`,
+and the domatar- sub-host for each provider account. Additional
+people sign up through Login.
 A message from a handler on prv1 to a DomId on `quippin-micha@quippin`
 is routed: tomcat1 (DOMATAR_HSTID=prv1) looks up the destination,
 sees PrvId=prv2, and HTTP-POSTs to `tomcat2:8080/domatar/Msg` over
@@ -1596,9 +1659,9 @@ deliberately positioned for a further split into per-app processes
   Direction ([Login protocol](apps/Login-Protocol.md) PART 14):
     - Account replication: a user signals "also keep this account on
       provider X"; provider X stores a copy of the account and the
-      issuing app's central host trusts both replicas.
+      issuing app's home host trusts both replicas.
     - Account migration: an account moves from prv1 to prv2; the
-      issuing app's central host updates its routing.
+      issuing app's home host updates its routing.
 
 16.4  Security
 
@@ -1670,6 +1733,8 @@ Hosts / directory
     ([Platform App](platform/Platform-App.md) T2).
   * Split the simulation seed so non-directory stores start with an
     empty host cache, exercising the miss-then-fetch path.
+  * Whether the platform app `domatar` ever gains a global home host
+    `domatar` / `domatar@domatar` (PART 4.1.1).
 
 Class / service layer
   * Done: the interface / implementation split — immutable service

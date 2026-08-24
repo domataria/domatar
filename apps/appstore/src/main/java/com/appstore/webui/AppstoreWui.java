@@ -9,7 +9,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import com.domatar.core.Context;
 import com.domatar.core.DomatarConfig;
-import com.domatar.db.ActDb;
+import com.domatar.install.HomeHostInstall;
 import com.domatar.servlet.DomatarServlet;
 import com.domatar.util.Act;
 import com.domatar.util.JsonMsg;
@@ -33,10 +33,6 @@ import com.domatar.util.DomatarMsgClient;
 public class AppstoreWui extends DomatarServlet
 {
   private static final long serialVersionUID = 1L;
-
-  /** Phase 0 live ActId on db2; used only if ActDb lookup fails. */
-  private static final String REGISTRY_ACT_FALLBACK =
-      "Tocu5~rhqDF8ZylMvKJ9Q_Ulnnpq_IGY";
 
   private static volatile String cachedRegistryActId;
 
@@ -210,27 +206,18 @@ public class AppstoreWui extends DomatarServlet
     return new DomId("appstore", "appstore", registryActId(), "registry");
   }
 
-  private static String registryActId()
+  private static String registryActId() throws DomatarException
   {
     if (cachedRegistryActId != null)
       return cachedRegistryActId;
 
-    try
-    {
-      final Act act = ActDb.getActByUsrId("appstore@appstore");
+    final String actId = HomeHostInstall.actId("appstore");
 
-      if (act != null && act.actId != null && !act.actId.isEmpty())
-      {
-        cachedRegistryActId = act.actId;
-        return cachedRegistryActId;
-      }
-    }
-    catch (final DomatarException e)
-    {
-      System.out.println("WARN: AppstoreWui registryActId lookup failed: " + e);
-    }
+    if (actId == null)
+      throw new DomatarException("home user appstore@appstore not found");
 
-    return REGISTRY_ACT_FALLBACK;
+    cachedRegistryActId = actId;
+    return cachedRegistryActId;
   }
 
   private static boolean isProvider(final Context ctx)

@@ -4,16 +4,15 @@
 
 package com.appstore.install;
 
-import com.domatar.db.ActDb;
 import com.domatar.db.HstDb;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
 import com.domatar.install.AppInstall;
 import com.domatar.install.CatalogInstall;
 import com.domatar.install.ClsInstall;
+import com.domatar.install.HomeHostInstall;
 import com.domatar.install.SrvInstall;
 import com.domatar.install.UserHostIds;
-import com.domatar.util.Act;
 import com.domatar.util.Hst;
 import com.domatar.util.Lnk;
 import com.domatar.util.DomId;
@@ -35,10 +34,6 @@ import com.domatar.util.DomatarMsgClient;
  */
 public class AppstoreInstall implements AppInstall
 {
-  /** Sim fallback when act row lookup fails (Phase 0 live ActId on db2). */
-  private static final String REGISTRY_ACT_FALLBACK =
-      "Tocu5~rhqDF8ZylMvKJ9Q_Ulnnpq_IGY";
-
   @Override
   public void installProvider(final String prvId, final String domain) throws DomatarException
   {
@@ -51,28 +46,20 @@ public class AppstoreInstall implements AppInstall
   }
 
   /**
-   * Idempotently create the global registry container on the App Store
-   * central host (Spec-AppStore PART 4.3 / Update-AppStore KD9).
+ * Idempotently create the global registry container on the App Store
+ * home host (Spec-AppStore PART 4.3 / Update-AppStore KD9).
    */
   private static void ensureRegistry(final String domain, final String prvId)
       throws DomatarException
   {
-    String registryActId = null;
-
-    try
-    {
-      final Act act = ActDb.getActByUsrId("appstore@appstore");
-
-      if (act != null && act.actId != null && !act.actId.isEmpty())
-        registryActId = act.actId;
-    }
-    catch (final DomatarException e)
-    {
-      System.out.println("WARN: AppstoreInstall ensureRegistry act lookup failed: " + e);
-    }
+    String registryActId = HomeHostInstall.actId("appstore");
 
     if (registryActId == null)
-      registryActId = REGISTRY_ACT_FALLBACK;
+    {
+      System.out.println("WARN: AppstoreInstall ensureRegistry skipped — "
+          + "home user appstore@appstore not found");
+      return;
+    }
 
     final DomId regId = new DomId("appstore", "appstore", registryActId, "registry");
 

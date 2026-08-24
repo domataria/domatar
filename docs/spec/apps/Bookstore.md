@@ -71,12 +71,15 @@ Non-goals (deferred)
 
 2.4  System account
 -------------------
-  Account owning the central catalog object (not a real user):
+  Home user of the app ([Domatar](../Domatar.md) PART 4.1.1). Owns the
+  catalog object:
 
-    actId  : bookstore@bookstore
     usrId  : bookstore@bookstore
-    usrName: Bookstore
-    password: "123"  (bcrypt hash: see PART 9)
+    actId  : fingerprint minted at `/Setup` on the offering provider
+    usrName: bookstore
+    password: provider admin password (`DOMATAR_ADMIN_PASSWORD`)
+
+  Some catalog DomIds still put the usrId string in the actId slot.
 
 ## PART 3 — DATA MODEL
 

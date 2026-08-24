@@ -476,8 +476,14 @@ public abstract class SetupServlet extends HttpServlet
           System.out.println("WARN: ProviderKeyPublish on already-done Setup: " + e);
         }
 
+        // Idempotent: offered home hosts + home users, then each app's
+        // installProvider (registry/catalog objects owned by the home user).
+        doSetup();
+        onSetupComplete(req, res);
+
         res.setStatus(HttpServletResponse.SC_OK);
-        out.println("Setup has already been completed. Provider key republished.");
+        out.println("Setup has already been completed. Provider key republished; "
+            + "home hosts refreshed.");
         return;
       }
 

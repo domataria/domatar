@@ -151,26 +151,28 @@ host's domain. That subsystem is this document.
 
   appId         : "appstore"
   AppName       : "App Store"
-  central host  : "appstore"   (directory-registered; local two-provider
+  home host     : "appstore"   (directory-registered; local two-provider
                                 stack typically hosts it on prv2)
+  home user     : appstore@appstore  (fingerprint actId minted at `/Setup`)
   per-user host : appstore-<actId>-<prvId>
                   (shell replica per login home — PART 9.5;
                    [Platform App](../platform/Platform-App.md)).
-                  The central registry host remains `appstore` (KD9).
+                  The registry stays on the home host `appstore` (KD9).
 
 4.2  Registry ownership
 
-  The registry objects live on the App Store central host under the App Store
-  system account (sim: appstore@appstore). Ordinary users and providers reach
-  it by DomId / directory routing — they do not need a login ON the registry
-  host beyond the usual verified session / delegation used for cross-provider
-  messages.
+  The registry objects live on the App Store home host, owned by the
+  home user `appstore@appstore` ([Domatar](../Domatar.md) PART 4.1.1).
+  Ordinary users and providers reach it by DomId / directory routing —
+  they do not need a login ON the registry host beyond the usual
+  verified session / delegation used for cross-provider messages.
 
 4.3  Registry host
 
-  The central host `appstore` is the registry location.
-  `AppstoreInstall.installProvider` registers the catalog entry and
-  ensures the central host / registry containers exist (idempotent).
+  The home host `appstore` is the registry location.
+  `HomeHostInstall` ensures the home user; `AppstoreInstall.installProvider`
+  registers the catalog entry and ensures the registry containers exist
+  (idempotent), owned by that account's fingerprint actId.
 
 ## PART 5 - SUPPLY SIDE: DEPLOY, CATALOG, REGISTER
 
