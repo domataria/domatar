@@ -1,5 +1,12 @@
 # Domatar
 
+Domatar provides a unified, distributed, interoperable
+app and data model, that makes it possible to own apps and data in
+many physical locations, without giving up interoperability — between
+different apps in different locations, or between different instances
+of the same app in different locations, or between your apps and
+someone else's apps — without making everything public.
+
 WHAT YOU GET (six results from one model)
 -----------------------------------------
   * Own your data. Objects carry your identity, not the provider's. Leave a
@@ -27,23 +34,6 @@ WHAT YOU GET (six results from one model)
     thousand custom APIs. The agent acts AS the user, with exactly the user's
     permissions, enforced where the data lives — so no one has to "trust the
     agent," only the user they already trust.
-
-
-Domatar is a general, distributed, interoperable application environment.
-The platform speaks objects, classes, hosts, and messages. Independent servers 
-on the public internet run the same
-artefact, own their own data, and can address one another. Applications
-are packaged and installed separately from the platform.
-
-The unit of value is the Application: anyone may publish one, anyone may
-run a provider, anyone may sign up. Domatar is the substrate that lets
-those three populations cooperate.
-
-Today that substrate is a Tomcat 10.1 / Jakarta EE 10 / Java 17 web
-application over MySQL 8, exchanging JSON messages over HTTP. The
-reference distribution includes Navigator, Login, Desktop, App Store,
-Quippin, Bookstore, Spreadsheet, Money, AI Agent, and the platform's own
-app (`domatar`).
 
 - Why this exists: [Why Domatar](docs/Why-Domatar.md)
 - How it is specified: [Specification](docs/Specification.md)
