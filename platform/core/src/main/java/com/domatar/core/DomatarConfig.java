@@ -493,6 +493,85 @@ public class DomatarConfig
     }
   }
 
+  // Q2 path provenance (PART 8.9 / 8.11)
+
+  /**
+   * Maximum hop depth of a signed path (default 16).
+   * Configurable via {@code DOMATAR_MAX_HOP_DEPTH} / {@code MaxHopDepth}.
+   */
+  public static int getMaxHopDepth()
+  {
+    final String v = resolve("DOMATAR_MAX_HOP_DEPTH", "MaxHopDepth", null);
+    if (v == null || v.isEmpty())
+      return 16;
+    try
+    {
+      return Integer.parseInt(v);
+    }
+    catch (final NumberFormatException ignored)
+    {
+      return 16;
+    }
+  }
+
+  /**
+   * Maximum age of a path in milliseconds from first hop to last
+   * (default 300000 = 5 min). Configurable via
+   * {@code DOMATAR_MAX_CHAIN_AGE_MS} / {@code MaxChainAgeMs}.
+   */
+  public static long getMaxChainAgeMs()
+  {
+    final String v = resolve("DOMATAR_MAX_CHAIN_AGE_MS", "MaxChainAgeMs", null);
+    if (v == null || v.isEmpty())
+      return 300_000L;
+    try
+    {
+      return Long.parseLong(v);
+    }
+    catch (final NumberFormatException ignored)
+    {
+      return 300_000L;
+    }
+  }
+
+  /**
+   * Inclusive minimum accepted {@code Sec=} envelope version (default 1).
+   * Configurable via {@code DOMATAR_SEC_VER_MIN} / {@code SecVerMin}.
+   */
+  public static int getSecVerMin()
+  {
+    final String v = resolve("DOMATAR_SEC_VER_MIN", "SecVerMin", null);
+    if (v == null || v.isEmpty())
+      return 1;
+    try
+    {
+      return Integer.parseInt(v);
+    }
+    catch (final NumberFormatException ignored)
+    {
+      return 1;
+    }
+  }
+
+  /**
+   * Inclusive maximum accepted {@code Sec=} envelope version (default 1).
+   * Configurable via {@code DOMATAR_SEC_VER_MAX} / {@code SecVerMax}.
+   */
+  public static int getSecVerMax()
+  {
+    final String v = resolve("DOMATAR_SEC_VER_MAX", "SecVerMax", null);
+    if (v == null || v.isEmpty())
+      return 1;
+    try
+    {
+      return Integer.parseInt(v);
+    }
+    catch (final NumberFormatException ignored)
+    {
+      return 1;
+    }
+  }
+
   /**
    * Default fingerprint version for newly minted accounts (default 1).
    * Configurable via {@code DOMATAR_FP_DEFAULT_VERSION} / {@code FpDefaultVersion}

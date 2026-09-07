@@ -24,7 +24,7 @@ public class Log
 
   public static JsonMsg add(final String logType, final String actId, final String operation, final JsonMap attrMap, final DomatarMsgClient msgClient) throws DomatarException
   {
-    final DomId domId = new DomId("quippin~" + actId, "quippin", actId, "logs");
+    final DomId domId = new DomId(DomId.subHstId("quippin", actId), "quippin", actId, "logs");
     final JsonMsg logMsg = new JsonMsg();
     final ObjAttrs attrs = new ObjAttrs();
     attrs.addAttr("LogType", logType);

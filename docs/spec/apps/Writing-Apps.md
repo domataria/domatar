@@ -196,15 +196,23 @@ return outMsg.toString();
 Types the author uses (`com.domatar.*`):
 
 - `util.JsonMsg`, `util.ObjAttrs` — the message
-- `util.DomatarMsgClient` — `send(DomId, JsonMsg)`
+- `util.DomatarMsgClient` — `send(DomId, JsonMsg)`, `withToken`, `domIdPath`
 - `util.ObjImpl`, `util.DomatarInterface` — handler base
 - `util.DomId`, `util.Obj`, `util.Lnk` — value types
 - `db.ObjDb`, `db.LnkDb`, `db.ActDb`, `db.HstDb` — persistence
-- `core.Auth` — `isVerified(inMsg)` (flag read, not a DB hit)
+- `core.Auth` — `isVerified(inMsg)` (ACCOUNT shortcut; not a DB hit)
+- `core.Context` — `trust`, `actId`, `contextId`; `isVerified()` is the
+  ACCOUNT shortcut of the three-valued verdict
 - `servlet.DomatarServlet` — WUI base
 
-Override `ObjImpl.requiresPath()` only when the handler must verify the
-signed hop chain ([Security](../platform/Security.md) PART 8).
+Verification is unconditional at every HTTP boundary
+([Security](../platform/Security.md) PART 8.9, 11.3). Override
+`ObjImpl.requiresPath()` only to declare that a Trust.NONE / Trust.PATH
+verdict is FATAL for this class. Apps never set the envelope, never
+construct a Context, and never import `com.domatar.crypto`. A handler
+receives a `DomatarMsgClient` that can `send` (and `withToken` /
+`domIdPath`) but cannot `root`, plus a `Context` carrying trust, actId
+and contextId.
 
 
 ## PART 7 — WUI servlets

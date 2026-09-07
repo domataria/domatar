@@ -41,17 +41,16 @@ public class ObjImpl implements DomatarInterface
   }
 
   /**
-   * Path-provenance hook (Q2, Spec-Security.txt PART 8.3).
+   * Path-provenance policy hook (Q2, Spec-Security PART 8.9 / KD14).
    *
-   * Override to return {@code true} in handlers that require the full signed
-   * hop chain to be verified before trusting the caller.  When this returns
-   * {@code true}, {@code Msg.doAction} runs {@link com.domatar.crypto.PathChain#verify}
-   * on the message's {@code Head.Sec.Path} before dispatching.  Failure resets
-   * the dispatch context to {@code verified=false} so {@code hasRights} can
-   * reject the request normally.
+   * Override to return {@code true} when a {@code Trust.NONE} or
+   * {@code Trust.PATH} verdict should be fatal for this handler (reject
+   * rather than run). Verification itself is unconditional from Phase 4;
+   * this hook is policy only. When this returns {@code true},
+   * {@code Msg.doAction} refuses dispatch unless the inbound verdict is
+   * {@code Trust.ACCOUNT}.
    *
-   * Default: {@code false} — handlers that need only origin authenticity (Q1)
-   * are unaffected by this hook.
+   * Default: {@code false}.
    */
   public boolean requiresPath()
   {
@@ -67,7 +66,7 @@ public class ObjImpl implements DomatarInterface
    *   - public:   return true;
    *   - verified: return Auth.isVerified(inMsg);
    *
-   * Auth.isVerified is a flag read on Context.verified - the trust
+   * Auth.isVerified is a Trust read via Context.isVerified() - the trust
    * boundary (DomatarServlet for browser entry, Msg.doAction for
    * cross-prv inbound) has already run verifyLogin once for this
    * request. Per-handler hasRights() therefore costs no DB hit; it is

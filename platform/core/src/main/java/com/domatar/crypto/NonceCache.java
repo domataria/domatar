@@ -44,7 +44,7 @@ public class NonceCache
      * Records a {@code (signerPrvId, nonce)} pair.
      *
      * @param signerPrvId the hstId of the provider that signed the message
-     * @param nonce       the nonce from the OriginBlock
+     * @param nonce       the nonce from the hop
      * @return {@code true} if the nonce was already seen within the window
      *         (replay detected), {@code false} if it is new (accept)
      */

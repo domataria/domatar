@@ -186,8 +186,8 @@ public abstract class SetupServlet extends HttpServlet
       {
         final String domain = req.getServerName();
         final com.domatar.core.Context ctx = new com.domatar.core.Context(
-            "setup@setup", null, null, "127.0.0.1", null, true, null,
-            new com.domatar.util.DomId[0]);
+            "setup@setup", null, null, "127.0.0.1", null,
+            com.domatar.core.Trust.ACCOUNT, null, null);
         final com.domatar.util.DomId src = new com.domatar.util.DomId(
             com.domatar.core.DomatarConfig.getHstId(), "setup", "setup@setup", "migrate");
         final com.domatar.util.DomatarMsgClient client =
@@ -216,8 +216,8 @@ public abstract class SetupServlet extends HttpServlet
       {
         final String domain = req.getServerName();
         final com.domatar.core.Context ctx = new com.domatar.core.Context(
-            "setup@setup", null, null, "127.0.0.1", null, true, null,
-            new com.domatar.util.DomId[0]);
+            "setup@setup", null, null, "127.0.0.1", null,
+            com.domatar.core.Trust.ACCOUNT, null, null);
         final com.domatar.util.DomId src = new com.domatar.util.DomId(
             com.domatar.core.DomatarConfig.getHstId(), "setup", "setup@setup", "cutover");
         final com.domatar.util.DomatarMsgClient client =
@@ -249,8 +249,8 @@ public abstract class SetupServlet extends HttpServlet
             ? DomatarConfig.getDomain()
             : req.getServerName();
         final com.domatar.core.Context ctx = new com.domatar.core.Context(
-            "setup@setup", null, null, "127.0.0.1", null, true, null,
-            new com.domatar.util.DomId[0]);
+            "setup@setup", null, null, "127.0.0.1", null,
+            com.domatar.core.Trust.ACCOUNT, null, null);
         final com.domatar.util.DomId src = new com.domatar.util.DomId(
             DomatarConfig.getHstId(), "setup", "setup@setup", "desktop-sync");
         final com.domatar.util.DomatarMsgClient client =
@@ -300,8 +300,8 @@ public abstract class SetupServlet extends HttpServlet
             ? DomatarConfig.getDomain()
             : req.getServerName();
         final com.domatar.core.Context ctx = new com.domatar.core.Context(
-            "setup@setup", null, null, "127.0.0.1", null, true, null,
-            new com.domatar.util.DomId[0]);
+            "setup@setup", null, null, "127.0.0.1", null,
+            com.domatar.core.Trust.ACCOUNT, null, null);
         final com.domatar.util.DomId src = new com.domatar.util.DomId(
             DomatarConfig.getHstId(), "setup", "setup@setup", "user-substrate");
         final com.domatar.util.DomatarMsgClient client =
@@ -332,8 +332,8 @@ public abstract class SetupServlet extends HttpServlet
             ? DomatarConfig.getDomain()
             : req.getServerName();
         final com.domatar.core.Context ctx = new com.domatar.core.Context(
-            "setup@setup", null, null, "127.0.0.1", null, true, null,
-            new com.domatar.util.DomId[0]);
+            "setup@setup", null, null, "127.0.0.1", null,
+            com.domatar.core.Trust.ACCOUNT, null, null);
         final com.domatar.util.DomId src = new com.domatar.util.DomId(
             DomatarConfig.getHstId(), "setup", "setup@setup", "domatar-membership");
         final com.domatar.util.DomatarMsgClient client =
@@ -375,8 +375,8 @@ public abstract class SetupServlet extends HttpServlet
           {
             final String domain = req.getServerName();
             final com.domatar.core.Context ctx = new com.domatar.core.Context(
-                actId, null, null, "127.0.0.1", null, true, null,
-                new com.domatar.util.DomId[0]);
+                actId, null, null, "127.0.0.1", null,
+                com.domatar.core.Trust.ACCOUNT, null, null);
             final com.domatar.util.DomId src = new com.domatar.util.DomId(
                 com.domatar.core.DomatarConfig.getHstId(), "setup", actId, "rebind");
             final com.domatar.util.DomatarMsgClient client =
@@ -426,8 +426,8 @@ public abstract class SetupServlet extends HttpServlet
             : (req.getServerName() + ":" + req.getServerPort());
         final String prvId  = DomatarConfig.getPrvId();
         final com.domatar.core.Context ctx = new com.domatar.core.Context(
-            actId, null, null, "127.0.0.1", null, true, null,
-            new com.domatar.util.DomId[0]);
+            actId, null, null, "127.0.0.1", null,
+            com.domatar.core.Trust.ACCOUNT, null, null);
         final com.domatar.util.DomId src = new com.domatar.util.DomId(
             DomatarConfig.getHstId(), "setup", actId, "desktop-replica");
         final com.domatar.util.DomatarMsgClient client =
@@ -466,7 +466,7 @@ public abstract class SetupServlet extends HttpServlet
       if (isAlreadyDone())
       {
         // Bootstrap is done, but Tomcat recreate can mint a new ephemeral
-        // operational key — refresh hst.PubKey so cross-prv OriginSig verifies.
+        // operational key — refresh hst.PubKey so cross-prv HopSig verifies.
         try
         {
           com.domatar.install.ProviderKeyPublish.publishLocalAndDirectory();

@@ -28,7 +28,7 @@ import java.util.TreeMap;
  *   - UTF-8 output bytes.
  *
  * The byte string returned by each method is the input to every signature
- * computation in the system (origin blocks, delegation certificates, hop records,
+ * computation in the system (hop records, delegation certificates,
  * hst directory records).
  */
 public class CanonicalJson
@@ -64,7 +64,7 @@ public class CanonicalJson
     /**
      * Canonical bytes for {@code map} with the named top-level fields omitted.
      * Used to produce the byte string over which a signature field itself was
-     * computed (e.g. exclude "OriginSig" before verifying the origin block).
+     * computed (e.g. exclude "HopSig" before verifying a hop).
      */
     public static byte[] canonicalizeExcluding(final JsonMap map, final String... fieldsToOmit)
     {

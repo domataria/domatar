@@ -336,8 +336,9 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
 
   The binding is stored with the account (this realisation: columns
   GenesisPubKey / OwnPubKey / BindingVersion / BindingNotBefore /
-  BindingSig on `act`) and travels with each signed message in
-  Head.Sec.Binding. Login-peer storage and replication are
+  BindingSig on `act`) and travels with each signed message in the
+  `Sec=` envelope ([Security](Security.md) PART 11.1). Login-peer
+  storage and replication are
   [Login protocol](../apps/Login-Protocol.md).
 
 6.3  Why it is self-authenticating
@@ -657,11 +658,12 @@ message proves origin, path, and wire protection (Q1 / Q2 / Q3).
 
 Names indicative; follow [Code Style](CodeStyle.md).
 
-  The binding lives with the account and in Head.Sec; this realisation
-  stores account fields on `act`. ActManagerImpl /
-  OwnIdsRebind perform rebind; Msg.verifyCredentialChain checks the
-  binding hop + local Version freshness. MembershipImpl GetBinding /
-  SetBinding replicate it ([Login protocol](../apps/Login-Protocol.md)).
+  The binding lives with the account and in the `Sec=` envelope
+  ([Security](Security.md) PART 11.1); this realisation stores account
+  fields on `act`. ActManagerImpl / OwnIdsRebind perform rebind;
+  Msg.doAction / Provenance.verify checks the binding hop + local
+  Version freshness. MembershipImpl GetBinding / SetBinding replicate
+  it ([Login protocol](../apps/Login-Protocol.md)).
 
   Binding record: a (login, binding)
   obj on each membership replica login-<actId>-<prvId>, alongside the

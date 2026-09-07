@@ -18,9 +18,10 @@ import javax.net.ssl.SSLSocketFactory;
 import com.domatar.crypto.Binding;
 import com.domatar.crypto.Delegation;
 import com.domatar.crypto.DirectoryTrust;
-import com.domatar.crypto.Hop;
-import com.domatar.crypto.OriginBlock;
-import com.domatar.crypto.PathChain;
+import com.domatar.crypto.CanonicalJson;
+import com.domatar.crypto.Path;
+import com.domatar.crypto.Provenance;
+import com.domatar.crypto.SecWire;
 import com.domatar.db.ActDb;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
@@ -53,6 +54,8 @@ public class HttpClient implements DomatarMsgClient
   private final Context srcContext;
   private final String srcContextPath;
   private final String srcContextRealPath;
+  private final Provenance prov;
+  private final boolean rootCapable;
 
   // Stateless directory DomId used as the "from" of GetHst calls. The hstId/actId
   // are placeholders; the directory does not check them.
@@ -71,25 +74,41 @@ public class HttpClient implements DomatarMsgClient
 
   public HttpClient(DomId domId, String domain, Context context, String contextPath, String contextRealPath)
   {
+    this(domId, domain, context, contextPath, contextRealPath, Provenance.empty(), true);
+  }
+
+  /**
+   * Platform factory Msg.doAction uses to hand a handler a client
+   * carrying the verified chain. The returned client can only extend
+   * that chain; it cannot root.
+   */
+  public static HttpClient inbound(final DomId dstDomId,
+                                   final String srcDomain,
+                                   final Context stampedCtx,
+                                   final String contextPath,
+                                   final String contextRealPath,
+                                   final Provenance verified)
+  {
+    return new HttpClient(dstDomId, srcDomain, stampedCtx, contextPath, contextRealPath,
+                          verified != null ? verified : Provenance.empty(),
+                          false);
+  }
+
+  private HttpClient(final DomId domId,
+                     final String domain,
+                     final Context context,
+                     final String contextPath,
+                     final String contextRealPath,
+                     final Provenance prov,
+                     final boolean rootCapable)
+  {
     srcDomId = domId;
     srcDomain = domain;
     srcContext = context;
     srcContextPath = contextPath;
     srcContextRealPath = contextRealPath;
-  }
-
-  /**
-   * Build a peer HttpClient that shares this client's transport
-   * coordinates (srcDomId, srcDomain, contextPath, contextRealPath)
-   * but carries a different identity envelope. Used by handlers that
-   * issue side-effect dispatches under a freshly-minted identity -
-   * e.g. ActManagerImpl.addAct stamping the just-issued token onto a
-   * RecordLogin / AddPeer to the account directory
-   * (Spec-Login-Multiple.txt — membership replica post-cutover).
-   */
-  public HttpClient derive(final Context context)
-  {
-    return new HttpClient(srcDomId, srcDomain, context, srcContextPath, srcContextRealPath);
+    this.prov = prov != null ? prov : Provenance.empty();
+    this.rootCapable = rootCapable;
   }
 
   @Override
@@ -98,64 +117,145 @@ public class HttpClient implements DomatarMsgClient
     return srcDomId;
   }
 
+  /**
+   * Platform only (DomatarServlet, bootstrap, directory bring-up). Mints
+   * hop 0. Throws when this client already holds a chain. Roots with
+   * {@code srcContext.actId} when verified, else a null actId, and
+   * attaches Binding + Delegation when a fingerprint actId is asserted.
+   */
+  public JsonMsg root(final DomId dst, final JsonMsg msg) throws DomatarException
+  {
+    if (!rootCapable || !prov.isEmpty())
+      throw new DomatarException("root on a non-empty chain");
+
+    final String actId = srcContext != null && srcContext.isVerified()
+                         ? srcContext.actId : null;
+    return dispatchRoot(dst, msg, actId);
+  }
+
+  /**
+   * Platform only. Sole legitimate caller: {@code ActManagerImpl.addAct}.
+   * Mints a fresh hop 0 and ContextId under {@code actId} and attaches
+   * that account's Binding and Delegation.
+   */
+  public JsonMsg rootAs(final String actId, final DomId dst, final JsonMsg msg)
+      throws DomatarException
+  {
+    return dispatchRoot(dst, msg, actId);
+  }
+
+  /**
+   * Platform only. Sole legitimate caller: {@code ActManagerImpl.addAct}.
+   * Returns a new root-capable client stamped as the just-created account
+   * so the install chain can send as a new lineage, not a hand-built
+   * Context with an empty path.
+   */
+  public HttpClient rootAs(final String actId,
+                           final String usrId,
+                           final String usrName,
+                           final String usrIp,
+                           final String token)
+  {
+    final Context stamped = new Context(actId, usrId, usrName, usrIp, token,
+                                        Trust.ACCOUNT, null, null);
+    return new HttpClient(srcDomId, srcDomain, stamped, srcContextPath,
+                          srcContextRealPath, Provenance.empty(), true);
+  }
+
   @Override
   public String send(DomId dstDomId, String document) throws DomatarException
   {
     return send(dstDomId, new JsonMsg(document)).toString();
   }
 
+  /**
+   * Appends a hop from the held chain. An ordinary handler-composed send
+   * costs one Hop signature and no database read (Spec PART 8.11).
+   * Throws when the chain is empty on an inbound client — an app that
+   * needs to start something calls a platform root, not send. A
+   * root-capable empty client (public constructor / {@link #rootAs})
+   * mints hop 0, which is how bootstrap and LoginRemote still send.
+   */
   @Override
   public JsonMsg send(DomId dstDomId, JsonMsg jsonMsg) throws DomatarException
   {
-    DomId sendDomId;
+    if (prov.isEmpty())
+    {
+      if (!rootCapable)
+        throw new DomatarException("send on an empty chain");
 
-    if (dstDomId.hstId.length() == 0)
-    {
-      sendDomId = new DomId(srcDomId.hstId,
-                            dstDomId.appId,
-                            dstDomId.actId,
-                            dstDomId.objId);
-    }
-    else
-    {
-      sendDomId = dstDomId;
+      final String actId = srcContext != null && srcContext.isVerified()
+                           ? srcContext.actId : null;
+      return dispatchRoot(dstDomId, jsonMsg, actId);
     }
 
-    JsonMsg retMsg;
+    final DomId sendDomId = resolveSendDomId(dstDomId);
 
     try
     {
-      // Append the destination to the path so LogsImpl can see the full hop chain.
-      final DomId[] oldPath = srcContext.domIdPath != null ? srcContext.domIdPath : new DomId[0];
-      final DomId[] newPath = new DomId[oldPath.length + 1];
-      System.arraycopy(oldPath, 0, newPath, 0, oldPath.length);
-      newPath[oldPath.length] = sendDomId;
-      final Context msgContext = new Context(srcContext.actId, srcContext.usrId, srcContext.usrName,
-                                             srcContext.usrIp, srcContext.token, srcContext.verified,
-                                             srcContext.httpHeaders, newPath);
-
-      jsonMsg.addRequestHead(srcDomId, sendDomId, msgContext);
-
-      // Phase 4: attach an OriginBlock + Delegation when:
-      //  - this is the first outbound hop (no Sec block yet),
-      //  - a real account actId is present in the context (not a synthetic
-      //    placeholder like "act@act" or "login@act"), and
-      //  - the message is a cross-provider request (not a self-dispatch that
-      //    will be handled inline without crossing a trust boundary).
-      attachSecIfAbsent(srcDomId, sendDomId, jsonMsg, msgContext);
-
-      // Phase 5: append a signed Hop to Sec.Path for every send
-      // (network or in-process) that carries a Sec block, so that
-      // provenance-requiring receivers can verify the full causal chain.
-      appendHopToPath(srcDomId, sendDomId, jsonMsg);
-
-      retMsg = dispatch(sendDomId, jsonMsg);
+      final byte[] canonicalBody = CanonicalJson.canonicalize(jsonMsg.getBodyMap());
+      final Provenance outbound = prov.append(srcDomId, sendDomId, canonicalBody,
+                                              DomatarConfig.getPrvId());
+      return dispatchWith(sendDomId, jsonMsg, outbound);
     }
-    catch (DomatarException e)
+    catch (final DomatarException e)
     {
       System.out.println("Error - HttpClient.send: " + e);
-      throw new DomatarException(e);
+      throw e;
     }
+  }
+
+  @Override
+  public DomatarMsgClient withToken(final String token) throws DomatarException
+  {
+    final Context c = new Context(srcContext.actId, srcContext.usrId, srcContext.usrName,
+                                  srcContext.usrIp, token, srcContext.trust,
+                                  srcContext.contextId, srcContext.httpHeaders);
+    return new HttpClient(srcDomId, srcDomain, c, srcContextPath, srcContextRealPath,
+                          prov, rootCapable);
+  }
+
+  @Override
+  public DomId[] domIdPath() throws DomatarException
+  {
+    return prov.domIdPath();
+  }
+
+  private JsonMsg dispatchRoot(final DomId dst, final JsonMsg msg, final String actId)
+      throws DomatarException
+  {
+    final DomId sendDomId = resolveSendDomId(dst);
+
+    try
+    {
+      final byte[] canonicalBody = CanonicalJson.canonicalize(msg.getBodyMap());
+      final Provenance outbound = mintRoot(sendDomId, canonicalBody, actId);
+      return dispatchWith(sendDomId, msg, outbound);
+    }
+    catch (final DomatarException e)
+    {
+      System.out.println("Error - HttpClient.root: " + e);
+      throw e;
+    }
+  }
+
+  /**
+   * Stamps informational Head.Context from the outbound provenance and
+   * dispatches. Provenance travels as {@code Sec=}, never inside JsonMsg.
+   * Called by root, rootAs and send.
+   */
+  private JsonMsg dispatchWith(final DomId sendDomId, final JsonMsg msg,
+                               final Provenance outbound) throws DomatarException
+  {
+    final Context msgContext = new Context(srcContext.actId, srcContext.usrId,
+                                           srcContext.usrName, srcContext.usrIp,
+                                           srcContext.token, srcContext.trust,
+                                           outbound.contextId(),
+                                           srcContext.httpHeaders);
+
+    msg.addRequestHead(srcDomId, sendDomId, msgContext);
+
+    final JsonMsg retMsg = dispatch(sendDomId, msg, outbound);
 
     retMsg.addResponseHead(sendDomId, srcDomId, srcContext);
 
@@ -175,37 +275,37 @@ public class HttpClient implements DomatarMsgClient
    * refresh-on-miss), then send HTTP to its domain.  On any transport error
    * or "Hst moved" reply, refresh the hst row once and retry.
    */
-  private JsonMsg dispatch(final DomId sendDomId, final JsonMsg jsonMsg) throws DomatarException
+  private JsonMsg dispatch(final DomId sendDomId, final JsonMsg jsonMsg,
+                           final Provenance outbound) throws DomatarException
   {
     final String selfHstId = DomatarConfig.getHstId();
 
     if (sendDomId.hstId != null && sendDomId.hstId.equals(selfHstId))
-      return new JsonMsg(sendLocal(sendDomId, jsonMsg));
+      return new JsonMsg(sendLocal(sendDomId, jsonMsg, outbound));
 
     // Directory service (domatar, hst, domatar@hst, hsts): there is no
     // routable hst row for "domatar". Reach it via DOMATAR_DIRECTORY the
     // same way getRemoteHst does (Spec-Domatar.txt PART 4.2; K10).
-    if ("domatar".equals(sendDomId.hstId)
-        && "hst".equals(sendDomId.appId)
-        && "hsts".equals(sendDomId.objId))
-      return new JsonMsg(sendHttp(DomatarConfig.getDirectory(), jsonMsg));
+    if (isDirectoryDomId(sendDomId))
+      return sendDirectory(jsonMsg);
 
     final Hst hst = getHst(sendDomId.hstId);
 
-    JsonMsg retMsg = dispatchOnce(sendDomId, jsonMsg, hst);
+    JsonMsg retMsg = dispatchOnce(sendDomId, jsonMsg, hst, outbound);
 
     if (shouldRefreshAndRetry(retMsg))
     {
       final Hst refreshed = refreshHst(sendDomId.hstId);
 
       if (refreshed != null)
-        retMsg = dispatchOnce(sendDomId, jsonMsg, refreshed);
+        retMsg = dispatchOnce(sendDomId, jsonMsg, refreshed, outbound);
     }
 
     return retMsg;
   }
 
-  private JsonMsg dispatchOnce(final DomId sendDomId, final JsonMsg jsonMsg, final Hst hst)
+  private JsonMsg dispatchOnce(final DomId sendDomId, final JsonMsg jsonMsg, final Hst hst,
+                               final Provenance outbound)
       throws DomatarException
   {
     final String selfHstId = DomatarConfig.getHstId();
@@ -215,12 +315,12 @@ public class HttpClient implements DomatarMsgClient
                          && hst.prvId.equals(selfHstId);
 
     if (isLocal)
-      return new JsonMsg(sendLocal(sendDomId, jsonMsg));
+      return new JsonMsg(sendLocal(sendDomId, jsonMsg, outbound));
 
     if (hst == null || hst.domain == null)
       return errorJson(jsonMsg.getOperation(), "Hst not found");
 
-    final String retStr = sendRemote(hst.domain, jsonMsg);
+    final String retStr = sendRemote(hst.domain, jsonMsg, outbound);
 
     return new JsonMsg(retStr);
   }
@@ -246,8 +346,15 @@ public class HttpClient implements DomatarMsgClient
    * wins; the obj row is loaded only as a fallback when the envelope carries
    * no class. Container services (quips, news, follows, ...) work without an
    * obj row by relying on the envelope class.
+   *
+   * WHY the callee's client is built from {@code extended}, not
+   * {@code srcContext}: the shipped sendLocal constructed a fresh public
+   * HttpClient and dropped every in-process hop (Spec PART 11.2). The
+   * handler must receive the extended provenance so its send() appends
+   * rather than restarting the chain.
    */
-  private String sendLocal(final DomId dstDomId, final JsonMsg jsonMsg) throws DomatarException
+  private String sendLocal(final DomId dstDomId, final JsonMsg jsonMsg,
+                           final Provenance extended) throws DomatarException
   {
     String clsAppId = jsonMsg.getClsAppId();
     String clsId    = jsonMsg.getClsId();
@@ -272,11 +379,17 @@ public class HttpClient implements DomatarMsgClient
     if (msgHandler == null)
       return errorMsg(jsonMsg.getOperation(), "Handler not found");
 
-    final DomatarMsgClient msgClient = new HttpClient(dstDomId,
-                                                      srcDomain,
-                                                      srcContext,
-                                                      srcContextPath,
-                                                      srcContextRealPath);
+    final Context childCtx = new Context(srcContext.actId, srcContext.usrId,
+                                         srcContext.usrName, srcContext.usrIp,
+                                         srcContext.token, srcContext.trust,
+                                         extended.contextId(),
+                                         srcContext.httpHeaders);
+
+    final DomatarMsgClient msgClient = inbound(dstDomId, srcDomain, childCtx,
+                                               srcContextPath, srcContextRealPath,
+                                               extended);
+
+    jsonMsg.setContext(childCtx);
 
     return msgHandler.handleMsg(jsonMsg.toString(), obj, srcContextPath, srcContextRealPath, msgClient);
   }
@@ -299,9 +412,10 @@ public class HttpClient implements DomatarMsgClient
     return msg;
   }
 
-  private String sendRemote(final String dstDomain, final JsonMsg jsonMsg) throws DomatarException
+  private String sendRemote(final String dstDomain, final JsonMsg jsonMsg,
+                            final Provenance outbound) throws DomatarException
   {
-    return sendHttp(dstDomain, jsonMsg);
+    return sendHttp(dstDomain, jsonMsg, outbound);
   }
 
   /**
@@ -360,11 +474,7 @@ public class HttpClient implements DomatarMsgClient
 
       getHstMsg.addRequestBody("GetHst", attrs);
 
-      final String directory = DomatarConfig.getDirectory();
-
-      final String retMsgStr = sendHttp(directory, getHstMsg);
-
-      final JsonMsg retMsg = new JsonMsg(retMsgStr);
+      final JsonMsg retMsg = sendDirectory(getHstMsg);
 
       if (!"Success".equals(retMsg.getError()))
         return null;
@@ -423,92 +533,54 @@ public class HttpClient implements DomatarMsgClient
   }
 
   /**
-   * Appends a signed {@link Hop} to the {@code Head.Sec.Path} list for every
-   * send that carries a Sec block (Phase 5, Spec-Security.txt PART 8.2).
-   * No-op when:
-   *   - the message has no Sec block (unsigned message), or
-   *   - ProviderKeyStore has no key yet (pre-bootstrap).
-   *
-   * Both network sends (sendHttp) and in-process sends (sendLocal) go through
-   * this path so the causal chain stays complete for the eventual receiver.
+   * Named Spec PART 10.3 carve-out. The operations needed to verify
+   * (GetHst) must be reachable without prior verification. Widening this
+   * method's callers is a security change.
    */
-  private void appendHopToPath(final DomId src, final DomId dst, final JsonMsg jsonMsg)
+  private JsonMsg sendDirectory(final JsonMsg msg) throws DomatarException
   {
-    try
-    {
-      if (!jsonMsg.hasSec())
-        return;
-
-      final JsonMsg.SecEnvelope sec = jsonMsg.getSec();
-      final java.util.List<Hop> existingPath = sec.path;
-
-      final String prvId = DomatarConfig.getPrvId();
-
-      final Hop hop = PathChain.append(existingPath, src, dst,
-                                       jsonMsg.getBodyMap(), prvId);
-
-      jsonMsg.appendHopToSec(hop);
-    }
-    catch (final Exception e)
-    {
-      System.out.println("WARN: appendHopToPath failed: " + e);
-    }
+    return new JsonMsg(sendHttp(DomatarConfig.getDirectory(), msg, null));
   }
 
-  /**
-   * Attaches an OriginBlock + Delegation + Binding to {@code jsonMsg} when:
-   *   - the message has no Sec block yet (first hop only),
-   *   - {@code msgContext.actId} is a fingerprint actId (not a synthetic
-   *     placeholder like "act@act"), and
-   *   - {@code msgContext.verified} is true (cookie-verified browser session).
-   *
-   * <p>OwnIds Phase 5: always attaches the Binding. An account with no
-   * binding is treated as a bug (log WARNING and skip signing).
-   *
-   * Failures are non-fatal: a missing delegation means the message goes out
-   * without a Sec block. The receiving Msg.verifyAndStamp will set
-   * verified=false, and public handlers still run.
-   */
-  private void attachSecIfAbsent(final DomId src,
-                                 final DomId dst,
-                                 final JsonMsg jsonMsg,
-                                 final Context ctx)
+  private static boolean isDirectoryDomId(final DomId id)
   {
+    return id != null
+        && "domatar".equals(id.hstId)
+        && "hst".equals(id.appId)
+        && "hsts".equals(id.objId);
+  }
+
+  private DomId resolveSendDomId(final DomId dstDomId) throws DomatarException
+  {
+    if (dstDomId.hstId.length() == 0)
+      return new DomId(srcDomId.hstId, dstDomId.appId, dstDomId.actId, dstDomId.objId);
+
+    return dstDomId;
+  }
+
+  private Provenance mintRoot(final DomId dst, final byte[] canonicalBody,
+                              final String actId) throws DomatarException
+  {
+    final String prvId = DomatarConfig.getPrvId();
+    String hopActId = null;
+    Binding binding = null;
+    Delegation deleg = null;
+
+    if (actId != null && !actId.isEmpty() && actId.indexOf('@') < 0)
+    {
+      hopActId = actId;
+      binding = ActDb.getBinding(actId);
+      deleg = Delegation.ensureValid(actId, prvId);
+    }
+
     try
     {
-      if (jsonMsg.hasSec())
-        return; // already signed (e.g. a forwarded message)
-
-      final String actId = ctx.actId;
-
-      if (actId == null || actId.isEmpty() || actId.indexOf('@') >= 0)
-        return; // synthetic or legacy actId — no signing
-
-      if (!ctx.verified)
-        return; // not yet cookie-verified; skip (no credentials to assert)
-
-      final String prvId = DomatarConfig.getPrvId();
-
-      final Binding binding = ActDb.getBinding(actId);
-      if (binding == null)
-      {
-        System.out.println("WARN: attachSecIfAbsent: no binding for actId=" + actId
-                           + " — skipping Sec (Phase 5 requires binding)");
-        return;
-      }
-
-      final Delegation deleg = Delegation.ensureValid(actId, prvId);
-
-      if (deleg == null)
-        return; // no valid delegation available
-
-      final OriginBlock origin = OriginBlock.sign(src, dst, jsonMsg.getBodyMap(), actId, prvId);
-      jsonMsg.addSec(origin, deleg, binding);
+      final Path path = Path.root(srcDomId, dst, canonicalBody, hopActId, prvId);
+      return Provenance.of(path, deleg, binding);
     }
-    catch (final Exception e)
+    catch (final RuntimeException e)
     {
-      // Non-fatal: log and continue without the Sec block.
-      System.out.println("WARN: attachSecIfAbsent failed: " + e);
+      throw new DomatarException(e);
     }
   }
 
@@ -526,7 +598,8 @@ public class HttpClient implements DomatarMsgClient
     }
   }
 
-  private String sendHttp(final String dstDomain, final JsonMsg jsonMsg)
+  private String sendHttp(final String dstDomain, final JsonMsg jsonMsg,
+                          final Provenance prov)
   {
     String retStr = "{ \"Error\" : \"" + TRANSPORT_FAILURE + "\" }";
     OutputStreamWriter osw = null;
@@ -558,7 +631,11 @@ public class HttpClient implements DomatarMsgClient
       final PrintWriter pout = new PrintWriter(osw, true);
 
       final String msgStr = jsonMsg.toString();
-      final String postStr = "Msg=" + URLEncoder.encode(msgStr, "UTF-8");
+      String postStr = "Msg=" + URLEncoder.encode(msgStr, "UTF-8");
+
+      if (prov != null)
+        postStr += "&" + SecWire.PARAM + "="
+            + URLEncoder.encode(SecWire.encode(prov), "UTF-8");
 
       pout.print(postStr);
       pout.flush();

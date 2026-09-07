@@ -50,8 +50,7 @@ public final class DirectoryLookup
       final DomId src = new DomId(DomatarConfig.getHstId(), "hst", "lookup@hst", "get");
       final DomId dst = new DomId("domatar", "hst", "domatar@hst", "hsts");
       final com.domatar.core.Context ctx = new com.domatar.core.Context(
-          "lookup@hst", null, null, "127.0.0.1", null, false, null,
-          new DomId[0]);
+          "lookup@hst", null, null, "127.0.0.1", null, null);
 
       req.addRequestHead(src, dst, ctx);
       req.addRequestBody("GetHst", attrs);

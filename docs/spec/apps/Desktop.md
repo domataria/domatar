@@ -243,7 +243,8 @@ Routed to by ImplMap entry (desktop, apps) -> AppsImpl.
     }
 
   Cross-provider PullApps / MergeApps carry the existing credential chain
-  in Head.Sec ([Security](../platform/Security.md) PART 6); no new published record.
+  in the platform `Sec=` envelope beside the message
+  ([Security](../platform/Security.md) PART 11.1); no new published record.
 
 6.2 Operations
 

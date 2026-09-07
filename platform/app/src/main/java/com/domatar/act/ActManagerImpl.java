@@ -301,31 +301,18 @@ public class ActManagerImpl extends ObjImpl
       }
     }
 
-    // For the FIRST sign-up the inbound caller has no session yet, so
-    // msgClient.srcContext is unverified. Derive a peer client carrying
-    // the just-issued (usrId, token) so that authenticated dispatches
-    // (AddPeer, QuippinDirectory.Register, ...) are accepted by the
-    // receivers' hasRights checks. Link-mode AddActs already have a
+    // For the FIRST sign-up the inbound caller has no session yet.
+    // rootAs mints a new operation lineage for the just-created account
+    // (hop 0 + that account's Binding and Delegation). The receiver's
+    // own verification decides trust. Link-mode AddActs already have a
     // verified caller and reuse msgClient as-is.
-    // Derived here (before the install chain) because QuippinInstall
+    // Built here (before the install chain) because QuippinInstall
     // needs sideClient to call Register on the quippin central host.
     DomatarMsgClient sideClient = msgClient;
 
     if (isRoot && msgClient instanceof HttpClient)
     {
-      // verified=true on the wire is safe in both topologies:
-      //   - same-prv self-dispatch: the central host is talking to a
-      //     sub-host on its own prv; the message is legitimately from
-      //     this just-completed addAct, so trusting the in-process
-      //     stamp is correct.
-      //   - cross-prv: Msg.verifyAndStamp on the receiving prv re-runs
-      //     LoginRemote.verifyLogin against the central host (which
-      //     just persisted the row), so the wire's verified flag is
-      //     overridden by an independent verdict.
-      final Context selfCtx = new Context(actId, usrId, usrName, ip, newToken, true, null,
-                                          new DomId[0]);
-
-      sideClient = ((HttpClient) msgClient).derive(selfCtx);
+      sideClient = ((HttpClient) msgClient).rootAs(actId, usrId, usrName, ip, newToken);
     }
 
     JsonList defaultAppInstallFailures = null;

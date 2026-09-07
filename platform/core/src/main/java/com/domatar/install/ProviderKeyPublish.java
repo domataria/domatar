@@ -28,7 +28,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <p>Safe to call after every Tomcat start / {@code /Setup}: without a
  * persisted {@code ProviderKeyPath}, ephemeral keys rotate on recreate and
- * peers reject OriginSig until hst.PubKey is refreshed.
+ * peers reject HopSig until hst.PubKey is refreshed.
  */
 public final class ProviderKeyPublish
 {
@@ -61,8 +61,7 @@ public final class ProviderKeyPublish
       final DomId directoryId = new DomId("domatar", "hst", "domatar@hst", "hsts");
       final DomId src = new DomId(prvId, "hst", prvId + "@hst", "publish");
       final Context ctx = new Context(
-          prvId + "@" + prvId, null, null, "127.0.0.1", null, false, null,
-          new DomId[0]);
+          prvId + "@" + prvId, null, null, "127.0.0.1", null, null);
       final JsonMsg updateMsg = new JsonMsg();
       final ObjAttrs attrs = new ObjAttrs();
 

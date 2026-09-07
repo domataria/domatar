@@ -477,47 +477,32 @@ Direction (Option C):
 
     * `DomatarServlet` (browser entry; e.g. /domatar/<appId>/Wui/<W>):
         Reads cookies, runs LoginRemote.verifyLogin against the local
-        `act` table (cookie/token path), builds a Context with
-        verified=true on success (or refuses the request on a
-        hard-required-verified page), and dispatches the WUI operation
-        via HttpClient.
-
-        HttpClient.send attaches a signed OriginBlock +
-        account Delegation to the outbound message before the first
-        cross-prv hop (if the context is verified and a fingerprint
-        actId is present).  The signing uses THIS provider's operational
-        key (ProviderKeyStore) and the account's current Delegation.
+        `act` table (cookie/token path), and ROOTS the operation
+        ([Security](platform/Security.md) PART 7.3, 8.7, 11.1): mints
+        and signs hop 0 with ActId, ContextId, Binding and Delegation,
+        then stamps Context with Trust.ACCOUNT (or refuses the request
+        on a hard-required-verified page). Every subsequent send
+        appends a signed Hop. The signing uses THIS provider's
+        operational key (ProviderKeyStore).
 
     * `Msg.doAction` (/domatar/Msg; cross-prv inbound):
-        verifies the credential chain from Head.Sec
-        ([Security](platform/Security.md) PART 7.3):
-          (a) Parse Head.Sec.Origin + Head.Sec.Delegation.
-              If absent → verified=false, dispatch continues.
-          (b) Verify Delegation: self-cert (actId == fingerprint
-              (rootPubKey)), signature, expiry, PrvId == SignerPrvId.
-          (c) Fetch SignerPrv's operational pubkey from the local hst
-              cache. Verify OriginSig over the canonical body.
-          (d) Verify BodyHash matches.
-          (e) Timestamp within ±DOMATAR_MSG_SKEW_MS AND nonce not seen
-              (NonceCache in-memory sliding window).
-
-        On full success: verified=true, actId = Origin.ActId.
-        On any failure: verified=false.  NEVER trusts the wire's
-        Verified flag.
-
-        Directory traffic (hst/hsts) is exempt — verified=false,
-        dispatch continues: provider-key lookups must be reachable
-        before any credential chain can be verified.
+        parses the `Sec=` envelope ([Security](platform/Security.md)
+        PART 11.1), always verifies the path (PART 8.9), and stamps
+        Context from its own Verdict (Trust.NONE / Trust.PATH /
+        Trust.ACCOUNT). NEVER trusts a wire Verified flag, ActId,
+        contextId, or object list. Unsigned HTTP is rejected except
+        the directory carve-out (hst/hsts): provider-key lookups must
+        be reachable before any credential chain can be verified.
 
   In-process local handler chains (`HttpClient.sendLocal`) inherit
-  the verified flag unchanged: the JsonMsg is rebuilt from the same
+  the stamped Context: the JsonMsg is rebuilt from the same
   in-memory Context the entry point produced, so there are no
   per-handler credential checks.
 
   Cross-prv crossings reset verification at the Msg boundary:
-  the receiving Msg.doAction runs its own credential-chain check
-  and overwrites the Verified flag.  A prv only trusts signatures
-  it has verified itself.
+  the receiving Msg.doAction runs its own checks and overwrites
+  Context from its Verdict. A prv only trusts signatures it has
+  verified itself.
 
 6.2  Class identification
 

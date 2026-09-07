@@ -199,18 +199,18 @@ class CryptoTest
     {
         final JsonHashMap map = new JsonHashMap();
         map.put("ActId", "abc");
-        map.put("OriginSig", "signature_to_exclude");
+        map.put("HopSig", "signature_to_exclude");
         map.put("Nonce", "xyz");
 
         final byte[] withSig    = CanonicalJson.canonicalize(map);
-        final byte[] withoutSig = CanonicalJson.canonicalizeExcluding(map, "OriginSig");
+        final byte[] withoutSig = CanonicalJson.canonicalizeExcluding(map, "HopSig");
 
-        // withoutSig must be shorter and not contain the OriginSig value
+        // withoutSig must be shorter and not contain the HopSig value
         assertTrue(withoutSig.length < withSig.length,
             "canonicalizeExcluding must produce fewer bytes than the full form");
 
         final String withoutStr = new String(withoutSig, java.nio.charset.StandardCharsets.UTF_8);
-        assertFalse(withoutStr.contains("OriginSig"),
+        assertFalse(withoutStr.contains("HopSig"),
             "The excluded field key must not appear in the output");
         assertFalse(withoutStr.contains("signature_to_exclude"),
             "The excluded field value must not appear in the output");

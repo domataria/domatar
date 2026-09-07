@@ -107,7 +107,7 @@ public class Delegation
      *   (c) DelegSig verifies under OwnPubKey
      *   (d) NotAfter is in the future (with skew)
      *
-     * Provider match (PrvId == Origin.SignerPrvId) remains the caller's job.
+     * Provider match (PrvId == hop 0 SignerPrv) remains the caller's job.
      */
     public boolean verify(final Binding binding, final int fpVersion)
     {

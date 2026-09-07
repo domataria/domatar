@@ -1,5 +1,7 @@
 # DOMATAR - SECURITY SPECIFICATION
 
+[IMPLEMENTED — Update-Security-New-Architecture.txt]
+
 This document specifies how Domatar secures inter-object communication:
 how a receiving object knows WHO sent a message (the caller's identity),
 by WHAT PATH it arrived (the chain of objects it passed through), and how
@@ -7,8 +9,14 @@ the bytes are protected ON THE WIRE.
 
 Account identity (ownId, actId, usrId, genesis/ownership keys, binding,
 rebind) is [Identifiers](Identifiers.md). This document is the wire:
-origin signatures, signed path hops, delegations carried on the message,
-and TLS.
+origin signatures, signed path hops, delegations carried with the
+message, and TLS.
+
+Security is a platform operation. Apps compose bodies and call `send`.
+They do not construct `Context`, do not attach provenance, and do not
+opt into verification. An app that does the wrong thing can fail its
+own work; it cannot become the source of truth for who called or which
+path the call took.
 
 The system uses three independent mechanisms:
 
@@ -21,8 +29,10 @@ The system uses three independent mechanisms:
                   alter the bytes in transit?"               (PART 9)
 
 Ownership keys are server-held on signing providers (T1). Device-held
-keys, proactive revocation, and message-level encryption are Direction
-(PART 15).
+keys, proactive revocation, message-level encryption, and defenses
+against a *correctly signing but dishonest* registered provider (A5)
+are Direction (PART 15).
+
 
 ## PART 1 - GOALS AND NON-GOALS
 
@@ -30,11 +40,12 @@ keys, proactive revocation, and message-level encryption are Direction
 
   G1  A receiving object can verify that a message genuinely originates
       from the account (actId) it names, and that no intermediary
-      altered its body. (Q1)
+      altered the body of the origin hop. (Q1)
 
   G2  A receiving object can verify the FULL PATH the message took --
-      the ordered chain of objects/providers that relayed it -- and
-      detect any inserted, dropped, reordered, or modified hop. (Q2)
+      the ordered chain of objects/providers that relayed or composed
+      it -- and detect any inserted, dropped, reordered, or modified
+      hop. (Q2)
 
   G3  Message bytes are confidential and integrity-protected against
       network eavesdroppers between two communicating providers. (Q3)
@@ -48,6 +59,10 @@ keys, proactive revocation, and message-level encryption are Direction
       control, even if it knows the account's identifiers and claims to
       be that account's home provider.
 
+  G6  Provenance is produced and verified by the platform. It does not
+      depend on an application supplying, preserving, or requesting a
+      security envelope.
+
 1.2  Non-goals (for this specification)
 
   * Consensus / a distributed ledger. Domatar needs unforgeable
@@ -58,16 +73,23 @@ keys, proactive revocation, and message-level encryption are Direction
 
   * Anonymity / traffic-analysis resistance. Full-path provenance (G2)
     is deliberately the OPPOSITE of anonymity: it reveals the route to
-    the endpoint (see PART 8.5).
+    the endpoint (see PART 8.13).
 
   * Confidentiality against a relaying provider. Transport (per-hop)
-    encryption only; a provider that handles a message can read it.
+    encryption only; a provider that handles a message can read *that*
+    hop's body. It does not receive upstream bodies (PART 8.4).
     End-to-end body encryption is Direction (PART 15).
 
   * Proactive revocation. A provider is de-authorized by letting its
     delegation expire (PART 6), not by a revocation list. A short
     delegation lifetime bounds the exposure; a revocation service is
     Direction (PART 15).
+
+  * Preventing a registered provider from lying about its own interior.
+    A provider is the only witness to its own objects. Q2 proves that
+    named providers attested a route; it does not prove those providers
+    were honest about objects they host (A5, PART 2.1 / PART 14.2).
+
 
 ## PART 2 - THREAT MODEL
 
@@ -78,15 +100,28 @@ keys, proactive revocation, and message-level encryption are Direction
 
   A2  A malicious or compromised provider that is NOT a delegated home
       provider of the victim account. It can send any bytes, craft any
-      identifiers, forge any DomIdPath, and claim to be anyone's home
+      identifiers, forge any path, and claim to be anyone's home
       provider.
 
-  A3  A malicious relay: a provider that legitimately forwards a message
-      but tries to alter it, alter its claimed route, or inject/drop
-      hops.
+  A3  A malicious relay: a provider that legitimately forwards or
+      composes a message but tries to alter it, alter its claimed
+      route, or inject/drop hops.
 
   A4  A replay attacker that captures a valid signed message and
       re-sends it.
+
+  A5  A registered provider that signs correctly and lies in the
+      claims nobody else can check: fabricated internal routes,
+      truncated chains presented as roots, doctored class descriptors,
+      success returned for work not done. A2 and A3 fail
+      cryptographically when the chain is platform-held. A5 passes
+      every signature check we have. (Direction for additional
+      mitigations: PART 15.)
+
+  A6  A malicious or buggy *application* running in-process on an
+      otherwise honest provider. It can compose any body and call
+      `send`. It must not be able to mint, truncate, or substitute
+      provenance, nor to raise its own trust level (PART 7.5).
 
 2.2  Trusted, by design (accepted limitations)
 
@@ -111,6 +146,32 @@ keys, proactive revocation, and message-level encryption are Direction
   already holds the keys; side-channel attacks on the crypto library;
   denial of service. These are real but not addressed here.
 
+2.4  Self-certifying vs provider-asserted
+
+  Every claim on the wire is one or the other:
+
+    Self-certifying     checkable without trusting a provider.
+                        actId is a fingerprint of GenesisPubKey;
+                        Binding and Delegation prove themselves
+                        against that actId.
+
+    Provider-asserted   true only if the signer is honest.
+                        Hop SrcDomId / DstDomId inside the signer's
+                        namespace; "this operation began here";
+                        class-descriptor fields (SideEffect, Cost,
+                        Compensates); "the compensating write
+                        succeeded."
+
+  Q1 and the credential chain exist so that *account identity* is
+  self-certifying. Q2 exists so that *route attestation* is
+  attributable to named providers. No authorization decision may rest
+  on a provider-asserted claim without the policy knowing it is one.
+  Confused-deputy rules that treat the path as a cryptographic proof
+  of caller *class* are treating a provider-asserted claim as
+  self-certifying; they hold only as far as each signing provider on
+  that segment is honest.
+
+
 ## PART 3 - IDENTITY ON THE WIRE
 
 Account identifiers are defined in [Identifiers](Identifiers.md). This
@@ -120,14 +181,14 @@ part states only what the message path needs.
 
   * actId — permanent account identity, a fingerprint of the genesis
     public key ([Identifiers](Identifiers.md) PART 4). Embedded in every
-    DomId and in the signed Origin block (PART 7). Never authorizes by
+    DomId and covered by `hop[0].HopSig` (PART 7). Never authorizes by
     itself; the credential chain (PART 6) proves it.
 
   * usrId — mutable login handle `<localname>@<appId>`
     ([Identifiers](Identifiers.md) PART 2.3;
     [Login protocol](../apps/Login-Protocol.md) PART 3.2). Travels in
-    Context.UsrId ([Domatar](../Domatar.md) PART 17.2). Display / routing
-    hint only; never an ownership reference; never authorizes.
+    Context as a display / routing hint only; never an ownership
+    reference; never authorizes.
 
   There is no global usrId-to-actId resolution step: the binding is
   asserted per message, and the actId half is cryptographically proven
@@ -152,6 +213,15 @@ part states only what the message path needs.
   the actId is invariant. Authorization is always against the actId via
   a signature (PART 7).
 
+3.5  prvId
+
+  prvId is a host identifier (an hstId), not a key fingerprint
+  ([Domatar](../Domatar.md) PART 3–4). SignerPrv on each hop names this
+  id. Q1 uses path[0].signerPrv; there is no separate Origin signer
+  field. The matching operational public key comes from the signed
+  directory host record (PART 10).
+
+
 ## PART 4 - CRYPTOGRAPHIC PRIMITIVES
 
   Signatures     Ed25519 (EdDSA over Curve25519). 32-byte public keys,
@@ -160,8 +230,9 @@ part states only what the message path needs.
                  pitfalls. No RSA.
 
   Hash           SHA-256. Used for the actId fingerprint
-                 ([Identifiers](Identifiers.md) PART 4.1), for body digests,
-                 and for hop links (PART 8).
+                 ([Identifiers](Identifiers.md) PART 4.1), for body
+                 digests, for hop links (PART 8), and for ContextId
+                 (PART 8.6).
 
   Text encoding  com.domatar.util.Base64Encoder (URL-safe alphabet, no
                  padding) for all binary-in-string values: actIds, public
@@ -184,6 +255,7 @@ part states only what the message path needs.
 
   TLS            Standard TLS 1.3 for the wire (PART 9).
 
+
 ## PART 5 - KEYS AND PRINCIPALS
 
 Three kinds of key exist. Keep them distinct; they answer different
@@ -204,11 +276,10 @@ questions and have different lifetimes.
   The actId NEVER rotates (rotating genesis would change identity). The
   ownership key DOES rotate via rebind ([Identifiers](Identifiers.md) PART 10).
 
-  Note the division of labour. The ownership key is needed to GOVERN
-  day-to-day delegations. It is NOT needed to OPERATE message-to-message:
-  a home provider signs messages with its own provider key (5.2) plus a
-  delegation it already holds. Genesis is consulted only at creation and
-  rebind.
+  The ownership key is needed to GOVERN day-to-day delegations. It is
+  NOT needed to OPERATE message-to-message: a home provider signs
+  messages with its own provider key (5.2) plus a delegation it already
+  holds. Genesis is consulted only at creation and rebind.
 
 5.2  Provider operational / identity key  (per provider)
 
@@ -216,7 +287,7 @@ questions and have different lifetimes.
   host record (PART 10). One key serves three roles:
     - it signs ORIGIN messages for accounts that have delegated to it
       (PART 7);
-    - it signs PATH hops it relays (PART 8);
+    - it signs PATH hops it performs (PART 8);
     - it authenticates the provider in TLS (PART 9).
   It may rotate; rotation is a directory record update (PART 10.3) with
   an overlap window.
@@ -255,6 +326,7 @@ questions and have different lifetimes.
   device-issued, expiring delegation and no longer stores
   `act.OwnPrvKey`.
 
+
 ## PART 6 - DELEGATION AND THE CREDENTIAL CHAIN
 
 There is NO shared "account record" and NO account directory. Everything
@@ -272,8 +344,8 @@ to publish an account's set of home providers anywhere.
   actId itself. The chain includes the genesis-signed Binding
   ([Identifiers](Identifiers.md) PART 6 / PART 11):
 
-     actId                      the account identity (in the Origin
-                                block, PART 7), = fingerprint(GenesisPubKey)
+     actId                      the account identity (`hop[0].ActId`,
+                                PART 7), = fingerprint(GenesisPubKey)
        ^  actId == fingerprint(GenesisPubKey)      [self-certifying;
           version-aware via act.FpVersion / AccountKeys.fingerprintsTo —
           [Identifiers](Identifiers.md); v1 algorithm unchanged]
@@ -282,15 +354,15 @@ to publish an account's set of home providers anywhere.
      Binding (Version)          "genesis authorizes OwnId as current"
        ^  names OwnPubKey; ownId == fingerprint(OwnPubKey)
      OwnPubKey                  the current operating key, carried in
-                                the Delegation
+                                the Binding
        ^  signs
      Delegation                 "OwnId authorizes provider P until T"
        ^  authorizes P
      provider key of P          from the signed directory host record
                                 (PART 10)
        ^  signs
-     OriginSig                  P's signature on this specific message
-                                (PART 7)
+     hop[0].HopSig              P's signature on hop 0, whose signed
+                                bytes include ActId (PART 7)
 
   No lookup of the account is required at any step: Binding and OwnPubKey
   arrive with the message and are proven by the self-certifying checks;
@@ -300,32 +372,65 @@ to publish an account's set of home providers anywhere.
 6.2  The delegation certificate
 
   A delegation is issued by the ownership key and provisioned to a
-  home provider. It is self-contained (it carries the operating public
-  key so the whole chain verifies from the actId plus the Binding):
+  home provider. The *signed* form is self-contained (it names the
+  account, the operating public key, and the provider):
 
-    Delegation {
+    Delegation (canonical, what DelegSig covers) {
       ActId       : <account ID>                    ([Identifiers](Identifiers.md) PART 4)
-      RootPubKey  : <base64 Ed25519 public key>     (32 bytes)
+      OwnPubKey   : <base64 Ed25519 public key>     (32 bytes)
       PrvId       : <prvId authorized to sign for ActId>
       NotAfter    : <expiry, millis-since-epoch>
-      Nonce       : <random, >= 16 bytes>           (issuance serial)
+      Nonce       : <random>
     }
-    DelegSig    : <base64 Ed25519 sig by RootPubKey over canonical
-                   Delegation>
+    DelegSig    : <base64 Ed25519 sig by the ownership key over
+                   canonical Delegation>
+
+  The delegation is carried WHOLE. Every field above travels on the
+  message and is stored in the same shape (ActDb keeps the canonical
+  JSON). There is ONE representation of a Delegation, so `verify` needs
+  no `Context` and a credential can be checked in isolation — in a test,
+  in a migration, or in a log. Re-deriving ActId / OwnPubKey / PrvId at
+  verify time from their neighbours would save roughly 120 bytes on the
+  wire and cost a second shape per type, a verifier that cannot run
+  standalone, and the diagnosability of every mismatch below.
 
   A verifier ACCEPTS a delegation only if ALL hold:
-    (a) SHA-256(RootPubKey)[0..24) encodes to ActId  -- the
-        self-certifying check: the delegation proves its own account
-        identity;
-    (b) DelegSig verifies under RootPubKey            -- the account
-        really authorized this;
-    (c) NotAfter is in the future (subject to clock skew, PART 13);
-    (d) Provider equals the SignerPrv of the Origin block it accompanies
-        (PART 7).
+    (a) the accompanying Binding verifies under the account's genesis
+        key and names this OwnPubKey as current
+        ([Identifiers](Identifiers.md) PART 6 / 11);
+    (b) `Delegation.ActId` == `Binding.ActId` == `hop[0].ActId`;
+    (c) `Delegation.OwnPubKey` == `Binding.OwnPubKey`;
+    (d) `Delegation.PrvId` == `hop[0].SignerPrv` — the delegation
+        authorizes the provider that actually signed the origin hop;
+    (e) DelegSig verifies under OwnPubKey over canonical Delegation
+        excluding DelegSig — the ownership key really authorized this
+        provider;
+    (f) NotAfter is in the future (subject to clock skew, PART 13).
 
-  Because of (a) and (b), a delegation needs no external signer or
-  registry: a forged delegation either fails the actId check or fails the
-  signature check.
+  Because of (a) and (e), a forged delegation either fails the Binding
+  chain to the actId or fails the ownership signature. A delegation
+  issued to prvA cannot ride on a hop signed by prvB: check (d) rejects
+  it, and says so — the failure names the mismatched provider instead of
+  surfacing as an opaque bad signature. There is no delegation registry.
+
+6.2a  Binding on the message
+
+  The Binding's canonical signed form is unchanged
+  ([Identifiers](Identifiers.md) PART 6):
+
+    Binding (canonical, what GenesisSig covers) {
+      ActId, GenesisPubKey, OwnId, OwnPubKey, Version, NotBefore
+    }
+
+  As with the Delegation, the Binding is carried WHOLE and stored in the
+  same shape (actId is the persistence primary key). `Binding.verify()`
+  therefore takes no `Context`: it re-derives ownId from OwnPubKey
+  ([Identifiers](Identifiers.md) PART 5.1), checks
+  actId == fingerprint(GenesisPubKey) under the account's stored
+  FpVersion, and checks GenesisSig. The shipped
+  `com.domatar.crypto.Binding` and `Delegation` classes already have
+  exactly these fields and this self-contained `verify`; this design
+  leaves both classes alone.
 
 6.3  No account record, no lookup
 
@@ -344,7 +449,7 @@ to publish an account's set of home providers anywhere.
   Issuing / adding a home provider. The ownership-key holder (a signing
   provider today; the user's device in PART 15 Direction) signs a
   Delegation naming the new provider and provisions it to that provider,
-  which stores it and attaches it to the messages it signs. This is a
+  which stores it and attaches it to the origin hops it signs. This is a
   LOCAL act of the ownership-key holder; it involves no directory and no
   global record.
 
@@ -354,11 +459,11 @@ to publish an account's set of home providers anywhere.
 
   Abandoning / removing a home provider. Simply STOP renewing that
   provider's delegation. Its last delegation lapses at NotAfter, after
-  which no verifier will accept its signatures for the account. The actId
-  is unchanged; no object is rewritten; the abandoned provider may be the
-  original creating provider. This realizes G4. A signing provider that
-  still holds the ownership key can self-renew until a rebind
-  ([Identifiers](Identifiers.md) PART 10).
+  which no verifier will accept its origin signatures for the account.
+  The actId is unchanged; no object is rewritten; the abandoned provider
+  may be the original creating provider. This realizes G4. A signing
+  provider that still holds the ownership key can self-renew until a
+  rebind ([Identifiers](Identifiers.md) PART 10).
 
   De-authorization latency is therefore bounded by the delegation
   lifetime (PART 13), not instantaneous. There is no proactive
@@ -372,184 +477,570 @@ to publish an account's set of home providers anywhere.
   the user's device: providers then depend on device-issued, expiring
   delegations, so ceasing to renew genuinely de-authorizes them.
 
-  Desktop-assisted removal (Direction). A future self-synchronizing
-  Desktop that knows all of the user's home providers and holds (or
-  coordinates) the device ownership key makes COOPERATIVE removal clean:
-  it stops issuing delegations to the dropped provider, whose last one
-  lapses at NotAfter. Instant network-wide revocation still needs a
-  revocation service (PART 15) or a published set (which would
-  reintroduce the lookup PART 6.3 removes). Keeping NotAfter short
-  (PART 13) bounds the gap.
-
 6.5  Caching (optimization, not required)
 
   A verifier MAY cache an accepted Delegation by (ActId, Provider) until
   its NotAfter, so senders need not retransmit an unchanged delegation on
   every message. This is a pure optimization; the default, fully
-  stateless behaviour is to carry the delegation in each message.
+  stateless behaviour is to carry the delegation with each message.
+
 
 ## PART 7 - Q1: ORIGIN AUTHENTICATION ("THE ACCOUNT IS CORRECT")
 
 7.1  What is signed
 
-  The originating home provider attaches an ORIGIN SIGNATURE to the
-  message, computed with that provider's operational key (PART 5.2) over
-  the canonical form of:
+  There is NO separate origin signature and NO Origin object. The
+  account assertion is a FIELD OF HOP 0, inside the bytes that hop 0's
+  `HopSig` already covers (PART 8.3):
 
-    Origin {
-      ActId       : <account ID on whose behalf we send>   ([Identifiers](Identifiers.md) PART 4)
-      SrcDomId    : <full source DomId>
-      DstDomId    : <full destination DomId>
-      BodyHash    : SHA-256( canonical message Body )
-      SignerPrvId : <prvId doing the signing>
-      Timestamp   : <millis-since-epoch>
-      Nonce       : <random, >= 16 bytes>
-    }
-    OriginSig   : <base64 Ed25519 sig over canonical Origin>
+    hop[0].ActId : <fingerprint actId asserted by hop[0].SignerPrv>
+                   absent when no account is being asserted
 
-  The message also carries the Delegation + DelegSig (PART 6.2) that
-  authorizes SignerPrv to sign for ActId. Together they form the
-  credential chain of PART 6.1. All of this travels in the message Head,
-  extending the JsonMsg Head of [Domatar](../Domatar.md) PART 17.2 (see PART 11).
+  So the provider's one signature on hop 0 says both "I relayed this
+  route" and "I assert this account for it." The envelope additionally
+  carries the Delegation + DelegSig (PART 6.2) authorizing
+  `hop[0].SignerPrv` to sign for that ActId, and the Binding chaining
+  OwnPubKey to the actId. Together they form the credential chain of
+  PART 6.1.
+
+  Why one signature, not two. Separability is a property of the CHECKS,
+  not of the signatures. Q1 asks "is an account asserted here and
+  authorized?"; Q2 asks "is the chain intact?"; both remain independently
+  answerable with ActId inside hop 0. One canonical map, one signature.
+
+  ActId appears at index 0 ONLY. A hop at i > 0 carrying an ActId is
+  rejected (PART 8.9 check (h)): an intermediary does not get to assert
+  an account mid-chain. Later hops are authenticated by Q2, not by
+  re-asserting the origin. A receiver that needs "this account started
+  this operation" verifies Q1. A receiver that needs "this body
+  travelled this object path" verifies Q2.
 
 7.2  Where signing happens: the browser never signs
 
-  The ownership key lives on the home provider, so the ORIGIN SIGNATURE
-  is created at the browser trust boundary (DomatarServlet,
-  [Domatar](../Domatar.md) PART 6.1 / 17.4):
+  The ownership key lives on the home provider, so hop 0 — and with it
+  the account assertion — is signed at the browser trust boundary
+  (DomatarServlet, [Domatar](../Domatar.md) PART 6.1):
 
     1. The browser authenticates to its home provider with the existing
        cookie/token login (UNCHANGED from [Domatar](../Domatar.md) PART 6).
-    2. Having verified the cookie, the home provider signs the outbound
-       message with its provider key, asserting the account's actId, and
-       attaches its delegation.
+    2. Having verified the cookie, the home provider roots the
+       operation (PART 8.7): it mints hop 0 with `ActId` set, signs it
+       with its provider key, and attaches Binding and Delegation.
 
   Thus the `(usrId, token)` bearer mechanism SURVIVES on the
   browser->home-provider hop only. Inter-object and inter-provider hops
   are authenticated by signature, not by token. The browser holds no key
-  and performs no crypto. Direction (PART 15) would have the device
-  sign Origin and issue delegations.
+  and performs no crypto. Direction (PART 15) would have the device sign
+  hop 0 and issue delegations.
 
 7.3  Verification
 
-  A receiving object (or its provider, at the Msg boundary) accepts the
-  origin as authentic iff ALL hold:
+  A receiving provider, at the Msg HTTP boundary, accepts the origin as
+  authentic iff ALL hold:
 
-    (a) The accompanying Delegation is valid for ActId and names
-        SignerPrv as Provider (the PART 6.2 checks a-d).
-    (b) SignerPrv's Ed25519 key (from the signed directory record,
-        PART 10) verifies OriginSig over the reconstructed Origin.
-    (c) BodyHash equals SHA-256 of the received canonical Body.
-    (d) Timestamp is within the acceptance window and Nonce is unseen
-        (replay defense, PART 13).
+    (a) `hop[0].ActId` is present and is a fingerprint actId (PART 8.8).
+    (b) `hop[0]` verifies as a hop (PART 8.9) under `hop[0].SignerPrv`'s
+        Ed25519 key from the signed directory record (PART 10). Since
+        ActId is inside those signed bytes, this is also the account
+        assertion. Replay of the origin is replay of hop 0; there is no
+        second nonce.
+    (c) The accompanying Binding and Delegation are valid for that ActId
+        and name `hop[0].SignerPrv` as PrvId (the PART 6.2 checks).
 
   Interpretation: "a provider the account itself delegated to vouched
-  for this exact body, to this exact destination, now." A provider with
-  no valid delegation (A2), one that tampered with the body (A3), or one
-  that replayed an old message (A4) fails (a), (c), or (d) respectively.
+  for this hop 0, now." A provider with no valid delegation (A2) fails
+  (c); one that swapped in a different hop 0 (A3) or replayed one (A4)
+  fails (b) or the hop-0 nonce check.
+
+  An absent `hop[0].ActId` does not mean the path is unsigned. Hop 0 is
+  still present and provider-signed (PART 8.8). It means no *account* is
+  being asserted, which is a distinct and visible provenance level
+  (`Trust.PATH`, PART 7.5), not a failure.
 
 7.4  Why A2 (the impersonation attack) fails
 
   A malicious provider prvEvil crafts a message claiming a victim's
   ActId. To pass 7.3 it must present a Delegation for that ActId naming
-  prvEvil as Provider, chained to the victim's current ownId
+  prvEvil as PrvId, chained to the victim's current ownId
   ([Identifiers](Identifiers.md) PART 11). prvEvil does not hold the
-  ownership key; it cannot forge the ownership signature (b of PART 6.2),
-  and it cannot substitute its own key because the self-certifying
-  checks would fail (a of PART 6.2). The usrId is never consulted for
+  ownership key; it cannot forge the ownership signature ((e) of
+  PART 6.2), and it cannot substitute its own key because the
+  self-certifying checks would fail ((a) of PART 6.2). Nor can it reuse
+  the victim's genuine delegation on a hop of its own: that delegation
+  names the victim's real home provider, and (d) of PART 6.2 compares
+  PrvId against `hop[0].SignerPrv`. The usrId is never consulted for
   authorization -- only the credential chain to the actId is.
   Impersonation therefore fails cryptographically, not by policy.
 
-7.5  Relationship to "verified" in the core spec
+7.5  Trust levels: "verified" is not a boolean
 
-  For cross-provider messages, `Verified=true` means "the origin
-  signature verified, and it was made by a provider holding a valid
-  delegation from the named account," not "some provider asserted a
-  token" ([Domatar](../Domatar.md) PART 6). Authorization (hasRights,
-  PART 6.3) is separate: signatures answer WHO; hasRights answers MAY.
-  A valid signature proves the caller's actId, not its right to act on
-  the destination.
+  PART 8.13 requires that an unattributed message be a VISIBLE
+  provenance level for `hasRights` and charging, "not a silent absence."
+  A boolean cannot express that: it collapses "provider-signed route,
+  no account asserted" into the same value as "no usable provenance at
+  all," at exactly the call sites that must tell them apart. So the
+  stamped verdict is three-valued:
+
+    Trust.ACCOUNT   Q1 passed (PART 7.3). An actId is proven, and a
+                    provider the account delegated to vouched for it.
+    Trust.PATH      the hop chain verified (PART 8.9) but hop 0
+                    asserts no account. The ROUTE is attributable to
+                    named providers; no account bears consequence.
+    Trust.NONE      no usable provenance: the chain is missing, broken,
+                    unsigned, or its signers are unknown.
+
+  For source compatibility `isVerified()` is a derived accessor meaning
+  `trust == ACCOUNT`, so `Auth.isVerified` and the existing `hasRights`
+  overrides keep their present meaning ([Domatar](../Domatar.md)
+  PART 6): "the origin hop verified, and it was signed by a provider
+  holding a valid delegation from the named account," not "some provider
+  asserted a token."
+
+  Authorization (hasRights, [Domatar](../Domatar.md) PART 6.3) stays
+  separate: signatures answer WHO, hasRights answers MAY. A valid
+  signature proves the caller's actId, not its right to act on the
+  destination.
+
+  `trust`, `actId`, and `contextId` are stamped by the receiving
+  platform from its OWN verification verdict (PART 16, `Verdict`). They
+  are never taken from the wire.
+
 
 ## PART 8 - Q2: PATH PROVENANCE (SIGNED HASH CHAIN)
 
-Q2 is a SEPARATE mechanism from Q1. Q1 proves the origin; Q2 proves the
-route. A receiving object that needs to trust the whole path verifies
-both.
+Q2 is a SEPARATE mechanism from Q1. Q1 proves the origin account; Q2
+proves the route. The path is a causal chain of distinct messages:
+each handler composes a NEW body to the next object
+([Domatar](../Domatar.md) PART 17). Q2 makes that chain tamper-evident
+by having each hop carry a signed link back to its parent — the
+hash-chaining idea from blockchains, WITHOUT any consensus layer.
 
-8.1  What the chain chains
+8.1  Custody: the platform, not the message
 
-  A Domatar message is not one immutable body forwarded verbatim; each
-  handler composes a NEW message to the next object ([Domatar](../Domatar.md)
-  PART 17). So `Context.DomIdPath` ([Domatar](../Domatar.md) PART 17.3) is a
-  CAUSAL chain of distinct messages. Q2 makes that chain tamper-evident
-  by having each hop carry a signed link back to its parent -- the
-  hash-chaining idea from blockchains, WITHOUT any consensus layer.
+  The signed path does not live in the application `JsonMsg`. Apps
+  compose bodies. The platform owns provenance.
 
-8.2  Hop structure
+  In memory the chain and its credentials live in a `Provenance` object
+  (PART 8.2) held privately by `HttpClient` and by `Msg`. `HttpClient`
+  is the only code that roots or extends it. On the wire it travels in a
+  platform slot *beside* the app message — a second POST parameter
+  (PART 11.1) — never inside `JsonMsg.Head`. `JsonMsg` has no Sec API.
 
-  Each time a provider performs a send that extends the path, it appends
-  a signed hop:
+  Provenance is NOT reachable from anything a handler receives. A
+  handler gets a `DomatarMsgClient` (a capability that can only extend
+  the chain it was given) and a `Context` that carries the stamped
+  verdict but no crypto. Consequently:
 
-    Hop[i] {
-      Seq         : i                         (0 at the origin)
-      SignerPrv   : <prvId performing this hop>
-      SrcDomId    : <source object of this hop>
-      DstDomId    : <destination object of this hop>
-      BodyHash    : SHA-256( canonical Body of THIS hop's message )
-      PrevHopHash : SHA-256( canonical Hop[i-1] including its HopSig )
-                    (empty for Seq 0)
-      Timestamp   : <millis>
-      Nonce       : <random, >= 16 bytes>
-    }
-    HopSig[i]   : <base64 Ed25519 sig by SignerPrv's key over
-                   canonical Hop[i]>
+    * An app that does `new JsonMsg()` before `send` cannot restart
+      the chain. There is nowhere to put a forged envelope.
+    * `HttpClient.send` always builds the outbound envelope from its
+      own private `Provenance`, and ignores any bytes an app might
+      have smuggled into the body that look like provenance.
+    * No hop array is exposed as a public field anywhere. `final` on a
+      Java array protects the reference, not the contents; a public
+      `Hop[]` on a handler-visible object would BE somewhere to put a
+      forged envelope, and would alias mutably across fan-out
+      branches. The chain is wrapped (`Path`, PART 16) and hands out
+      only copies and projections.
+    * There is one lineage. The object list is a projection of the
+      verified path (PART 8.5).
 
-  PrevHopHash is the chain link: it binds each hop to the exact prior
-  hop, so inserting, dropping, reordering, or editing any hop breaks the
-  chain.
+  App JARs run in-process and could in principle call
+  `ProviderKeyStore` directly. That is T1/A5, not A6. G6 is the claim
+  that the *default* path through the API cannot be used as a
+  provenance oracle. Reachability, not documentation, is what makes
+  that true: apps never import `com.domatar.crypto` at all (PART 16).
 
-8.3  Verification at the receiving object
+8.2  Context and Provenance
 
-  The receiver accepts the path iff:
-    (a) Hop[0] is the origin and its SrcDomId / BodyHash agree with the
-        Q1 Origin block (the chain and the origin signature are
-        consistent);
-    (b) for every i, PrevHopHash == SHA-256(canonical Hop[i-1]) -- the
-        chain is unbroken;
-    (c) for every i, HopSig[i] verifies under SignerPrv[i]'s directory
-        key (PART 10);
-    (d) each hop's DstDomId equals the next hop's SrcDomId's object (the
-        path is contiguous);
-    (e) replay/expiry checks (PART 13) pass for the final hop.
+  Two objects, because they have different audiences and different
+  serialization rules. Mixing both in one handler-visible type is how
+  the envelope became an app-facing surface.
 
-  A receiver requiring only origin authenticity (not full route) MAY
-  verify Q1 alone; a receiver requiring provenance verifies the whole
-  chain to Seq 0.
+  `Context` — WHO and WHERE. Handler-visible, informational plus the
+  stamped verdict (`trust`, `actId`, `contextId`). Constructed only by
+  the platform (`DomatarServlet`, `Msg`, `HttpClient`);
+  apps never call `new Context(...)`. Its informational fields (usrId,
+  usrName, usrIp, token, httpHeaders) travel in `Head.Context` for
+  logging and cookie continuity and do not authorize. `trust`, `actId`,
+  and `contextId` are stamped from a local `Verdict` at a trust
+  boundary and are never read from the wire.
 
-8.4  Signing principal: provider, not account
+  `Provenance` — the CHAIN and the CREDENTIALS: a `Path` plus the
+  per-operation Delegation and Binding. Platform-only, never handed to
+  a handler, never a field of `Context` or of `JsonMsg`. The Delegation
+  and Binding are per-operation and sit here once, not on every hop; a
+  non-root send carries them through unchanged and appends one `Hop`.
 
-  Path hops are signed by the PROVIDER performing each send (its
-  operational key), NOT by the account ownership key. The account attests
-  ORIGIN (Q1, via a provider it delegated to); providers attest ROUTE
-  (Q2). This is why the two mechanisms are cleanly separable and why a
-  hop performed by an object whose account key lives elsewhere is still
-  signable: the provider that physically performs the send always has its
-  own key.
+  Members of both: PART 16.
 
-8.5  Tradeoffs to accept knowingly
+8.3  Hop
 
-  * Size. Each hop adds a Hop block plus a 64-byte signature to the
-    envelope (not to stored rows). Deep chains grow the message.
-  * Disclosure. Full-path provenance means the endpoint learns the
-    entire upstream route (objects and providers). This is inherent to
-    G2 and is the opposite of anonymity (PART 1.2). If a boundary must
-    NOT reveal its interior, it may terminate a chain and start a new one
-    (acting as a fresh origin), at the cost of the endpoint no longer
-    seeing past that boundary. Whether/where to allow such pruning is a
-    policy decision left to the handler.
-  * Cost. Verifying an N-hop chain is N signature verifications versus
-    the core spec's single flag read ([Domatar](../Domatar.md) PART 6.3).
-    Provider keys are cacheable; per-hop results may be cached.
+  One element of the path is one send. *n* sends, *n* elements. All
+  fields are final; elements are immutable after creation and are
+  shared by reference across fan-out branches, which is safe precisely
+  because they are immutable and because the enclosing array is never
+  published (PART 8.1).
+
+  The class keeps its shipped name and package,
+  `com.domatar.crypto.Hop`. The ARRAY is the path and the ELEMENT is a
+  hop. A signed value type that calls `ProviderKeyStore` belongs beside
+  the crypto helpers that canonicalize it. Members: PART 16.
+
+  `domId` is not a stored field. It is `dstDomId`: the current object,
+  the destination of the hop that arrived here.
+
+    hop[i].SrcDomId == hop[i-1].DstDomId     for i > 0
+    hop[0].SrcDomId == the UI id             (PART 8.5)
+    hop[i].DstDomId == the object that receives hop i
+
+  Both `SrcDomId` and `DstDomId` belong in the signed bytes of every
+  hop. `DstDomId` binds the destination of the in-flight hop: `BodyHash`
+  covers the body only, and `Head.DstId` is not in the body, so omitting
+  dest from the signature is a redirect. `SrcDomId` names which object
+  on the signing provider sent; a provider hosts many objects. Once dest
+  is in a hop's signed bytes it stays there: `PrevHopHash` covers the
+  previous hop including its signature, so dest cannot be stripped from
+  earlier hops when they cease to be last.
+
+  `BodyHash` covers the Body ONLY, never the Head. The servlet and
+  `addRequestHead` mutate heads around the signing point, so a hash over
+  the whole message would be invalidated by ordinary platform work. The
+  destination is bound instead by `DstDomId` being a signed field, which
+  is why omitting it would license a redirect.
+
+  There is NO `Message` / retained-body field on a hop. Check (d) of
+  PART 8.9 hashes the RECEIVED body against `bodyHash`. Where the
+  canonical body is wanted for logging or for a returned causal tree, it
+  belongs on the log record keyed by `contextId`, not inside the signed
+  type. `Hop.sign` takes the canonical bytes as a parameter and retains
+  nothing.
+
+  There is no `Seq` field either. Position is pinned transitively:
+  `PrevHopHash` covers the previous hop INCLUDING its signature, index 0
+  is identified by an empty `PrevHopHash`, and hop 0 is anchored by
+  Q1 or by explicit unattribution (PART 8.13). The array index is the
+  sequence.
+
+8.4  One form, and what is NOT in it
+
+  A hop has ONE shape. The in-memory object and the wire map carry the
+  same fields, and `HopSig` is computed over the canonical map excluding
+  `HopSig` itself. Signed field set (canonical order):
+
+    ActId (index 0 only, when an account is asserted), BodyHash,
+    ContextId, DstDomId, Nonce, PrevHopHash, SignerPrv, SrcDomId,
+    Timestamp
+
+  Absent fields are omitted from the canonical map rather than encoded
+  as null, so "no account asserted" is a well-defined signing input
+  without a special case (PART 4).
+
+  Bodies are NOT in it. A provider that handles hop *i* can read hop
+  *i*'s body (accepted, PART 1.2). It cannot read hop *i−1*'s body from
+  the envelope. Carrying bodies forward would leak hop-2 payment data to
+  a hop-6 shipping provider, grow the envelope with the sum of bodies
+  (quadratic in depth if recorded messages nested their own paths,
+  exponential), and contradict the redaction required of a returned
+  causal tree (the saga / compensation work, Direction, PART 15).
+
+  REDACTION IS NOT POSSIBLE ON A SIGNED HOP, and this constrains later
+  work. `HopSig` covers `SrcDomId` and `DstDomId`, so dropping either
+  one to hide a callee's interior breaks the signature: a "redacted
+  hop" cannot be a hop. Any future partial disclosure (the saga /
+  compensation work, Direction, PART 15, wants signed opaque handles
+  for a returned causal tree) must therefore either be a SEPARATE signed
+  object, or rely on
+  commitments placed in the signed set BEFORE the format is frozen —
+  e.g. a salted `DstDomIdCommit` signed in place of the plaintext, with
+  the plaintext carried as an unsigned adjunct that a redactor drops.
+  This design does NOT add such commitments, because the salting, the
+  contiguity check (PART 8.9 (c)) and the handle-redemption semantics
+  are the Saga spec's to settle, not this one's. The decision is
+  recorded here because it cannot be retrofitted without an envelope
+  version bump (PART 11.1).
+
+8.5  The UI hop, and the object-list projection
+
+  The first message of a user operation comes from the UI, outside
+  Domatar. The browser is not an object and cannot sign.
+  `DomatarServlet` is the trust boundary that roots the chain.
+
+  Hop 0's `SrcDomId` is a synthetic UI id minted by the servlet, of
+  the existing shape `(prvHstId, "ui", actId, "uiObj")`. The browser
+  does not supply it. A client-supplied source is forgeable.
+
+  That UI id is NOT a path element. `path[0].DstDomId` is the first
+  real Domatar object — the thing the UI addressed. The UI id exists
+  only as hop 0's signed `SrcDomId`.
+
+  The object list formerly stored as `Context.domIdPath` is the
+  projection
+
+    [ path[0].SrcDomId, path[0].DstDomId, path[1].DstDomId, ... ]
+
+  i.e. UI, then every real object. `LogsImpl` and any other reader of
+  the old array consume this projection. It is derived, never
+  independent state.
+
+  Typing. A `Hop` stores `srcDomId` / `dstDomId` as STRINGS, because
+  that is what gets canonicalized and signed. `Context.domIdPath` was
+  `DomId[]`, and that is what `LogsImpl` consumes. So the projection
+  re-parses: `Path.domIdPath()` returns `DomId[]`, parsing each signed
+  string once, and returns a fresh array per call so no caller can
+  mutate shared state. Callers that only log may take the string form.
+
+8.6  ContextId
+
+  `contextId` is the identity of the operation lineage: the same value
+  on every hop of one user action, including every branch of a fan-out,
+  and a different value from every other action.
+
+  It is not a login session. The act table's token slots are sessions;
+  two devices of the same person are two sessions and many ContextIds.
+  It is not `actId`. It is not a Java-object identity.
+
+  MINTED, NOT DERIVED. A root send mints `ContextId` as >= 16 random
+  bytes; every appended hop copies it verbatim. It is a SIGNED FIELD of
+  every hop (PART 8.4), so every hop's `HopSig` covers it. A signed
+  field is verifiable at every hop independently, including a redacted
+  or partial chain; "all hops of one operation share a lineage" is a
+  CHECKED invariant (PART 8.9 check (i)); there is no formula that must
+  work both before and after signing.
+
+  It also makes prefix-verification caching safe (PART 8.11).
+
+  TRUST RULE. At each HTTP trust boundary `contextId` is stamped onto
+  `Context` from the verified `Path`, never from a wire `Context` field.
+  An id copied from a wire Context field is forgeable by any relay; one
+  read out of a verified hop is not. The member on `Context` is a
+  convenience for handlers and need not be serialized at all.
+
+  `Context.getContextId()` is the handler-facing accessor. Saga /
+  charging / re-entry work (Direction, PART 15) keys off this
+  value; PART 8.14 states what that work must supply, because this
+  design deliberately persists no hop.
+
+8.7  Root and send
+
+  Extending the chain is correct both when a relay passes the same body
+  onward and when a handler composes a new one. Starting a chain is a
+  different operation. The distinction is an explicit API, never
+  inferred from whether an app reused a `JsonMsg`.
+
+    root(dst, msg)      mint hop 0, minting ContextId and setting
+                        ActId. Platform only (DomatarServlet,
+                        bootstrap, directory bring-up); not a member
+                        of `DomatarMsgClient`. An app that can root
+                        can launder provenance. Rejected if the
+                        client already holds a non-empty chain.
+
+    send(dst, msg)      append a hop, copying ContextId. This is what
+                        apps call, through `DomatarMsgClient`. The
+                        client a handler receives is a capability that
+                        can only extend the chain it was given.
+                        Rejected if the chain is empty.
+
+  There is no separate `forward`. A relay hop is exactly one where
+  `hop[i].BodyHash == hop[i-1].BodyHash`, which any receiver can observe
+  without being told. Relay is a derived predicate over the verified
+  path.
+
+  `HttpClient.derive(Context)` with an arbitrary context is not an app
+  API and is removed. Its shipped caller is `ActManagerImpl.addAct`,
+  which hand-builds a whole `Context` with a new `actId`, `verified` set
+  true by app-tier code, and an EMPTY path — i.e. it restarts the chain,
+  which is the very bug this PART exists to close. A token-only copier
+  cannot serve that caller, because the caller legitimately needs a new
+  identity: a just-created account asserting itself for the first time.
+  That is a new ROOT, not a derived context. It is served by
+
+    rootAs(actId, dst, msg)   platform only, restricted to the
+                              account-creation flow: mints a fresh
+                              hop 0 and ContextId under the newly
+                              created actId and attaches that
+                              account's binding and delegation.
+
+  and by a narrow `withToken(String)` on the client for the genuine
+  token-stamping case, which carries `actId`, `trust`, `contextId` and
+  the chain through unchanged and can alter nothing else.
+
+8.8  Hop always; the account assertion conditional
+
+  Every send produces a hop. The provider key signs it, so a hop can
+  exist without an account. `hop[0].ActId`, Binding, and Delegation are
+  present only when the root names a real fingerprint actId and a
+  binding and delegation are available.
+
+  Synthetic actIds (`act@act`, `login@act`) therefore still carry a
+  provider-signed hop 0. They are not "internal, so unsigned":
+  AccountsWui sends `AddAct` / `AttachProvision` to another provider,
+  carrying passwords, delegations, bindings, and sometimes the
+  ownership private key. The hop is the message-level evidence of
+  which provider sent it, and it is the `contextId` for the one flow
+  that moves keys between providers.
+
+  `Path.verify` skips the Q1 checks when `hop[0].ActId` is absent and
+  returns `Trust.PATH`: an account-less root verifies as far as the
+  hops go. `Trust.ACCOUNT` requires Q1 (PART 7.5).
+
+8.9  Verification
+
+  Verification is a platform operation at an HTTP trust boundary
+  (`Msg.doAction`). It is not gated on `ObjImpl.requiresPath()`.
+  That hook, defaulting to false and overridden nowhere, is why Q2
+  never ran and why the chain-restart bug survived.
+
+  Every HTTP receive verifies the path and records the verdict.
+  `requiresPath()` remains as *policy only*: whether a `Trust.NONE` or
+  `Trust.PATH` verdict is fatal for that handler (reject rather than
+  run), not whether verification happens.
+
+  In-process sends (`sendLocal`) do not re-verify. The chain is
+  platform-held Java objects this process just built. They still
+  *sign* a hop, because the eventual HTTP receiver needs a contiguous
+  object-level chain.
+
+  Verification returns a `Verdict` (PART 16) — a `Trust` level plus the
+  proven `actId`, the `contextId`, and a reason string for logs. It is
+  the ONLY route from wire bytes to a trusted `actId`. The receiver
+  accepts the path iff:
+
+    (a) For every i > 0, PrevHopHash == SHA-256(canonical path[i-1]
+        including HopSig) — the chain is unbroken. Index 0 has empty
+        PrevHopHash. The array index is the sequence; it is not a
+        stored field.
+    (b) For every i, HopSig verifies under SignerPrv[i]'s directory
+        key (PART 10). A hop with a null HopSig fails this check.
+    (c) For every i > 0, path[i].SrcDomId == path[i-1].DstDomId
+        (contiguous). path[0].SrcDomId is the UI id (PART 8.5).
+    (d) SHA-256 of the received canonical Body equals path[last].bodyHash.
+    (e) Replay / expiry checks (PART 13) pass for the FINAL hop.
+    (f) Timestamps are non-decreasing: path[i].Timestamp >=
+        path[i-1].Timestamp for every i > 0, and
+        path[last].Timestamp - path[0].Timestamp does not exceed the
+        configured maximum chain age. Without this, a fresh final hop
+        can carry an arbitrarily old prefix past check (e), which
+        checks only the last hop.
+    (g) Depth does not exceed the platform cap (PART 8.11).
+    (h) ActId appears on path[0] only. A hop at i > 0 carrying an ActId
+        is rejected (PART 7.1).
+    (i) Every hop carries the same ContextId (PART 8.6).
+
+  Then, if path[0].ActId is present, the Q1 checks of PART 7.3 decide
+  between `Trust.ACCOUNT` and rejection; if it is absent, the verdict
+  is `Trust.PATH`. A path that fails any check above yields
+  `Trust.NONE`.
+
+  An HTTP message whose path is missing, empty, or unsigned is
+  rejected (PART 8.10), except the directory-lookup carve-out
+  (PART 10.3).
+
+8.10  Unsigned root (pre-bootstrap only)
+
+  True pre-bootstrap, before `/Setup` mints a provider key, may
+  produce an unsigned hop 0 so bring-up is never blocked by the
+  absence of a key.
+
+    * In-process only. An HTTP message with an unsigned root is
+      REJECTED. Otherwise "unsigned is allowed" is a downgrade:
+      strip the signature, claim pre-bootstrap. Pre-bootstrap work
+      is local by definition — by the time `/Setup` publishes the
+      PubKey, the key exists.
+    * Never verified, never authoritative. Check (b) of PART 8.9
+      already fails a hop with a null HopSig, so an unsigned root can
+      exist and can never pass. That is its only remaining function:
+      it lets bring-up traffic have a lineage id without granting it
+      any trust.
+    * `contextId` still works, and needs no special case: it is a
+      minted random field (PART 8.6), not a hash of signed bytes.
+
+8.11  Depth cap and verification cost
+
+  Bytes per hop are small (hashes, not bodies). The real cost is
+  verification: a receiver at depth *d* performs *d* signature checks.
+  The platform enforces a hard maximum hop depth
+  (provider-configurable). This is a safety cap, not an app budget;
+  agent iteration caps (AIAgent.md) are a different axis and do not
+  cover a cycle inside a single tool call.
+
+  The honest total. Verifying an N-hop chain is N signature checks at
+  each HTTP boundary it crosses, so an operation that crosses a
+  boundary at every hop costs O(N^2) across the operation, not O(N).
+  The mitigation is a verified-prefix cache keyed on
+  (ContextId, PrevHopHash): a provider re-entered on a lineage it has
+  already verified re-checks only the new tail. This is sound BECAUSE
+  `ContextId` is a signed field (PART 8.6) — with a derived id the
+  cache key would itself be unverifiable. The cache is an optimization;
+  correctness never depends on a hit. It is NOT implemented; it remains
+  the named mitigation for the O(N^2) cost.
+
+  Cost of a non-root send: one Hop signature, no database. Binding /
+  Delegation work happens at the root only. Ordinary sends are one
+  signature; they do not re-read Binding / Delegation or sign a second
+  origin object.
+
+8.12  Requests only
+
+  The hash chain covers request hops, not responses. A chain whose
+  Src/Dst reverse halfway loses the contiguity property that makes
+  PART 8.9 simple.
+
+  A returned causal tree (the saga / compensation work, Direction,
+  PART 15) is a signed attachment on the reply, not more hops.
+  Redaction of that tree is specified there.
+
+8.13  Tradeoffs
+
+  * Size. Each hop adds a signed element to the envelope (not to
+    stored rows). Deep chains grow the message; the depth cap bounds
+    this.
+  * Disclosure. The endpoint learns the upstream *route* (objects
+    and providers), not upstream *bodies* (PART 8.4). This is
+    inherent to G2 and the opposite of anonymity (PART 1.2).
+  * Interior honesty. A provider can sign hops with any SrcDomId /
+    DstDomId in its own namespace (A5). The chain is a sequence of
+    per-provider attestations.
+  * Truncation. Silently terminating a chain and starting a new one
+    is provenance laundering: a receiver cannot distinguish a
+    laundered short chain from a genuinely short one. A root hop
+    MUST either carry `ActId` (naming an account that bears the
+    consequence) or be explicitly unattributed. Unattributed is a
+    visible provenance level (`Trust.PATH`, PART 7.5) for `hasRights`
+    and charging, not a silent absence. Handler-level "pruning as
+    policy" is not permitted.
+  * Cost. O(N) signature verifications per HTTP boundary, O(N^2) over
+    an operation that crosses a boundary at every hop (PART 8.11).
+
+8.14  The chain has no durable home
+
+  Stated plainly because dependent work assumes otherwise. `Hop` and
+  `Path` are the only security objects in this design with NO
+  persistence: they exist in the heap for one request and on the wire
+  for one POST. Bindings, delegations, provider keys and nonce windows
+  all have durable homes (PART 5.4, PART 10.1); the path does not. The
+  only part that reaches storage is the PART 8.5 object-list
+  projection, through the log.
+
+  Consequences:
+
+    * There is no after-the-fact audit of a route. Once a request
+      returns, the proof that a message travelled a given path is
+      gone unless something recorded it deliberately.
+    * No party ever holds the TREE. At a fan-out the branching object
+      is the only one that knows both branches; PART 8.12 makes the
+      chain request-only, so nothing comes back. Each receiver holds
+      exactly its own root-to-here BRANCH.
+    * Therefore effect rollback (the saga / compensation work,
+      Direction, PART 15) cannot be built on this PART as it stands.
+      It needs, and must specify for
+      itself: durable per-participant records keyed by `contextId`
+      (what I did, for whom, and whom I called), and either a returned
+      causal tree or a cascading protocol that needs only each node's
+      own out-edges. This design supplies the correlation key
+      (`contextId`, verifiable at every hop, PART 8.6) and the
+      per-message granularity, and nothing else.
+
 
 ## PART 9 - Q3: WIRE CONFIDENTIALITY (TLS)
 
@@ -569,9 +1060,10 @@ both.
   network layer. The logical multi-hop path (Q2) is about
   object-to-object causality, and its INTEGRITY is already protected
   end-to-end by the signed hash chain (PART 8). There is no
-  message-level encryption: Q2 covers path integrity, Q1 covers body
+  message-level encryption: Q2 covers path integrity, Q1 covers origin
   integrity, and TLS covers per-link confidentiality. A relay provider
-  can read a body it handles (accepted, PART 1.2 / T1).
+  can read the body of a hop it handles (accepted, PART 1.2). It does
+  not receive other hops' bodies from the envelope (PART 8.4).
 
 9.3  Mutual TLS (optional, for provider-to-provider trust)
 
@@ -595,6 +1087,7 @@ both.
   root (PART 5.3 / PART 10), pinned in provider configuration. This is
   the out-of-band trust anchor that lets a fresh provider verify its
   first peer.
+
 
 ## PART 10 - KEY DISTRIBUTION AND TRUST ANCHORS
 
@@ -631,12 +1124,15 @@ both.
 
     directory root key            (pinned, out of band)
       -> signs hst records        => provider PubKeys are trusted
-         -> provider keys sign     => origin (Q1) and path hops (Q2)
+         -> provider keys sign     => path hops, hop 0 of which also
+                                      carries the account assertion
+                                      (Q2 and Q1)
     account genesis / ownership keys  (self-certifying: actId ==
                                    fingerprint(GenesisPubKey);
                                    [Identifiers](Identifiers.md) PART 4)
-      -> Binding then Delegation       => a provider is authorized to sign
-                                      for the actId (PART 6)
+      -> Binding then Delegation       => a provider is authorized to
+                                      assert the actId on hop 0
+                                      (PART 6)
 
   A receiver trusts exactly one pre-shared key (the directory root) for
   provider identity, and trusts account identity with no pre-shared key
@@ -649,7 +1145,7 @@ both.
   verification, or dispatch deadlocks:
 
     * GetHst and provider-key lookup are PUBLIC and require no origin
-      signature.
+      signature and no signed path.
     * A message whose sole purpose is to fetch provider keys/host records
       is exempt from the signed-chain requirement, exactly as directory
       traffic is exempt.
@@ -660,59 +1156,105 @@ both.
   Provider-key rotation publishes a new hst record Version with an
   overlap window during which both old and new keys verify (PART 13).
 
+
 ## PART 11 - INTEGRATION WITH THE CORE RUNTIME
 
-11.1  Message envelope ([Domatar](../Domatar.md) PART 17.2)
+11.1  Envelope
 
-  The JsonMsg Head has an optional security block carrying the full
-  credential chain (PART 6.1) plus the provenance path (PART 8):
+  The application message remains a `JsonMsg` with Head (Method, SrcId,
+  DstId, TimeStamp, informational Context) and Body. Provenance is not
+  in the Head.
 
-    Head {
-      ... existing fields ...
-      Sec {
-        Origin     : { ActId, SrcDomId, DstDomId, BodyHash,
-                       SignerPrv, Timestamp, Nonce }
-        OriginSig  : <base64>
-        Delegation : { ActId, RootPubKey, Provider, NotAfter, Nonce }
-        DelegSig   : <base64>
-        Path       : [ Hop[0], Hop[1], ... ]     (each with HopSig)
-      }
+  The platform envelope, carried beside the message:
+
+    {
+      Ver         : 1
+      Delegation  : { ActId, OwnPubKey, PrvId, NotAfter, Nonce,
+                      DelegSig }              // whole, PART 6.2
+      Binding     : { ActId, GenesisPubKey, OwnId, OwnPubKey,
+                      Version, NotBefore, GenesisSig }
+                                              // whole, PART 6.2a
+      Path        : [ Hop[0], Hop[1], ... ]   // PART 8.4; always
+                                              // present on HTTP
     }
 
-  Delegation/DelegSig MAY be omitted when the verifier is known to have
-  cached them (PART 6.5); otherwise they are always present.   Absent the
-  whole Sec block, a message is UNVERIFIED (Verified=false). Public
-  handlers still run for unverified callers ([Domatar](../Domatar.md)
-  PART 6.1).
+  There is no envelope-level `ActId` and no `OriginSig`: the account
+  assertion is `Path[0].ActId`, inside hop 0's signed bytes (PART 7.1).
+  When it is absent the path still authenticates the route and the
+  caller is `Trust.PATH`, not a verified account. Delegation / Binding
+  MAY be omitted when the verifier is known to have cached them
+  (PART 6.5).
 
-11.2  The two trust boundaries ([Domatar](../Domatar.md) PART 6.1)
+  `Ver` is mandatory and is the FIRST field. Every other versioned
+  artifact in the platform has one — `hst.Version`, `Binding.Version`,
+  `act.FpVersion` — and this envelope is versioned so providers can
+  upgrade independently (`Seq` removed from hops, `ContextId` and
+  `ActId` added to hop bytes, no separate origin signature). A receiver
+  rejects an envelope whose `Ver` it does not implement, and rotation
+  across a version boundary gets the same overlap treatment as
+  provider-key rotation (PART 13).
 
-  * DomatarServlet (browser entry): after the existing cookie
-    verification, STAMP and SIGN the Origin (PART 7.2), attach the
-    provider's Delegation, and start the Q2 path with Hop[0].
+  Transport. `sendHttp` posts two parameters to
+  `<scheme>://<domain>/domatar/Msg`: `Msg=` with the URL-encoded
+  `JsonMsg` (Head + Body) and `Sec=` with the URL-encoded envelope
+  above. The envelope sits beside the message, not inside Head.
 
-  * Msg.doAction (cross-prv inbound): verify origin signatures
-    (PART 7.3) and, where the handler requires provenance, the path
-    chain (PART 8.3). Set Verified accordingly. A prv only believes
-    its own checks, never the wire's Verified flag
-    ([Domatar](../Domatar.md) PART 6.1) -- it re-verifies signatures
-    rather than tokens.
+11.2  The trust boundaries ([Domatar](../Domatar.md) PART 6.1)
 
-  * HttpClient.sendLocal / sendHttp: sendHttp APPENDS a signed Hop
-    (PART 8.2) before dispatch; in-process sendLocal extends the path in
-    memory without a network signature but MUST still append a hop record
-    so the causal chain is complete for the eventual receiver.
+  * DomatarServlet (browser entry): after cookie verification, `root`
+    the operation (PART 8.7): mint hop 0 from the synthetic UI source
+    to the addressed object with `ContextId` minted and `ActId` set
+    when asserting an account, sign it, attach Binding / Delegation,
+    and stamp `Context` with `Trust.ACCOUNT`.
 
-11.3  Unchanged
+  * Msg.doAction (HTTP inbound): parse `Sec=`, always verify the path
+    (PART 8.9), and take the resulting `Verdict`. Stamp `Context` from
+    that verdict only — `actId` and `trust` from Q1, `contextId` from
+    the verified Path. Never trust a wire `Verified` flag, `ActId`,
+    `contextId`, or object list. A prv only believes its own checks.
 
-  Authorization (ObjImpl.hasRights, [Domatar](../Domatar.md) PART 6.3), routing
-  by hstId (PART 5), the class envelope and service qualifier (PART 6.2 /
-  PART 8), and object/link persistence ([Domatar](../Domatar.md) PART 7) are
-  unchanged.
-  Verification is signatures + delegations + Binding
-  ([Identifiers](Identifiers.md) PART 11). This realisation stores
-  `OwnPrvKey` on `act` (PART 5.4) and `PubKey` / `RecordSig` on `hst`
-  (PART 10.1).
+  * MsgHandler (in-process entry): the class was dead code (its whole
+    body commented out, no caller) and was DELETED (KD7). The lesson
+    remains: an in-process entry point that parses a Context off a
+    message would be a trust boundary.
+
+  * HttpClient.root / send / sendLocal / sendHttp: append a signed
+    `Hop` from the client's own private `Provenance` before dispatch.
+    `sendHttp` serializes the envelope as the `Sec=` parameter.
+    `sendLocal` passes the Java objects through and does not re-verify
+    — but it MUST construct the local handler's client from the
+    EXTENDED provenance. The shipped `sendLocal` passes the
+    un-extended `srcContext`, which drops in-process hops from the
+    chain; that is the same chain-restart bug this PART exists to
+    close, and it is one line.
+
+  * Directory lookups are exempt (PART 10.3) and the exemption is a
+    NAMED method (`sendDirectory`), not an artifact of `getRemoteHst`
+    happening to call `sendHttp` directly. Naming it makes the
+    carve-out auditable and stops a later refactor from silently
+    widening or losing it.
+
+11.3  Handler-facing surface
+
+  A handler receives a `DomatarMsgClient` that can `send` and cannot
+  `root`, plus a `Context` that carries `trust`, `actId`, `contextId`
+  and the informational fields — and no crypto. The path projection is
+  readable via the client as `domIdPath()`. `ObjImpl.hasRights` is unchanged in role
+  ([Domatar](../Domatar.md) PART 6.3). `ObjImpl.requiresPath()` no
+  longer gates verification; it only says whether a `Trust.NONE` /
+  `Trust.PATH` verdict is fatal for this class.
+
+  Apps never set the envelope. That rule is in
+  [Writing-Apps](../apps/Writing-Apps.md).
+
+11.4  Unchanged
+
+  Authorization (ObjImpl.hasRights), routing by hstId, the class
+  envelope and service qualifier, and object/link persistence are
+  unchanged. This realisation stores `OwnPrvKey` on `act` (PART 5.4)
+  and `PubKey` / `RecordSig` on `hst` (PART 10.1). v1 actId / ownId
+  math, existing identifiers, and host names are unchanged.
+
 
 ## PART 12 - OPERATIONS
 
@@ -724,7 +1266,7 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
 
     IssueDelegation (Provider, NotAfter) -> Delegation + DelegSig
         Signed by the ownership key. Provisioned to the named home
-        provider, which attaches it to the messages it signs. Adding a
+        provider, which attaches it to the origin hops it signs. Adding a
         home provider is exactly issuing it a delegation; renewing is
         re-issuing before NotAfter.
 
@@ -746,15 +1288,40 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
   RegisterAccount: an account publishes nothing and is looked up by no
   one (PART 6.3). Its identity and authorization travel in each message.
 
+
 ## PART 13 - REPLAY, EXPIRY, AND CLOCK SKEW
 
-  * Nonce. Every Origin and every Hop carries a >= 16-byte random Nonce.
-    Each verifying provider keeps a sliding-window cache of seen
+  * Nonce. Every Hop carries a random Nonce (>= 16 bytes). Each
+    verifying provider keeps a sliding-window cache of seen
     (SignerPrv, Nonce) pairs and REJECTS duplicates within the window.
+    Q1 has no nonce of its own: replaying the account assertion is
+    replaying hop 0.
 
-  * Timestamp window. A message is accepted only if its Timestamp is
-    within +/- SKEW of local time. SKEW is small (default 120 s). Nonces
-    need only be remembered for the window length.
+    SCOPE. "Provider" here must mean the DEPLOYMENT, not the process.
+    This deployment is a single node per provider. The `NonceCache` is
+    a per-JVM `LinkedHashMap` singleton; a Tomcat restart forgets up
+    to SKEW seconds of nonces. A provider running more than one node
+    MUST share the window (a common store, or sticky routing per
+    SignerPrv).
+
+  * Timestamp window. A message is accepted only if the *final hop's*
+    Timestamp is within +/- SKEW of local time. SKEW is small (default
+    120 s). Nonces need only be remembered for the window length.
+
+  * Chain age and ordering. Because the freshness check applies to the
+    final hop only, a fresh last hop can otherwise carry an
+    arbitrarily old prefix. Hop timestamps must be non-decreasing and
+    the total chain age is capped (PART 8.9 (f)). Both checks are
+    free; the cap is provider configuration alongside SKEW.
+
+  * Replay protection is NOT idempotency. These checks stop the same
+    signed message being accepted twice. They say nothing about the
+    same EFFECT being applied twice: a legitimately retried operation
+    is re-signed with a fresh nonce and a fresh timestamp, and will
+    pass. Effect-level exactly-once, where it is needed, is the
+    handler's problem keyed on `contextId` — see the saga /
+    compensation work (Direction, PART 15), where idempotent
+    compensation depends on exactly this distinction.
 
   * Delegation expiry. Delegation.NotAfter bounds how long an
     authorization -- including one for a provider you have stopped
@@ -785,6 +1352,7 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
 
   These windows are provider configuration ([Domatar](../Domatar.md) PART 12).
 
+
 ## PART 14 - THREATS ADDRESSED AND RESIDUAL RISKS
 
 14.1  Addressed
@@ -795,16 +1363,32 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
                                    current ownId; an outside provider holds
                                    no such delegation and cannot forge it
                                    (PART 6.2, 7.4).
-  A3 relay tampers body/route   -> BodyHash (Q1) + signed hash chain (Q2)
-                                   make edits/insertions/drops detectable
-                                   (PART 7.3, 8.3).
-  A4 replay                     -> nonce + timestamp window (PART 13).
+  A3 relay tampers body/route   -> last-hop BodyHash (Q2) + ActId inside
+                                   hop 0's signed bytes (Q1)
+                                   + signed hash chain make
+                                   edits/insertions/drops detectable
+                                   (PART 7.3, 8.9). A relay cannot rewrite
+                                   Head.DstId without breaking the current
+                                   hop's DstDomId signature (PART 8.3).
+  A4 replay                     -> nonce + timestamp window, plus
+                                   non-decreasing timestamps and a chain
+                                   age cap (PART 13, 8.9 (f)). Not the
+                                   same as effect idempotency (PART 13).
+  A6 app-supplied provenance    -> the chain is not in JsonMsg and not on
+                                   Context; it lives in a platform-only
+                                   Provenance that no handler can reach,
+                                   behind a wrapper that publishes no
+                                   array; send cannot root; verification
+                                   is not an app opt-in
+                                   (PART 8.1, 8.7, 8.9). G6.
   Fake usrId                    -> the usrId never authorizes; only the
                                    credential chain to the actId does
                                    (PART 3.4, 7.4).
   Loss of a provider            -> multiple delegated home providers;
                                    abandonment with no identity change
                                    (G4, PART 6.4).
+  Visible-but-uncertified path  -> one lineage; the object list is a
+                                   projection of verified path (PART 8.5).
 
 14.2  Residual (accepted)
 
@@ -816,8 +1400,9 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
     unexpired delegation stays usable until NotAfter (no proactive
     revocation, PART 1.2). Mitigated by a short delegation lifetime; a
     revocation service is Direction (PART 15).
-  * A relaying/home provider can read message bodies it handles (no
-    end-to-end encryption). Message-level encryption is Direction
+  * A relaying/home provider can read the body of a hop it handles (no
+    end-to-end encryption). It cannot read other hops' bodies from the
+    envelope (PART 8.4). Message-level encryption is Direction
     (PART 15).
   * Genesis-key compromise is catastrophic
     ([Identifiers](Identifiers.md) PART 16.3).
@@ -827,7 +1412,19 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
     requirement is Direction (PART 15).
   * The directory root key is a single provider-identity trust anchor;
     its compromise forges provider identity (not account identity).
-    Threshold/multiple signers are Direction.
+    Threshold/multiple signers, and an append-only log of hst records,
+    are Direction.
+  * A5: a registered provider that signs correctly can lie about its
+    own objects, return success for work it did not do, and serve a
+    doctored class descriptor. Q2 makes the lie *attributable*. It
+    does not make it impossible. Truncation-as-new-root is constrained
+    by PART 8.13 (`ActId` or explicit unattributed); the remaining A5
+    surface is Direction (PART 15).
+  * Nothing in this design persists a hop (PART 8.14), so there is no
+    after-the-fact audit of a route and no party holds the fan-out
+    tree. Dependent work (effect rollback, charging) must supply its
+    own durable records keyed on `contextId`.
+
 
 ## PART 15 - DIRECTION
 
@@ -836,7 +1433,7 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
 
   Device-held ownership key (close T1)
     - The ownership private key moves to the USER'S DEVICE (WebCrypto /
-      passkey). The browser then signs the Origin directly and issues
+      passkey). The browser then signs hop 0 directly and issues
       delegations from the device; the home provider no longer holds
       `act.OwnPrvKey`, so ceasing to renew a delegation genuinely
       de-authorizes a provider (PART 6.4).
@@ -854,70 +1451,207 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
       provider key); providers currently stay on the hstId scheme with
       keys in the directory (PART 10.1).
 
+  Malicious implementations (A5)
+    - Publisher-signed class descriptors, digest registered in the App
+      Store listing, so a provider serving a modified SideEffect /
+      Cost / Compensates is detectable. Needed before those fields
+      drive consent or billing.
+    - Append-only log of hst records with gossiped signed heads
+      (certificate-transparency shape): does not prevent a forged
+      record; makes equivocation provable. Cheaper than threshold
+      signing for the realistic directory-root attack.
+    - Verifiable misbehavior proofs: two conflicting signed statements
+      under one provider key, or a signed receipt contradicted by a
+      signed record. Anyone checks them offline. Local allow/deny
+      lists consume proofs; there is no central scoring service.
+    - Conformance suite plus an optional certified-build claim on the
+      hst record, meaningful once lying about it is provable.
+    - All of the above depend on PART 8 having already made
+      decision-relevant data signed and platform-held.
+
+
+## PART 16 - JAVA TYPES (DATA MEMBERS)
+
+  Methods are named in PARTs 6–11; this PART is the shape. `Hop` keeps
+  its name and package (PART 8.3) and carries `contextId` / `actId`;
+  `JsonMsg` has no Sec members. `Delegation` and `Binding` are shipped
+  classes and are NOT modified.
+
+  Nullability: `actId` is set on hop 0 only and only when an account is
+  asserted (PART 7.1). `delegation` and `binding` are null exactly when
+  `hop[0].actId` is null. `hopSig` is null only on an in-process
+  unsigned pre-bootstrap root (PART 8.10). There is no field that is
+  null for positional reasons.
+
+```
+package com.domatar.crypto;
+
+/** One signed link in the chain. Immutable; this IS the wire shape. */
+public final class Hop
+{
+  public final String contextId;   // lineage id; minted at root, identical on every hop
+  public final String actId;       // index 0 only: account asserted by signerPrv; else null
+  public final String signerPrv;   // prvId whose operational key signed this hop
+  public final String srcDomId;    // sender; hop 0 = servlet-minted UI id
+  public final String dstDomId;    // receiver = current object (domId)
+  public final String bodyHash;    // SHA-256 of this hop's canonical Body (Body only)
+  public final String prevHopHash; // SHA-256 of previous hop incl. HopSig; "" at index 0
+  public final long   timestamp;   // millis; non-decreasing along the chain
+  public final String nonce;       // >= 16 bytes; replay cache key with signerPrv
+  public final String hopSig;      // sig over canonical(this) excluding HopSig
+}
+
+/** The whole chain. Immutable, platform-constructed; the array is never published. */
+public final class Path
+{
+  private final Hop[] hops;        // never exposed, not even as a copy-on-read field
+}
+
+/** Chain plus credentials. Platform-only; never handed to a handler. */
+public final class Provenance
+{
+  private final Path       path;
+  private final Delegation delegation;  // whole (PART 6.2); null iff no account
+  private final Binding    binding;     // whole (PART 6.2a); null iff no account
+}
+
+/** The outcome of verification, and the ONLY route from wire bytes to a trusted actId. */
+public final class Verdict
+{
+  public final Trust  trust;       // NONE | PATH | ACCOUNT (PART 7.5)
+  public final String actId;       // non-null iff trust == ACCOUNT
+  public final String contextId;   // from the verified chain
+  public final String reason;      // why it is not ACCOUNT; for logs, never for policy
+}
+```
+
+```
+package com.domatar.core;
+
+/** Trust level lives in core, next to Context, so no app ever imports com.domatar.crypto. */
+public enum Trust { NONE, PATH, ACCOUNT }
+
+public final class Context
+{
+  // WHO. Stamped from a Verdict at a trust boundary, or at root. Never from the wire.
+  public final Trust   trust;        // PART 7.5
+  public final String  actId;        // fingerprint account id; non-null iff trust == ACCOUNT
+  public final String  contextId;    // lineage id (PART 8.6); not a wire field
+
+  // Informational. Travels in Head.Context; never authorizes.
+  public final String  usrId;        // login handle
+  public final String  usrName;      // display name
+  public final String  usrIp;        // caller IP
+  public final String  token;        // browser cookie token; home hop only
+  public final JsonMap httpHeaders;  // inbound HTTP headers
+
+  // Source-compatible with the shipped boolean; 47 hasRights overrides keep working.
+  public boolean isVerified()  { return trust == Trust.ACCOUNT; }
+}
+
+public class HttpClient implements DomatarMsgClient
+{
+  private final DomId      srcDomId;            // object this client sends FROM
+  private final String     srcDomain;           // this provider's domain
+  private final String     srcContextPath;      // servlet context path
+  private final String     srcContextRealPath;  // exploded-WAR filesystem path
+  private final Context    srcContext;          // WHO; handler-visible, no crypto
+  private final Provenance prov;                // the chain; private, platform-only
+}
+```
+
+```
+package com.domatar.util;
+
+public class JsonMsg
+{
+  private final JsonMap jsonMap;  // Head + Body only; no Sec envelope
+}
+```
+
+  Notes on the shape:
+
+  * No public array anywhere. `Path` wraps `Hop[]` and hands out only
+    `domIdPath()` (a fresh `DomId[]`, PART 8.5), `contextId()`,
+    `depth()`, `last()`, and the wire map. This is what closes the A6
+    hole an exposed `public final Hop[] path` would open (PART 8.1).
+  * `Path` is a value object, not a static helper. `root` and `append`
+    return a new `Path`; `verify` returns a `Verdict`. Copy-on-append
+    and the depth cap live in `Path`.
+  * `Hop.sign` takes the canonical body BYTES and retains nothing
+    (PART 8.3); the caller keeps them if it wants them for a log.
+  * `Delegation` and `Binding` keep every field they ship with —
+    `actId`, `ownPubKeyB64`, `prvId` on the former; `actId`, `ownId` on
+    the latter — so `verify` stays self-contained and needs no
+    `Context`. ActDb persists and returns the same shape it transmits;
+    there is one representation per type.
+  * Failing to sign is FATAL to the send. An unsigned HTTP message is
+    rejected by the receiver, so failing open only converts a local,
+    diagnosable error into a remote, opaque one.
+
+
 ## Implementation surface
 
-Origin signatures (PART 7) and delegations (PART 6):
+  This section names the realisation that implements this spec.
+  Fields are PART 16. The `Sec=` envelope sits beside the message;
+  verification is unconditional at every HTTP boundary.
 
-  * act columns Delegation, DelegSig, DelegNotAfter.
-  * com.domatar.crypto.Delegation — issue, verify, toJson/fromJson,
-    ensureValid.
-  * com.domatar.db.ActDb — getDelegationRow, setDelegation.
-  * ActManagerImpl issues an initial delegation on sign-up;
-    DomatarProviderInstall issues one for the provider account at
-    bootstrap. Delegation.ensureValid issues a delegation on first
-    outbound send when the row has none yet.
-  * com.domatar.crypto.OriginBlock — sign / verify (ProviderKeyStore).
-  * JsonMsg.addSec / getSec / hasSec; Sec lives in Head.Sec.
-  * HttpClient.send attachSecIfAbsent: when the message has no Sec,
-    the context is verified, and actId is a fingerprint, attach
-    OriginBlock + Delegation. Failure is non-fatal (no Sec → receiver
-    treats as unverified).
-  * Msg.verifyAndStamp verifies the credential chain (PART 7.3): parse
-    Sec, verify Delegation, fetch signer pubkey and verify OriginSig,
-    check BodyHash, timestamp skew, and NonceCache.
-  * com.domatar.crypto.NonceCache — sliding-window replay cache keyed
-    on (signerPrvId, nonce), TTL = DOMATAR_MSG_SKEW_MS (default 120 s).
-  * LoginRemote is the browser-boundary path (DomatarServlet) and the
-    local actManager VerifyLogin op — not the cross-provider message
-    path.
-  * DomatarConfig: getDelegTtlMs (DOMATAR_DELEG_TTL_MS, default 1h),
-    getMsgSkewMs (DOMATAR_MSG_SKEW_MS, default 120 s).
+  * `com.domatar.crypto.Hop` — MODIFY: add `contextId`, `actId`; drop
+    `seq`. `sign`, `canonicalHash`, `toMap` / `fromMap` (one shape).
+    `getDomId()` returns `dstDomId`.
+  * `com.domatar.crypto.Path` — NEW. `root`, `append`, `verify` ->
+    `Verdict`, `contextId`, `depth` (cap enforced here), `domIdPath`,
+    `toWire` / `fromWire`.
+  * `com.domatar.crypto.Provenance` — NEW. `Path` + whole Delegation
+    and Binding. Held by `HttpClient` and `Msg` only.
+  * `com.domatar.crypto.Verdict` — NEW.
+  * `com.domatar.crypto.SecWire` — NEW. Envelope `encode` / `decode`;
+    a receiver rejects a `Ver` outside [SecVerMin, SecVerMax].
+  * `com.domatar.crypto.ProviderKeyResolver` — NEW. Lookup of a
+    provider's operational public key for hop verification.
+  * `com.domatar.install.DirectoryKeyResolver` — NEW. Directory-root
+    implementation of `ProviderKeyResolver` (PART 10.3 carve-out).
+  * `com.domatar.core.Trust` — NEW enum, in `core` deliberately: it is
+    the one crypto-derived value a `hasRights` implementor names, so
+    apps never import `com.domatar.crypto`. That is a grep-checkable
+    invariant, not a paragraph.
+  * `com.domatar.core.Context` — MODIFY: `trust` / `actId` /
+    `contextId` plus informational fields; `isVerified()`;
+    platform-only constructors; no crypto members.
+  * `com.domatar.core.HttpClient` — MODIFY: `root` and
+    `rootAs(actId, …)` (platform, not on the interface), `send`
+    (apps), `withToken`; `derive(Context)` removed; one private
+    `dispatchWith` produces the outbound `Provenance` unconditionally;
+    `sendLocal` passes the EXTENDED provenance to the local handler's
+    client; `sendHttp` serializes the `Sec=` parameter;
+    `sendDirectory` is the named PART 10.3 carve-out; never reads
+    provenance from `JsonMsg`.
+  * `com.domatar.util.DomatarMsgClient` — `send`, `getSrcId`,
+    `withToken`, `domIdPath`. No `root`, no `forward` (PART 8.7). `HttpClient` is
+    its only implementer, so the interface change is cheap.
+  * `com.domatar.servlet.DomatarServlet` — cookie verify, mint UI
+    SrcDomId, `root`.
+  * `com.domatar.servlet.Msg` — parse `Sec=`, always verify the path,
+    stamp `Context` from the `Verdict`; reject unsigned HTTP roots and
+    unknown `Ver`.
+  * `com.domatar.util.JsonMsg` — DELETE `SecEnvelope`, `addSec`,
+    `getSec`, `hasSec`, `appendHopToSec`. Head.Context carries
+    informational fields only.
+  * `com.domatar.util.ObjImpl.requiresPath` — fatal-if-untrusted
+    policy, not a verify gate.
+  * `com.domatar.core.MsgHandler` — DELETE (dead code; PART 11.2).
+  * Unchanged: `Delegation`, `Binding`, `AccountKeys`, `CanonicalJson`,
+    `KeyOps`, `ProviderKeyStore`, `DirectoryTrust`, `MasterKey`,
+    `GenesisVault`, `TlsConfig`. `NonceCache` unchanged in role; this
+    deployment is a single node per provider (PART 13).
 
-Path provenance (PART 8):
+  Config (existing): DOMATAR_DELEG_TTL_MS, DOMATAR_MSG_SKEW_MS,
+  DOMATAR_WIRE_SCHEME, DOMATAR_MTLS_REQUIRED. New (getter / env /
+  provider.config.txt key / default):
 
-  * com.domatar.crypto.Hop — sign, canonicalHash (SHA-256 of the
-    canonical hop including HopSig; used as the next hop's PrevHopHash).
-  * PathChain.append builds and signs a Hop; PathChain.verify runs
-    PART 8.3 checks (a)–(e).
-  * SecEnvelope.path: List<Hop>. appendHopToSec adds a hop to
-    Head.Sec.Path.
-  * HttpClient appendHopToPath on every msgClient.send that carries Sec
-    (sendHttp and sendLocal).
-  * ObjImpl.requiresPath (default false). Msg.doAction runs
-    PathChain.verify before dispatch when the handler requires it; on
-    failure, demotes context to verified=false.
-
-Wire confidentiality (PART 9):
-
-  * DomatarConfig: getWireScheme (DOMATAR_WIRE_SCHEME, default
-    "https"), trust/key store paths, isMtlsRequired
-    (DOMATAR_MTLS_REQUIRED, default true when https).
-  * TlsConfig builds SSLSocketFactory from the configured stores;
-    cached per process. Null when no stores are configured (JVM
-    defaults).
-  * HttpClient.sendHttp uses getWireScheme. When https, applies
-    TlsConfig.getSocketFactory. Dev: WireScheme=http bypasses TLS.
-  * RequestContext holds the TLS client-certificate public key for the
-    current request. Msg.doAction populates it from Tomcat's
-    X509Certificate attribute.
-  * HstsImpl.updateHst, when mTLS is required, rejects UpdateHst
-    without a client certificate; if the provider already has a stored
-    pubKey, the cert must match.
-  * provider.config.txt documents WireScheme, stores, MtlsRequired,
-    DelegTtlMs, MsgSkewMs.
-
-  Local two-provider stacks typically set WireScheme=http and
-  MtlsRequired=false. Full TLS validation needs provider certificates
-  chained to a shared trust anchor.
+    getMaxHopDepth()    DOMATAR_MAX_HOP_DEPTH    / MaxHopDepth    = 16
+    getMaxChainAgeMs()  DOMATAR_MAX_CHAIN_AGE_MS / MaxChainAgeMs  = 300000
+    getSecVerMin()      DOMATAR_SEC_VER_MIN      / SecVerMin      = 1
+    getSecVerMax()      DOMATAR_SEC_VER_MAX      / SecVerMax      = 1
 
 # END OF SPEC

@@ -69,14 +69,17 @@ public class LogsImpl extends ObjImpl
     final String usrName = context.usrName;
     final String usrId = context.usrId;
     final String usrIp = context.usrIp;
-    final DomId[] path = context.domIdPath;
+    final DomId[] path = msgClient.domIdPath();
     final StringBuilder pathBuilder = new StringBuilder();
 
-    for (final DomId domId : path)
+    if (path != null)
     {
-      if (pathBuilder.length() > 0)
-        pathBuilder.append("\n\n");
-      pathBuilder.append(domId.toString());
+      for (final DomId domId : path)
+      {
+        if (pathBuilder.length() > 0)
+          pathBuilder.append("\n\n");
+        pathBuilder.append(domId.toString());
+      }
     }
 
     final String pathStr = pathBuilder.toString();

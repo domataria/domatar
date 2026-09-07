@@ -94,6 +94,26 @@ AdminPassword=admin
 # window are rejected as stale or future-dated.
 # MsgSkewMs=120000
 
+# Q2 path provenance (Spec-Security PART 8.9 / 8.11).
+# Maximum signed hop depth (default 16). Path.append rejects a send that
+# would exceed this rather than truncating.
+# MaxHopDepth=16
+# Maximum age of a path from first hop to last, in milliseconds
+# (default 300000 = 5 minutes).
+# MaxChainAgeMs=300000
+#
+# Accepted Sec= envelope version range (default 1 / 1). Crossing an
+# envelope version boundary gets the same overlap treatment as
+# provider-key rotation (Spec PART 11.1 / 13): widen the accepted range
+# first on every node, then move the senders.
+# SecVerMin=1
+# SecVerMax=1
+#
+# Nonce-cache scope (KD8): this deployment is single-node per provider.
+# The replay window is per-JVM (NonceCache). A Tomcat restart forgets up
+# to MsgSkewMs of nonces. Shared windows for multi-node providers are
+# Direction.
+
 # ============================================================
 # Multi-provider Login membership (Spec-Login-Multiple)
 # ============================================================

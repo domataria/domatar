@@ -1,14 +1,12 @@
 package com.domatar.util;
 
 import com.domatar.core.Context;
-import com.domatar.crypto.Binding;
-import com.domatar.crypto.Delegation;
-import com.domatar.crypto.Hop;
-import com.domatar.crypto.OriginBlock;
+import com.domatar.core.Trust;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Head + Body only. JsonMsg has no security surface: provenance travels
+ * as the {@code Sec=} POST parameter, not inside Head.
+ */
 public class JsonMsg
 {
   private final JsonMap jsonMap;
@@ -48,24 +46,27 @@ public class JsonMsg
   }
 
   /**
-   * Replace this message's Context. Used by trust boundaries (DomatarServlet,
-   * Msg.doAction) after they run verifyLogin, to stamp the dispatch context
-   * with verified=true (and the locally-resolved actId/usrName) so that
-   * downstream local handlers can authorize via a flag read instead of
-   * re-running verifyLogin.
-   *
-   * Note: the Verified field DOES travel on the wire. The receiving
-   * Msg.doAction must always overwrite it based on its own local
-   * verifyLogin - it never trusts the caller's word for it.
+   * Replace this message's Context. Used by trust boundaries after they
+   * produce a Verdict, so downstream handlers that re-parse the raw string
+   * still see the stamped informational fields. Trust itself is not a
+   * wire field; {@link #getContext()} reads {@code Trust.NONE} from JSON
+   * and the local stamp restores ACCOUNT via {@code Verified} only for
+   * this in-process re-parse (Auth.isVerified).
    */
   public void setContext(Context context) throws DomatarException
   {
     JsonMap head = getHead();
 
-    head.put("Context", contextToJson(context));
+    head.put("Context", contextToJson(context, true));
   }
 
   private JsonMap contextToJson(Context context) throws DomatarException
+  {
+    return contextToJson(context, false);
+  }
+
+  private JsonMap contextToJson(Context context, final boolean stamped)
+      throws DomatarException
   {
     JsonMap jContext = new JsonHashMap();
 
@@ -74,157 +75,11 @@ public class JsonMsg
     jContext.put("UsrName", context.usrName);
     jContext.put("UsrIp", context.usrIp);
     jContext.put("Token", context.token);
-    jContext.put("Verified", context.verified ? "true" : "false");
+    if (stamped)
+      jContext.put("Verified", context.isVerified() ? "true" : "false");
     jContext.put("HttpHeaders", context.httpHeaders);
 
-    JsonList jDomIdPath = domIdsToJsonArray(context.domIdPath);
-
-    jContext.put("DomIdPath", jDomIdPath);
-
     return jContext;
-  }
-
-  // -------------------------------------------------------------------------
-  // Sec block (Phase 4+)
-  // -------------------------------------------------------------------------
-
-  /**
-   * Value object returned by {@link #getSec()}.
-   * All fields are null/empty when no Sec block is present.
-   */
-  public static final class SecEnvelope
-  {
-    public final OriginBlock origin;
-    public final Delegation  delegation;
-    public final Binding     binding;
-    public final List<Hop>   path;
-
-    public SecEnvelope(final OriginBlock origin,
-                       final Delegation  delegation,
-                       final Binding     binding,
-                       final List<Hop>   path)
-    {
-      this.origin     = origin;
-      this.delegation = delegation;
-      this.binding    = binding;
-      this.path       = path != null ? path : new ArrayList<>();
-    }
-
-    public boolean hasOrigin()     { return origin     != null; }
-    public boolean hasDelegation() { return delegation != null; }
-    public boolean hasBinding()    { return binding    != null; }
-    public boolean hasPath()       { return path != null && !path.isEmpty(); }
-  }
-
-  /**
-   * Writes the {@code Head.Sec} block containing the origin authentication
-   * block and account delegation (Spec-Security.txt PART 11.1).
-   * Path is initially empty; use {@link #appendHopToSec} to add hops.
-   * Legacy two-arg form (no Binding); prefer the three-arg overload.
-   *
-   * @param origin     signed OriginBlock (must not be null)
-   * @param delegation account delegation or null
-   */
-  public void addSec(final OriginBlock origin, final Delegation delegation)
-      throws DomatarException
-  {
-    addSec(origin, delegation, null);
-  }
-
-  /**
-   * Writes {@code Head.Sec} with Origin, optional Delegation, and optional
-   * Binding (Spec-OwnIds.txt PART 11).
-   */
-  public void addSec(final OriginBlock origin,
-                     final Delegation  delegation,
-                     final Binding     binding) throws DomatarException
-  {
-    final JsonMap head = getHead();
-    final JsonMap sec  = new JsonHashMap();
-
-    sec.put("Origin", origin.toMap());
-
-    if (delegation != null)
-      sec.put("Delegation", delegation.toMap());
-
-    if (binding != null)
-      sec.put("Binding", binding.toMap());
-
-    head.put("Sec", sec);
-  }
-
-  /**
-   * Appends a signed {@link Hop} to the {@code Head.Sec.Path} list
-   * (Spec-Security.txt PART 8.2 / 11.2).  Creates the Path array if it
-   * does not exist yet.  No-op if the Sec block is absent.
-   *
-   * @param hop the hop to append (typically produced by {@link com.domatar.crypto.PathChain#append})
-   */
-  public void appendHopToSec(final Hop hop) throws DomatarException
-  {
-    final JsonMap head = getHead();
-    final JsonMap sec  = head.getMap("Sec");
-
-    if (sec == null)
-      return; // no Sec block — unsigned message; skip silently
-
-    JsonList path = sec.getList("Path");
-
-    if (path == null)
-    {
-      path = new JsonArrayList();
-      sec.put("Path", path);
-    }
-
-    path.add(hop.toMap());
-  }
-
-  /**
-   * Returns the parsed {@link SecEnvelope} from {@code Head.Sec}, or an
-   * envelope with all fields null/empty if the Sec block is absent.
-   */
-  public SecEnvelope getSec() throws DomatarException
-  {
-    final JsonMap head = getHead();
-    final JsonMap sec  = head.getMap("Sec");
-
-    if (sec == null)
-      return new SecEnvelope(null, null, null, null);
-
-    final JsonMap originMap  = sec.getMap("Origin");
-    final JsonMap delegMap   = sec.getMap("Delegation");
-    final JsonMap bindingMap = sec.getMap("Binding");
-    final JsonList pathList  = sec.getList("Path");
-
-    final OriginBlock origin     = OriginBlock.fromMap(originMap);
-    final Delegation  delegation = Delegation.fromMap(delegMap);
-    final Binding     binding    = Binding.fromMap(bindingMap);
-
-    final List<Hop> path = new ArrayList<>();
-
-    if (pathList != null)
-    {
-      for (int i = 0; i < pathList.size(); i++)
-      {
-        final Object elem = pathList.get(i);
-        if (elem instanceof JsonMap)
-          path.add(Hop.fromMap((JsonMap) elem));
-      }
-    }
-
-    return new SecEnvelope(origin, delegation, binding, path);
-  }
-
-  /**
-   * Returns true iff this message carries a {@code Head.Sec} block with an
-   * OriginBlock inside. Used by {@code HttpClient.send} to decide whether to
-   * add a Sec block.
-   */
-  public boolean hasSec() throws DomatarException
-  {
-    final JsonMap head = getHead();
-    final JsonMap sec  = head.getMap("Sec");
-    return sec != null && sec.getMap("Origin") != null;
   }
 
   public void addClsId (String clsAppId, String clsId) throws DomatarException
@@ -362,17 +217,22 @@ public class JsonMsg
 
     JsonMap context = head.getMap("Context");
 
-    String verifiedStr = context.getString("Verified");
-    boolean verified = "true".equals(verifiedStr);
+    if (context == null)
+      return null;
+
+    // Wire Head.Context has no Verified (Phase 5). A locally stamped
+    // re-serialization still carries it so Auth.isVerified keeps working.
+    final String verifiedStr = context.getString("Verified");
+    final Trust trust = "true".equals(verifiedStr) ? Trust.ACCOUNT : Trust.NONE;
 
     return new Context(context.getString("ActId"),
                        context.getString("UsrId"),
                        context.getString("UsrName"),
                        context.getString("UsrIp"),
                        context.getString("Token"),
-                       verified,
-                       context.getMap("HttpHeaders"),
-                       jsonArrayToDomIds(context.getList("DomIdPath")));
+                       trust,
+                       null,
+                       context.getMap("HttpHeaders"));
   }
 
   public String getClsAppId() throws DomatarException
@@ -439,7 +299,7 @@ public class JsonMsg
 
   /**
    * Returns the message Body map (creates an empty one if absent).
-   * Used by {@code HttpClient} to compute the BodyHash for an OriginBlock.
+   * Used to compute the BodyHash for hop signatures.
    */
   public JsonMap getBodyMap() throws DomatarException
   {
@@ -525,30 +385,6 @@ public class JsonMsg
     JsonMap body = getBody();
 
     return body.getString("ErrorMsg");
-  }
-
-  private static JsonList domIdsToJsonArray(DomId[] domIds) throws DomatarException
-  {
-    int len = domIds.length;
-
-    JsonList jarray = new JsonArrayList();
-
-    for (int i = 0; i < len; i++)
-      jarray.add(domIds[i].toString());
-
-    return jarray;
-  }
-
-  private static DomId[] jsonArrayToDomIds(JsonList jsonArray) throws DomatarException
-  {
-    int len = jsonArray.size();
-
-    DomId[] domIds = new DomId[len];
-
-    for (int i = 0; i < len; i++)
-      domIds[i] = new DomId(jsonArray.getString(i));
-
-    return domIds;
   }
 
   @Override

@@ -19,6 +19,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import com.domatar.core.Context;
+import com.domatar.core.Trust;
 import com.domatar.core.HttpClient;
 import com.domatar.core.LoginRemote;
 import com.domatar.core.DomatarConfig;
@@ -171,9 +172,9 @@ public abstract class DomatarServlet extends HttpServlet
                                                  null,
                                                  usrIp,
                                                  token,
-                                                 false,
-                                                 httpHeaders,
-                                                 new DomId[0]);
+                                                 Trust.NONE,
+                                                 null,
+                                                 httpHeaders);
 
         final DomId loginDomId = new DomId(prvHstId, "act", "login@act", "loginObj");
 
@@ -199,23 +200,23 @@ public abstract class DomatarServlet extends HttpServlet
 
       final DomId srcDomId = new DomId(prvHstId, "ui", act.actId, "uiObj");
 
-      // Trust boundary: we just verified usrId/token against the local act
-      // table. Mark the dispatch context verified=true so downstream
-      // handlers can authorize via a flag read - no per-handler DB hit.
+      // Trust boundary: cookie/token matched the local act table. Stamp
+      // Trust.ACCOUNT so downstream handlers authorize via isVerified() —
+      // no per-handler DB hit.
       final Context context = new Context(act.actId,
                                           usrId,
                                           act.usrName,
                                           usrIp,
                                           token,
-                                          true,
-                                          httpHeaders,
-                                          new DomId[] { srcDomId });
+                                          Trust.ACCOUNT,
+                                          null,
+                                          httpHeaders);
 
-      final DomatarMsgClient msgClient = new HttpClient(srcDomId,
-                                                        srcDomain,
-                                                        context,
-                                                        contextPath,
-                                                        contextRealPath);
+      final HttpClient msgClient = new HttpClient(srcDomId,
+                                                  srcDomain,
+                                                  context,
+                                                  contextPath,
+                                                  contextRealPath);
 
       final JsonMsg msg = getMsg(req, srcDomId, context, act, msgClient);
 
@@ -226,7 +227,7 @@ public abstract class DomatarServlet extends HttpServlet
         return;
       }
 
-      final JsonMsg retMsg = msgClient.send(msg.getDstId(), msg);
+      final JsonMsg retMsg = msgClient.root(msg.getDstId(), msg);
 
       final JsonList jsonCookies = retMsg.getCookies();
 
