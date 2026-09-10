@@ -313,12 +313,16 @@ launcher URLs are in the live system (PART 7–11).
       {scheme}://{PublicDomain}/<appId>/icons/app.svg
 
   GetUserApps re-derives IconPath / LaunchPath from stored AppUrl or
-  inherited HostBrowserOrigin / HostPublicDomain. Docker-only HostDomain
+  inherited HostBrowserOrigin / HostPublicDomain. When AppUrl is
+  absent, the stored LaunchPath's last path segment is still replaced
+  with LaunchPage (so a stale `/domatar/quippin/quippin.html` becomes
+  `/domatar/quippin/news.html`). Docker-only HostDomain
   is never used as a browser URL; GetUserApps may SiteRole-fetch
   BrowserOrigin from that wire host. A later SetAppUrl updates both
   the tile image and the click target.
 
-  Desktop HTML: prefer AppUrl; else IconPath / LaunchPath. On a direct
+  Desktop HTML: prefer AppUrl + LaunchPage; else LaunchPath with the
+  LaunchPage filename applied. On a direct
   WAR page, if IconPath is absolute to another host, fall back to the
   same-origin launcher path so existing tiles still paint.
 

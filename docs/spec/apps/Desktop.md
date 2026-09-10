@@ -168,12 +168,15 @@ asks to purge "app-" rows.
        merged list differs from saved TileOrder, eagerly
        SetTileOrder. Do not write shell/userApps Position for layout.
     4. Render the ordered Apps[] as a grid of
-         <a draggable target="_blank" rel="noopener" href=LaunchPath>...
+         <a draggable target="_blank" rel="noopener" href=tileHref>...
+       tileHref is AppUrl + LaunchPage when AppUrl is browser-reachable;
+       otherwise LaunchPath with LaunchPage as the filename (Quippin
+       opens news.html, not quippin.html).
        Drag-and-drop (including shells) reorders the grid and eagerly
        SetTileOrder; on save failure the previous order is restored.
 
   No live polling. Clicking an icon is a normal anchor navigation to
-  LaunchPath, with target="_blank" so the destination app opens in a
+  that href, with target="_blank" so the destination app opens in a
   new browser tab and the Desktop stays available in the original tab.
   (rel="noopener" prevents the spawned tab from inheriting a
   window.opener handle - standard hardening for _blank links.)

@@ -12,6 +12,8 @@ import com.desktop.sync.DesktopFanout;
 import com.domatar.core.Auth;
 import com.domatar.core.Context;
 import com.domatar.core.DomatarConfig;
+import com.domatar.install.AppUrls;
+import com.domatar.install.LaunchPaths;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
 import com.domatar.util.Base64Encoder;
@@ -172,10 +174,12 @@ public class AppsImpl extends ObjImpl
 
       final JsonMap entry = new JsonHashMap();
 
-      entry.put("AppId",       extractAppId(row.domId.objId));
+      final String appId = extractAppId(row.domId.objId);
+
+      entry.put("AppId",       appId);
       entry.put("DisplayName", a.getAttr("DisplayName"));
       entry.put("IconPath",    a.getAttr("IconPath"));
-      entry.put("LaunchPath",  a.getAttr("LaunchPath"));
+      entry.put("LaunchPath",  launchPathForBrowser(appId, a.getAttr("LaunchPath")));
       entry.put("Position",    a.getAttr("Position"));
       entry.put("TileVersion", a.getAttr("TileVersion"));
       putOptional(entry, a, "HostPrvId");
@@ -1033,6 +1037,15 @@ public class AppsImpl extends ObjImpl
   private static String extractAppId(final String objId)
   {
     return IdGen.getIdSuffix(objId);
+  }
+
+  private static String launchPathForBrowser(final String appId,
+                                                final String stored)
+  {
+    final String rewritten = AppUrls.replaceLaunchAsset(stored,
+        LaunchPaths.launchPage(appId));
+
+    return rewritten != null ? rewritten : stored;
   }
 
   private static int comparePosition(final Obj a, final Obj b) throws DomatarException

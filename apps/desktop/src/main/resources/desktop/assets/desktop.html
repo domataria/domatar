@@ -897,6 +897,31 @@
         return b + "/" + appId + "/" + a;
     }
 
+    function rewriteLaunchFile(url, app)
+    {
+        var asset = launchAsset(app);
+
+        if (!url || !asset)
+            return url;
+
+        var query = "";
+        var path = String(url);
+        var q = path.indexOf("?");
+
+        if (q >= 0)
+        {
+            query = path.substring(q);
+            path = path.substring(0, q);
+        }
+
+        var slash = path.lastIndexOf("/");
+
+        if (slash >= 0)
+            return path.substring(0, slash + 1) + asset + query;
+
+        return asset + query;
+    }
+
     function isBrowserReachable(hostOrUrl)
     {
         if (!hostOrUrl)
@@ -954,7 +979,7 @@
         var launch = app.LaunchPath || "";
 
         if (launch.charAt(0) === "/" || isBrowserReachable(launch))
-            return launch;
+            return rewriteLaunchFile(launch, app);
 
         return "#";
     }

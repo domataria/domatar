@@ -10,7 +10,7 @@ package com.domatar.install;
  * <p>Resolution: explicit {@code AppUrl} if set; else the offering
  * provider's {@code BrowserOrigin}; else PublicDomain / Domain.
  * IconPath and LaunchPath are derived from that base plus convention
- * paths ({@code /<appId>/icons/app.svg}, {@code /<appId>/<appId>.html}).
+ * paths ({@code /<appId>/icons/app.svg}, {@code /<appId>/<LaunchPage>}).
  */
 public final class AppUrls
 {
@@ -197,6 +197,47 @@ public final class AppUrls
       return AssetPaths.WIRE_CONTEXT + "/";
 
     return join(appUrl, appId, launchAsset(appId, launchPage));
+  }
+
+  /**
+   * Keep origin, directory, and query; replace the last path segment with
+   * {@code launchAsset}. Blank {@code url} returns null so the caller can
+   * supply a relative default.
+   */
+  public static String replaceLaunchAsset(final String url,
+                                           final String launchAsset)
+  {
+    if (isBlank(launchAsset))
+      return url;
+
+    String file = launchAsset.trim().replace('\\', '/');
+    final int slashInFile = file.lastIndexOf('/');
+
+    if (slashInFile >= 0)
+      file = file.substring(slashInFile + 1);
+
+    if (file.isEmpty() || file.contains(".."))
+      return url;
+
+    if (isBlank(url))
+      return null;
+
+    String path = url.trim();
+    String query = "";
+    final int q = path.indexOf('?');
+
+    if (q >= 0)
+    {
+      query = path.substring(q);
+      path = path.substring(0, q);
+    }
+
+    final int slash = path.lastIndexOf('/');
+
+    if (slash >= 0)
+      return path.substring(0, slash + 1) + file + query;
+
+    return file + query;
   }
 
   public static String iconPath(final String appUrl, final String appId)

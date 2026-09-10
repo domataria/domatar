@@ -580,7 +580,12 @@ public class UserAppsImpl extends ObjImpl
     {
       if (iconPath == null)
         iconPath = AppUrls.iconPath(null, appId);
-      if (launchPath == null)
+
+      final String rewritten = AppUrls.replaceLaunchAsset(launchPath, launchPage);
+
+      if (rewritten != null)
+        launchPath = rewritten;
+      else
         launchPath = AppUrls.launchPath(null, appId, launchPage);
     }
 

@@ -97,6 +97,25 @@ public class AppUrlsTest
   }
 
   @Test
+  public void replaceLaunchAssetKeepsDirectory()
+  {
+    assertEquals("/domatar/quippin/news.html",
+        AppUrls.replaceLaunchAsset("/domatar/quippin/quippin.html",
+            "news.html"));
+    assertEquals(
+        "http://localhost:9080/domatar/quippin/news.html",
+        AppUrls.replaceLaunchAsset(
+            "http://localhost:9080/domatar/quippin/quippin.html",
+            "news.html"));
+    assertEquals("/domatar/quippin/news.html?x=1",
+        AppUrls.replaceLaunchAsset("/domatar/quippin/quippin.html?x=1",
+            "news.html"));
+    assertNull(AppUrls.replaceLaunchAsset(null, "news.html"));
+    assertEquals("/domatar/quippin/quippin.html",
+        AppUrls.replaceLaunchAsset("/domatar/quippin/quippin.html", ""));
+  }
+
+  @Test
   public void hostOnlyGetsScheme()
   {
     assertEquals("http://localhost:9080",
