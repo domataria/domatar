@@ -11,7 +11,11 @@ import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.List;
 import java.util.Scanner;
+import java.util.logging.Logger;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -25,11 +29,18 @@ import com.domatar.crypto.SecWire;
 import com.domatar.db.ActDb;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
+import com.domatar.db.OpLogDb;
+import com.domatar.log.OpLog;
+import com.domatar.log.OpMsg;
 import com.domatar.util.Base64Encoder;
 import com.domatar.util.Hst;
+import com.domatar.util.Json;
+import com.domatar.util.JsonList;
+import com.domatar.util.JsonMap;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
 import com.domatar.util.ObjAttrs;
+import com.domatar.util.ObjImpl;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarInterface;
 import com.domatar.util.DomatarMsgClient;
@@ -37,6 +48,8 @@ import com.domatar.util.DomId;
 
 public class HttpClient implements DomatarMsgClient
 {
+  private static final Logger LOG = Logger.getLogger(HttpClient.class.getName());
+
   // Inbound endpoint.  Full URL: <scheme>:// + dstDomain + PLATFORM_CONTEXT_PATH + servletPath
   // The scheme is read from DOMATAR_WIRE_SCHEME (default "https"; use "http" for dev-only).
   private static final String servletPath = "/Msg";
@@ -56,6 +69,13 @@ public class HttpClient implements DomatarMsgClient
   private final String srcContextRealPath;
   private final Provenance prov;
   private final boolean rootCapable;
+
+  private int priorVisitSnapshot = 0;
+  private int priorVisitAnySnapshot = 0;
+  private boolean snapshotted = false;
+  private String inboundMsgName;
+  /** Not on DomatarMsgClient; Payment draws on INSERT. */
+  public boolean thisAdmitIsFirst;
 
   // Stateless directory DomId used as the "from" of GetHst calls. The hstId/actId
   // are placeholders; the directory does not check them.
@@ -115,6 +135,50 @@ public class HttpClient implements DomatarMsgClient
   public DomId getSrcId()
   {
     return srcDomId;
+  }
+
+  /** Verdict-stamped inbound Context. Not on DomatarMsgClient. */
+  public Context inboundContext()
+  {
+    return srcContext;
+  }
+
+  /**
+   * Table state before this admit. Idempotent: the first call wins so
+   * alreadyEntered still sees the pre-upsert counts after admitIfNeeded.
+   */
+  public void snapshotPriors(final String contextId, final String dstDomId,
+                             final String msgName) throws DomatarException
+  {
+    if (snapshotted)
+      return;
+
+    inboundMsgName = msgName;
+
+    if (OpLog.isSkipVisit() || contextId == null || contextId.isEmpty())
+    {
+      priorVisitSnapshot = 0;
+      priorVisitAnySnapshot = 0;
+      snapshotted = true;
+      return;
+    }
+
+    final String hstId = new DomId(dstDomId).hstId;
+    priorVisitSnapshot = OpLogDb.priorVisitCount(hstId, contextId, dstDomId,
+        msgName);
+    priorVisitAnySnapshot = OpLogDb.priorVisitCountAny(hstId, contextId,
+        dstDomId);
+    snapshotted = true;
+  }
+
+  public int priorVisitSnapshot()
+  {
+    return priorVisitSnapshot;
+  }
+
+  public int priorVisitAnySnapshot()
+  {
+    return priorVisitAnySnapshot;
   }
 
   /**
@@ -196,6 +260,17 @@ public class HttpClient implements DomatarMsgClient
       final byte[] canonicalBody = CanonicalJson.canonicalize(jsonMsg.getBodyMap());
       final Provenance outbound = prov.append(srcDomId, sendDomId, canonicalBody,
                                               DomatarConfig.getPrvId());
+      if (!OpLog.isSkipVisit() && !isDirectoryDomId(sendDomId)
+          && srcContext != null && srcContext.contextId != null)
+      {
+        OpLogDb.insertMsg(
+            srcDomId.hstId,
+            srcContext.contextId,
+            srcDomId.toString(),
+            sendDomId.toString(),
+            jsonMsg.getOperation(),
+            OpLog.nowMs());
+      }
       return dispatchWith(sendDomId, jsonMsg, outbound);
     }
     catch (final DomatarException e)
@@ -211,14 +286,144 @@ public class HttpClient implements DomatarMsgClient
     final Context c = new Context(srcContext.actId, srcContext.usrId, srcContext.usrName,
                                   srcContext.usrIp, token, srcContext.trust,
                                   srcContext.contextId, srcContext.httpHeaders);
-    return new HttpClient(srcDomId, srcDomain, c, srcContextPath, srcContextRealPath,
-                          prov, rootCapable);
+    final HttpClient next = new HttpClient(srcDomId, srcDomain, c, srcContextPath,
+        srcContextRealPath, prov, rootCapable);
+    next.priorVisitSnapshot = priorVisitSnapshot;
+    next.priorVisitAnySnapshot = priorVisitAnySnapshot;
+    next.snapshotted = snapshotted;
+    next.inboundMsgName = inboundMsgName;
+    next.thisAdmitIsFirst = thisAdmitIsFirst;
+    return next;
   }
 
   @Override
   public DomId[] domIdPath() throws DomatarException
   {
     return prov.domIdPath();
+  }
+
+  @Override
+  public int priorVisitCount() throws DomatarException
+  {
+    return priorVisitCount(currentContextId());
+  }
+
+  @Override
+  public int priorVisitCount(final String contextId) throws DomatarException
+  {
+    if (contextId != null && contextId.equals(currentContextId()) && snapshotted)
+      return priorVisitSnapshot;
+
+    if (contextId == null || inboundMsgName == null)
+      return 0;
+
+    return OpLogDb.priorVisitCount(thisHstId(), contextId, thisDomId(),
+        inboundMsgName);
+  }
+
+  @Override
+  public boolean alreadyEntered() throws DomatarException
+  {
+    if (!snapshotted)
+      return false;
+
+    return priorVisitCount() > 0;
+  }
+
+  @Override
+  public boolean alreadyEntered(final String contextId) throws DomatarException
+  {
+    if (contextId != null && contextId.equals(currentContextId()) && !snapshotted)
+      return false;
+
+    return priorVisitCount(contextId) > 0;
+  }
+
+  @Override
+  public int priorVisitCountAny() throws DomatarException
+  {
+    return priorVisitCountAny(currentContextId());
+  }
+
+  @Override
+  public int priorVisitCountAny(final String contextId) throws DomatarException
+  {
+    if (contextId != null && contextId.equals(currentContextId()) && snapshotted)
+      return priorVisitAnySnapshot;
+
+    if (contextId == null)
+      return 0;
+
+    return OpLogDb.priorVisitCountAny(thisHstId(), contextId, thisDomId());
+  }
+
+  @Override
+  public List<OpMsg> outMsgs() throws DomatarException
+  {
+    return outMsgs(currentContextId());
+  }
+
+  @Override
+  public List<OpMsg> outMsgs(final String contextId) throws DomatarException
+  {
+    if (contextId == null)
+      return Collections.emptyList();
+
+    return OpLogDb.listOutMsgs(thisHstId(), contextId, thisDomId());
+  }
+
+  @Override
+  public void attach(final String slot, final Object json,
+      final long attachExpiresAt) throws DomatarException
+  {
+    attach(currentContextId(), inboundMsgName, slot, json, attachExpiresAt);
+  }
+
+  @Override
+  public void attach(final String contextId, final String slot, final Object json,
+      final long attachExpiresAt) throws DomatarException
+  {
+    attach(contextId, inboundMsgName, slot, json, attachExpiresAt);
+  }
+
+  @Override
+  public void attach(final String contextId, final String msgName, final String slot,
+      final Object json, final long attachExpiresAt) throws DomatarException
+  {
+    if (contextId == null || msgName == null)
+      return;
+
+    final String body = jsonTextOrReject(json);
+
+    if (json != null && body == null)
+      return;
+
+    OpLogDb.attach(thisHstId(), contextId, thisDomId(), msgName, slot, body,
+        attachExpiresAt);
+  }
+
+  @Override
+  public Object attachment(final String slot) throws DomatarException
+  {
+    return attachment(currentContextId(), inboundMsgName, slot);
+  }
+
+  @Override
+  public Object attachment(final String contextId, final String slot)
+      throws DomatarException
+  {
+    return attachment(contextId, inboundMsgName, slot);
+  }
+
+  @Override
+  public Object attachment(final String contextId, final String msgName,
+      final String slot) throws DomatarException
+  {
+    if (contextId == null || msgName == null || slot == null)
+      return null;
+
+    return parseAttachment(OpLogDb.attachmentBody(thisHstId(), contextId,
+        thisDomId(), msgName, slot));
   }
 
   private JsonMsg dispatchRoot(final DomId dst, final JsonMsg msg, final String actId)
@@ -385,11 +590,21 @@ public class HttpClient implements DomatarMsgClient
                                          extended.contextId(),
                                          srcContext.httpHeaders);
 
-    final DomatarMsgClient msgClient = inbound(dstDomId, srcDomain, childCtx,
-                                               srcContextPath, srcContextRealPath,
-                                               extended);
+    final HttpClient msgClient = inbound(dstDomId, srcDomain, childCtx,
+                                         srcContextPath, srcContextRealPath,
+                                         extended);
 
     jsonMsg.setContext(childCtx);
+
+    if (msgHandler instanceof ObjImpl)
+    {
+      final ObjImpl impl = (ObjImpl) msgHandler;
+      msgClient.snapshotPriors(childCtx.contextId, jsonMsg.getDstId().toString(),
+          jsonMsg.getOperation());
+      if (!impl.hasRights(jsonMsg, obj, msgClient))
+        return impl.notAuthorized(jsonMsg);
+      OpLog.admitIfNeeded(msgClient, jsonMsg, obj, extended);
+    }
 
     return msgHandler.handleMsg(jsonMsg.toString(), obj, srcContextPath, srcContextRealPath, msgClient);
   }
@@ -694,5 +909,61 @@ public class HttpClient implements DomatarMsgClient
     scanner.close();
 
     return retStr;
+  }
+
+  private String currentContextId()
+  {
+    return srcContext != null ? srcContext.contextId : null;
+  }
+
+  private String thisDomId()
+  {
+    return srcDomId.toString();
+  }
+
+  private String thisHstId()
+  {
+    return srcDomId.hstId;
+  }
+
+  /**
+   * JSON text for attach, or null to skip the write (rejected type).
+   * {@code json == null} is a delete, not a reject.
+   */
+  private static String jsonTextOrReject(final Object json) throws DomatarException
+  {
+    if (json == null)
+      return null;
+
+    if (json instanceof byte[]
+        || !(json instanceof JsonMap || json instanceof JsonList
+            || json instanceof String || json instanceof Number
+            || json instanceof Boolean))
+    {
+      LOG.warning("HttpClient.attach: rejected non-JSON type "
+          + json.getClass().getName());
+      return null;
+    }
+
+    if (json instanceof JsonMap)
+      return new String(CanonicalJson.canonicalize((JsonMap) json),
+          StandardCharsets.UTF_8);
+
+    return Json.toJson(json);
+  }
+
+  private static Object parseAttachment(final String body) throws DomatarException
+  {
+    if (body == null || body.isEmpty())
+      return null;
+
+    try
+    {
+      return Json.parse(body);
+    }
+    catch (final DomatarException e)
+    {
+      return body;
+    }
   }
 }

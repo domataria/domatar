@@ -88,7 +88,7 @@ public class ObjImpl implements DomatarInterface
    * Standard "Not authorized" reply. Returned by handleMsg when
    * hasRights returns false.
    */
-  protected String notAuthorized(final JsonMsg inMsg) throws DomatarException
+  public String notAuthorized(final JsonMsg inMsg) throws DomatarException
   {
     final JsonMsg outMsg = new JsonMsg();
 

@@ -14,6 +14,7 @@ import com.domatar.install.DesktopSyncCutover;
 import com.domatar.install.DesktopTombstonePurge;
 import com.domatar.install.NavigatorReplica;
 import com.domatar.install.NavAppEntry;
+import com.domatar.install.OpLogInstall;
 import com.domatar.install.OwnIdsMigration;
 import com.domatar.install.OwnIdsRebind;
 import com.domatar.install.SecurityMigration;
@@ -130,6 +131,15 @@ public abstract class SetupServlet extends HttpServlet
       res.setStatus(HttpServletResponse.SC_FORBIDDEN);
       out.println("Setup endpoint is only accessible from localhost.");
       return;
+    }
+
+    try
+    {
+      OpLogInstall.ensureTables();
+    }
+    catch (final Exception e)
+    {
+      System.out.println("WARN: OpLogInstall.ensureTables failed: " + e);
     }
 
     // Phase 2 security migration: GET /Setup?action=migrate-security

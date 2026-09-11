@@ -63,6 +63,8 @@ import com.domatar.install.AssetPaths;
  *                            provider's operational Ed25519 private key seed (Phase 1+)
  *   GenesisVaultPath       - filesystem path of the sim/test genesis-key vault
  *                            (Spec-OwnIds.txt PART 7/15; default mySQL/dev-keys/genesis-vault.txt)
+ *   VisitTtlMs             - op_dst visit TTL; default and floor are
+ *                            MaxChainAgeMs + MsgSkewMs
  *
  * Default applications (new accounts) are read by getDefaultApps() with this
  * precedence:
@@ -86,7 +88,8 @@ import com.domatar.install.AssetPaths;
  *   DOMATAR_DEFAULT_APPS, DOMATAR_DEFAULT_APPS_CONFIG, DOMATAR_ADMIN_PASSWORD,
  *   DOMATAR_DIRECTORY, DOMATAR_PRV_ACTID, DOMATAR_MASTER_KEY,
  *   DOMATAR_DIRECTORY_ROOT_PUBKEY, DOMATAR_DIRECTORY_ROOT_PRIVKEY,
- *   DOMATAR_PROVIDER_KEY_PATH, DOMATAR_GENESIS_VAULT_PATH
+ *   DOMATAR_PROVIDER_KEY_PATH, DOMATAR_GENESIS_VAULT_PATH,
+ *   DOMATAR_VISIT_TTL_MS
  */
 public class DomatarConfig
 {
@@ -531,6 +534,29 @@ public class DomatarConfig
     catch (final NumberFormatException ignored)
     {
       return 300_000L;
+    }
+  }
+
+  /**
+   * Visit TTL for {@code op_dst} in milliseconds. Default and floor are
+   * {@link #getMaxChainAgeMs()} + {@link #getMsgSkewMs()}. Configurable via
+   * {@code DOMATAR_VISIT_TTL_MS} / {@code VisitTtlMs}. Values below the floor
+   * are raised to the floor.
+   */
+  public static long getVisitTtlMs()
+  {
+    final long floor = getMaxChainAgeMs() + getMsgSkewMs();
+    final String v = resolve("DOMATAR_VISIT_TTL_MS", "VisitTtlMs", null);
+    if (v == null || v.isEmpty())
+      return floor;
+    try
+    {
+      final long n = Long.parseLong(v);
+      return n < floor ? floor : n;
+    }
+    catch (final NumberFormatException ignored)
+    {
+      return floor;
     }
   }
 

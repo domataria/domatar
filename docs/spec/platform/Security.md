@@ -818,8 +818,8 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
 
   `Context.getContextId()` is the handler-facing accessor. Saga /
   charging / re-entry work (Direction, PART 15) keys off this
-  value; PART 8.14 states what that work must supply, because this
-  design deliberately persists no hop.
+  value. The durable visit keyed by it is `op_dst` / `op_msg`
+  ([Domatar](../Domatar.md) PART 7); this PART still persists no hop.
 
 8.7  Root and send
 
@@ -1018,28 +1018,31 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
   `Path` are the only security objects in this design with NO
   persistence: they exist in the heap for one request and on the wire
   for one POST. Bindings, delegations, provider keys and nonce windows
-  all have durable homes (PART 5.4, PART 10.1); the path does not. The
-  only part that reaches storage is the PART 8.5 object-list
-  projection, through the log.
+  all have durable homes (PART 5.4, PART 10.1); the path does not.
+  The log is not the Path. The durable per-participant record keyed
+  by `contextId` is `op_dst` / `op_msg` ([Domatar](../Domatar.md)
+  PART 7): what this provider admitted, for whom, and whom it then
+  called. Hops themselves still do not persist. The only hop-shaped
+  thing that reaches storage is the PART 8.5 object-list projection,
+  through that log.
 
   Consequences:
 
-    * There is no after-the-fact audit of a route. Once a request
+    * There is no after-the-fact audit of a *route*. Once a request
       returns, the proof that a message travelled a given path is
-      gone unless something recorded it deliberately.
+      gone unless something recorded it deliberately. The log records
+      visits and out-edges, not hop signatures.
     * No party ever holds the TREE. At a fan-out the branching object
       is the only one that knows both branches; PART 8.12 makes the
       chain request-only, so nothing comes back. Each receiver holds
-      exactly its own root-to-here BRANCH.
-    * Therefore effect rollback (the saga / compensation work,
-      Direction, PART 15) cannot be built on this PART as it stands.
-      It needs, and must specify for
-      itself: durable per-participant records keyed by `contextId`
-      (what I did, for whom, and whom I called), and either a returned
-      causal tree or a cascading protocol that needs only each node's
-      own out-edges. This design supplies the correlation key
+      exactly its own root-to-here BRANCH. `op_msg` is that node's
+      local out-edges, not the tree.
+    * Effect rollback (the saga / compensation work, Direction,
+      PART 15) cites that log: visit identity and out-edges are
+      platform mechanism; compensation payload and cascade policy
+      are not. This design still supplies the correlation key
       (`contextId`, verifiable at every hop, PART 8.6) and the
-      per-message granularity, and nothing else.
+      per-message granularity.
 
 
 ## PART 9 - Q3: WIRE CONFIDENTIALITY (TLS)
@@ -1422,8 +1425,9 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
     surface is Direction (PART 15).
   * Nothing in this design persists a hop (PART 8.14), so there is no
     after-the-fact audit of a route and no party holds the fan-out
-    tree. Dependent work (effect rollback, charging) must supply its
-    own durable records keyed on `contextId`.
+    tree. Visit identity and out-edges live in `op_dst` / `op_msg`
+    ([Domatar](../Domatar.md) PART 7). Saga / payment / re-entry
+    policy cite that log; they do not invent a second store.
 
 
 ## PART 15 - DIRECTION

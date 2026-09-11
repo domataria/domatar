@@ -5,9 +5,13 @@
 package com.domatar.app;
 
 import com.domatar.core.ClsMap;
+import com.domatar.core.DomatarConfig;
 import com.domatar.core.ImplMap;
+import com.domatar.db.DbConnection;
 import com.domatar.install.AppInstall;
 import com.domatar.install.AppUserInstallHandler;
+import com.domatar.install.OpLogInstall;
+import com.domatar.log.OpLogJanitor;
 import com.domatar.servlet.AppAssetServlet;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarInterface;
@@ -49,6 +53,30 @@ public class AppLoader implements ServletContextListener
   public void contextInitialized(ServletContextEvent sce)
   {
     ServletContext ctx = sce.getServletContext();
+
+    final String dbOverride = DomatarConfig.getDbUrlOverride();
+    final String dbUrl = (dbOverride != null && !dbOverride.isEmpty())
+        ? dbOverride
+        : ctx.getInitParameter("DbConnection");
+    DbConnection.setConnectStr(dbUrl);
+
+    try
+    {
+      OpLogInstall.ensureTables();
+    }
+    catch (final Exception e)
+    {
+      LOG.log(Level.WARNING, "OpLogInstall.ensureTables failed", e);
+    }
+
+    try
+    {
+      OpLogJanitor.start();
+    }
+    catch (final Exception e)
+    {
+      LOG.log(Level.WARNING, "OpLogJanitor.start failed", e);
+    }
 
     String appsRealPath = ctx.getRealPath("/WEB-INF/apps");
 
@@ -103,6 +131,8 @@ public class AppLoader implements ServletContextListener
   @Override
   public void contextDestroyed(ServletContextEvent sce)
   {
+    OpLogJanitor.stop();
+
     for (URLClassLoader cl : loaders)
     {
       try

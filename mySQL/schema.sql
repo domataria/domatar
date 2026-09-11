@@ -76,6 +76,38 @@ CREATE TABLE `lnk` (
   PRIMARY KEY (`HstId`,`AppId`,`ActId`,`ObjId`,`TagAppId`,`Tag`,`SeqNum`,`Val`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
+DROP TABLE IF EXISTS `op_msg`;
+DROP TABLE IF EXISTS `op_dst`;
+CREATE TABLE `op_dst` (
+  `HstId`           varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `ContextId`       varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `DstDomId`        varchar(400) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `MsgName`         varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `ActId`           varchar(100) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `CallerDomId`     varchar(400) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `Trust`           varchar(16)  CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `VisitCount`      int NOT NULL,
+  `FirstSeenAt`     bigint NOT NULL,
+  `LastSeenAt`      bigint NOT NULL,
+  `VisitExpiresAt`  bigint NOT NULL,
+  `Attachment`      json DEFAULT NULL,
+  `AttachExpiresAt` bigint DEFAULT NULL,
+  PRIMARY KEY (`HstId`,`ContextId`,`DstDomId`,`MsgName`),
+  KEY `op_dst_ctx` (`HstId`,`ContextId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE `op_msg` (
+  `HstId`      varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `ContextId`  varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `SrcDomId`   varchar(400) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `Seq`        int NOT NULL,
+  `DstDomId`   varchar(400) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `OutMsgName` varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `SentAt`     bigint NOT NULL,
+  PRIMARY KEY (`HstId`,`ContextId`,`SrcDomId`,`Seq`),
+  KEY `op_msg_ctx` (`HstId`,`ContextId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
 DROP TABLE IF EXISTS `obj`;
 CREATE TABLE `obj` (
   `HstId` varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

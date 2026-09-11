@@ -26,6 +26,7 @@ import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
 import com.domatar.install.DirectoryKeyResolver;
 import com.domatar.install.OfferedHostsInstall;
+import com.domatar.log.OpLog;
 import com.domatar.util.Hst;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -207,10 +208,28 @@ public class Msg extends HttpServlet
                 }
                 else
                 {
-                  retMsg = msgHandler.handleMsg(msg, obj, contextPath, contextRealPath,
-                      HttpClient.inbound(dstDomId, srcDomain, dispatchContext,
-                                         contextPath, contextRealPath,
-                                         inboundProv));
+                  final HttpClient client = HttpClient.inbound(dstDomId, srcDomain,
+                      dispatchContext, contextPath, contextRealPath, inboundProv);
+
+                  if (msgHandler instanceof ObjImpl)
+                  {
+                    final ObjImpl impl = (ObjImpl) msgHandler;
+                    client.snapshotPriors(dispatchContext.contextId,
+                        jsonMsg.getDstId().toString(), jsonMsg.getOperation());
+                    if (!impl.hasRights(jsonMsg, obj, client))
+                      retMsg = impl.notAuthorized(jsonMsg);
+                    else
+                    {
+                      OpLog.admitIfNeeded(client, jsonMsg, obj, inboundProv);
+                      retMsg = msgHandler.handleMsg(msg, obj, contextPath,
+                          contextRealPath, client);
+                    }
+                  }
+                  else
+                  {
+                    retMsg = msgHandler.handleMsg(msg, obj, contextPath, contextRealPath,
+                        client);
+                  }
                 }
               }
               else

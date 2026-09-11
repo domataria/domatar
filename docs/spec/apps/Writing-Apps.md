@@ -196,7 +196,9 @@ return outMsg.toString();
 Types the author uses (`com.domatar.*`):
 
 - `util.JsonMsg`, `util.ObjAttrs` — the message
-- `util.DomatarMsgClient` — `send(DomId, JsonMsg)`, `withToken`, `domIdPath`
+- `util.DomatarMsgClient` — `send(DomId, JsonMsg)`, `withToken`, `domIdPath`,
+  `alreadyEntered`, `priorVisitCount`, `priorVisitCountAny`, `outMsgs`,
+  `attach`, `attachment`
 - `util.ObjImpl`, `util.DomatarInterface` — handler base
 - `util.DomId`, `util.Obj`, `util.Lnk` — value types
 - `db.ObjDb`, `db.LnkDb`, `db.ActDb`, `db.HstDb` — persistence
@@ -212,7 +214,12 @@ verdict is FATAL for this class. Apps never set the envelope, never
 construct a Context, and never import `com.domatar.crypto`. A handler
 receives a `DomatarMsgClient` that can `send` (and `withToken` /
 `domIdPath`) but cannot `root`, plus a `Context` carrying trust, actId
-and contextId.
+and contextId. The same client answers `alreadyEntered` /
+`priorVisitCount` / `outMsgs` and `attach` / `attachment` for this
+object ([Domatar](../Domatar.md) PART 6.3, PART 7). Handlers query;
+they do not INSERT. `Context.getContextId()` is the current lineage;
+`attach(contextId, msgName, slot, …)` names a past visit. A ContextId
+is not authorization.
 
 
 ## PART 7 — WUI servlets

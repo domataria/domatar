@@ -561,6 +561,17 @@ Direction (Option C):
   boundary; never again as the message bounces through local
   handlers).
 
+  After `hasRights` admits, dispatch writes a visit on `op_dst`
+  (PART 7) before `handleMsg`. A deny is not a visit. Directory
+  class `(hst, hsts)`, unsigned bootstrap, and `OpLog.skipVisit`
+  are not visits. Nested `send()` records an intent edge on
+  `op_msg` even if the callee denies; `root()` writes no edge.
+  Handlers query that store on the same `DomatarMsgClient` they
+  receive for `hasRights`: `alreadyEntered`, `priorVisitCount`,
+  `priorVisitCountAny`, `outMsgs`, `attach`, `attachment`. They
+  do not INSERT. Current-request `alreadyEntered` /
+  `priorVisitCount` are a snapshot taken before this admit.
+
   Direction: richer dynamic policies (owner-match, follower-status,
   ban-list consultation, ...) are each just another branch inside a
   handler's hasRights() override. The class-descriptor object
@@ -685,6 +696,26 @@ Tables, with the columns that matter to the runtime:
        local cache. Version and FetchedAt are bookkeeping for cache
        freshness.
 
+  op_dst (HstId, ContextId, DstDomId, MsgName,
+          ActId, CallerDomId, Trust, VisitCount,
+          FirstSeenAt, LastSeenAt, VisitExpiresAt,
+          Attachment JSON, AttachExpiresAt)
+       PK (HstId, ContextId, DstDomId, MsgName).
+       One admitted `handleMsg` on this host: this object, this Msg,
+       this operation. Deny is not a row. `Attachment` is named JSON
+       slots (reserved: `saga`, `payment`); the platform does not
+       interpret Body. `VisitExpiresAt` is visitTTL; a live
+       `AttachExpiresAt` keeps the row past the visit window. GC is
+       per HstId.
+
+  op_msg (HstId, ContextId, SrcDomId, Seq,
+          DstDomId, OutMsgName, SentAt)
+       PK (HstId, ContextId, SrcDomId, Seq).
+       One nested `send()` from this object under that ContextId.
+       Intent, not success. Seq is insert-success order. No
+       independent TTL; orphan edges go when this host's visits for
+       that ContextId are gone.
+
 Link naming convention — TagAppId / Tag / SeqNum / Val
 -------------------------------------------------------
 A link is a named pointer (or named array element) owned by the source
@@ -767,8 +798,8 @@ Persistence direction:
     follow-up should split the seed by HstId so each server only
     carries the data for the hsts it actually serves.
   - Object-level migration tooling (export/import of one host's
-    objects, accounts, and links plus its per-host files), to support
-    MoveHst.
+    objects, accounts, links, `op_dst` / `op_msg`, plus its per-host
+    files), to support MoveHst.
 
 ## PART 8 - CLASS OBJECTS AND SERVICES
 
