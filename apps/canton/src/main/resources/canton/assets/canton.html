@@ -15,7 +15,7 @@
         .cn-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
         .cn-header h2   { margin: 0; }
         .cn-card        { border: 1px solid var(--border); border-radius: var(--radius);
-                          padding: 16px 20px; margin-bottom: 20px; max-width: 720px; }
+                          padding: 16px 20px; margin-bottom: 20px; max-width: 960px; }
         .cn-card h3     { margin: 0 0 10px; font-size: 1.05em; }
         .cn-hint        { color: var(--page-muted); font-size: 0.88em; margin: 0 0 14px; line-height: 1.45; }
         .cn-row         { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
@@ -28,7 +28,8 @@
         .cn-status      { font-size: 0.88em; color: var(--page-muted); margin-top: 8px; }
         .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
                           margin-bottom: 10px; min-height: 1.2em; }
-        table.cn-table  { width: 100%; border-collapse: collapse; }
+        table.cn-table  { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        table.cn-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         table.cn-table th,
         table.cn-table td { text-align: left; padding: 6px 8px; }
         table.cn-table th { font-size: 0.82em; font-weight: 600; color: var(--page-muted);
@@ -240,16 +241,34 @@
             var open = href
                 ? ('<a href="' + href + '">Open</a>')
                 : '';
+            var symbol = c.Symbol || c.Currency || '';
+            var name = c.Name || c.TemplateId || '';
             html += '<tr>'
-                + '<td>' + escapeHtml(cid) + '</td>'
-                + '<td>' + escapeHtml(c.Issuer || '') + '</td>'
-                + '<td>' + escapeHtml(c.Owner || '') + '</td>'
-                + '<td>' + escapeHtml(c.Amount || '') + '</td>'
-                + '<td>' + escapeHtml(c.Currency || '') + '</td>'
+                + '<td>' + escapeHtml(symbol) + '</td>'
+                + '<td>' + escapeHtml(name) + '</td>'
+                + '<td>' + escapeHtml(c.Amount || c.Par || '') + '</td>'
+                + '<td title="' + escapeHtml(c.Owner || c.Buyer || c.Receiver || '') + '">'
+                + escapeHtml(shortParty(c.Owner || c.Buyer || c.Receiver || '')) + '</td>'
+                + '<td title="' + escapeHtml(cid) + '">' + escapeHtml(shortId(cid)) + '</td>'
                 + '<td>' + open + '</td>'
                 + '</tr>';
         }
         $('#cn-body').html(html);
+    }
+
+    function shortParty(s)
+    {
+        var i = s.indexOf('::');
+        if (i > 0 && s.length > i + 10)
+            return s.substring(0, i + 6) + '\u2026';
+        return s;
+    }
+
+    function shortId(s)
+    {
+        if (s.length > 14)
+            return s.substring(0, 8) + '\u2026' + s.substring(s.length - 4);
+        return s;
     }
 
     function escapeHtml(s)
@@ -286,11 +305,11 @@
             <h3>Party</h3>
             <p class="cn-hint">
                 Bind the Canton Party this account acts as. Party ids are ledger
-                strings (Alice, Bob, Bank) &mdash; counterparties need not have Domatar.
+                strings (<code>hint::1220&hellip;</code>) &mdash; counterparties need not have Domatar.
             </p>
             <div class="cn-row">
                 <label for="party-id">PartyId</label>
-                <input type="text" id="party-id" placeholder="e.g. Alice" maxlength="80"/>
+                <input type="text" id="party-id" placeholder="e.g. Alice::1220&hellip;" maxlength="255"/>
             </div>
             <div class="cn-btns">
                 <button type="button" id="btn-bind" onclick="bindParty()">Bind</button>
@@ -333,11 +352,11 @@
             <table class="cn-table">
                 <thead>
                     <tr>
-                        <th>ContractId</th>
-                        <th>Issuer</th>
-                        <th>Owner</th>
+                        <th>Symbol</th>
+                        <th>Name</th>
                         <th>Amount</th>
-                        <th>Currency</th>
+                        <th>Owner</th>
+                        <th>ContractId</th>
                         <th></th>
                     </tr>
                 </thead>

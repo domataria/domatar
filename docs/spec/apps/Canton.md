@@ -422,7 +422,12 @@ links, idempotent install.
             the party. That filter is the whole privacy
             model. Does not write the file.
 
-  getTemplate / listTemplates  static Iou table (PART 10).
+  getTemplate / listTemplates  Iou (PART 10) plus the
+        workshop demo templates in `DemoPortfolio`
+        (Amulet, Holding, LockedAmulet, TransferInstruction,
+        Dlr Repo). listTemplates remains ["Iou"]; Create
+        Iou is unchanged. Non-Iou ACS rows project as
+        (canton, contract).
 
   JSON file (`MockCanton`-only; NOT a `CantonClient` method):
 
@@ -451,6 +456,12 @@ links, idempotent install.
         ] }
 
     Load on construction (missing file → empty map, nextId=1).
+    The workshop sim may replace the file with
+    `DemoPortfolio.storeJson()` (ten contracts visible to
+    `davidb-quippin::1220…`: CC, HECTX, HXAI, HXSPX, HECTO,
+    USYC, SBC, LockedAmulet, pending CC transfer, DLR repo).
+    That seed is file contents, not submitCreate. Default
+    remains empty until the first Create.
     Save after each successful submitCreate / submitExercise:
     write \<path\>.tmp then replace (no new JSON libraries —
     `JsonHashMap` / `Json.toJson` and the existing parse path).
@@ -508,6 +519,8 @@ Handlers extend `ObjImpl`. After hasRights, they call
     Stores PartyId on this object. Does not allocate a
     Canton Party. Mock Parties are any string; real
     Canton will require a Party the participant hosts.
+    Realistic ids are `hint::1220` + 64 hex (Daml-LF max
+    255). The launcher PartyId field allows 255 chars.
 
 6.2  ContractsImpl  (canton, contracts)
 
@@ -624,9 +637,10 @@ the UX filter. It does not replace the ledger.
     ContractsWui    Sync, Create, list
     IouWui          GetIou, Transfer, Settle, Archive
 
-  Assets: `canton.html` (launcher: bind, create Iou, list)
-  and `iou.html?ContractDomId=` (payload + stakeholders,
-  Transfer / Settle / Archive). Party ids are text fields,
+  Assets: `canton.html` (launcher: bind, create Iou, list
+  Symbol/Name/Amount/Owner) and `iou.html?ContractDomId=`
+  (payload + stakeholders, Transfer / Settle / Archive).
+  Party ids are text fields (`hint::1220…`, maxlength 255),
   not actId pickers. LaunchPath `/domatar/canton/canton.html`.
 
 8.2  Navigator
@@ -811,8 +825,10 @@ of field names: `IouTemplates`. Install must not drift.
        on CantonClient.
 
   KD8  First template Iou (PART 10). Generic (canton,
-       contract) exists for later templates; v1 mock does
-       not mint it.
+       contract) exists for later templates. The mock
+       Create path still mints only Iou; a workshop JSON
+       seed may load DemoPortfolio holdings onto
+       (canton, contract).
 
   KD9  Do not wrap submit in Saga Compensate. Do not
        analogize RegisterAccount / BankTransfer / Credit.

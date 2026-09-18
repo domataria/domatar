@@ -103,12 +103,32 @@
     {
         $('#f-contractid').text(field(attrs, 'ContractId'));
         $('#f-templateid').text(field(attrs, 'TemplateId'));
-        $('#f-issuer').text(field(attrs, 'Issuer'));
-        $('#f-owner').text(field(attrs, 'Owner'));
-        $('#f-amount').text(field(attrs, 'Amount'));
-        $('#f-currency').text(field(attrs, 'Currency'));
+        $('#f-name').text(field(attrs, 'Name'));
+        $('#f-symbol').text(field(attrs, 'Symbol') || field(attrs, 'Currency'));
+        $('#f-instrument').text(field(attrs, 'InstrumentId'));
+        $('#f-issuer').text(field(attrs, 'Issuer') || field(attrs, 'InstrumentAdmin')
+            || field(attrs, 'Sender') || field(attrs, 'Operator'));
+        $('#f-owner').text(field(attrs, 'Owner') || field(attrs, 'Buyer')
+            || field(attrs, 'Receiver'));
+        $('#f-amount').text(field(attrs, 'Amount') || field(attrs, 'Par'));
+        $('#f-extra').text(extraLine(attrs));
         $('#f-signatories').text(field(attrs, 'Signatories'));
         $('#f-observers').text(field(attrs, 'Observers'));
+        var title = field(attrs, 'Name') || field(attrs, 'Symbol') || 'Contract';
+        $('#page-title').text(title);
+        document.title = title;
+    }
+
+    function extraLine(attrs)
+    {
+        var parts = [];
+        ['Status', 'Collateral', 'Rate', 'Start', 'End', 'LockContext', 'LockExpiry']
+            .forEach(function(k)
+            {
+                var v = field(attrs, k);
+                if (v) parts.push(k + ': ' + v);
+            });
+        return parts.join(' \u00b7 ');
     }
 
     function postChoice(action, extra)
@@ -185,7 +205,7 @@
 <div class="page">
     <div class="page-content">
         <div class="cn-header">
-            <h2>Iou</h2>
+            <h2 id="page-title">Contract</h2>
             <a class="cn-back" href="/domatar/canton/canton.html">&larr; Active</a>
         </div>
 
@@ -197,10 +217,13 @@
             <dl class="cn-dl">
                 <dt>ContractId</dt><dd id="f-contractid"></dd>
                 <dt>TemplateId</dt><dd id="f-templateid"></dd>
-                <dt>Issuer</dt><dd id="f-issuer"></dd>
+                <dt>Name</dt><dd id="f-name"></dd>
+                <dt>Symbol</dt><dd id="f-symbol"></dd>
+                <dt>Instrument</dt><dd id="f-instrument"></dd>
+                <dt>Issuer / admin</dt><dd id="f-issuer"></dd>
                 <dt>Owner</dt><dd id="f-owner"></dd>
                 <dt>Amount</dt><dd id="f-amount"></dd>
-                <dt>Currency</dt><dd id="f-currency"></dd>
+                <dt>Details</dt><dd id="f-extra"></dd>
                 <dt>Signatories</dt><dd id="f-signatories"></dd>
                 <dt>Observers</dt><dd id="f-observers"></dd>
             </dl>
@@ -210,7 +233,7 @@
             <h3>Choices</h3>
             <div class="cn-row">
                 <label for="new-owner">NewOwner</label>
-                <input type="text" id="new-owner" placeholder="Bank"/>
+                <input type="text" id="new-owner" placeholder="hint::1220&hellip;" maxlength="255"/>
             </div>
             <div class="cn-btns">
                 <button type="button" onclick="transferIou()">Transfer</button>

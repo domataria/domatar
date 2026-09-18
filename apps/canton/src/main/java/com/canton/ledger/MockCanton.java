@@ -73,6 +73,9 @@ public final class MockCanton implements CantonClient
   {
     if (IouTemplates.TEMPLATE_ID.equals(templateId))
       return IouTemplates.iou();
+    final TemplateDesc demo = DemoPortfolio.template(templateId);
+    if (demo != null)
+      return demo;
     throw new DomatarException("Unknown template: " + templateId);
   }
 
@@ -145,7 +148,7 @@ public final class MockCanton implements CantonClient
 
     final Map<String, String> args = argument != null ? argument : Collections.emptyMap();
 
-    if (IouTemplates.TEMPLATE_ID.equals(current.templateId) && "Transfer".equals(choice))
+    if ("Transfer".equals(choice) && current.payload.containsKey("Owner"))
     {
       final String newOwner = args.get("NewOwner");
 
@@ -162,17 +165,16 @@ public final class MockCanton implements CantonClient
       archived.add(contractId);
     }
 
-    if (IouTemplates.TEMPLATE_ID.equals(current.templateId) && "Transfer".equals(choice))
+    if ("Transfer".equals(choice) && current.payload.containsKey("Owner"))
     {
       final String newOwner = args.get("NewOwner");
       final Map<String, String> nextPayload = new LinkedHashMap<>(current.payload);
 
       nextPayload.put("Owner", newOwner);
       final String id = "cid-" + nextId++;
-      final TemplateDesc iou = IouTemplates.iou();
       final Contract successor = new Contract(id, current.templateId, nextPayload,
-          partiesFrom(iou.signatoryFields, nextPayload),
-          partiesFrom(iou.observerFields, nextPayload));
+          partiesFrom(t.signatoryFields, nextPayload),
+          partiesFrom(t.observerFields, nextPayload));
 
       contracts.put(id, successor);
       created.add(successor);
