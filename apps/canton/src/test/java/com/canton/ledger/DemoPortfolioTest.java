@@ -47,6 +47,16 @@ public class DemoPortfolioTest
     assertTrue(symbols.contains("HECTO"));
     assertTrue(symbols.contains("USYC"));
     assertTrue(symbols.contains("SBC"));
+    Contract hectx = null;
+    for (final Contract c : all)
+    {
+      if ("HECTX".equals(c.payload.get("Symbol")))
+        hectx = c;
+    }
+    assertNotNull(hectx);
+    assertEquals("0.28", hectx.payload.get("WeightOpenAI"));
+    assertTrue(hectx.payload.get("Allocations").contains("SpaceX"));
+    assertEquals("104.25", hectx.payload.get("Nav"));
   }
 
   @Test

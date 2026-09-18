@@ -71,16 +71,33 @@ public final class DemoPortfolio
 
     out.add(holding(cid("cc"), AMULET, DAVID, DSO,
         "12840.2500000000", "CC", "Amulet", "Canton Coin", DSO));
-    out.add(holding(cid("hectx"), HOLDING, DAVID, HECTO_REG,
-        "42.0000000000", "HECTX", "HECTX", "Hectocorn Index", HECTO_REG));
-    out.add(holding(cid("hxai"), HOLDING, DAVID, HECTO_REG,
-        "15.5000000000", "HXAI", "HXAI", "Hecto AI Index", HECTO_REG));
-    out.add(holding(cid("hxspx"), HOLDING, DAVID, HECTO_REG,
-        "8.2500000000", "HXSPX", "HXSPX", "Hecto Aerospace Index", HECTO_REG));
+    out.add(index(cid("hectx"), DAVID, HECTO_REG,
+        "42.0000000000", "HECTX", "Hectocorn Index", "104.25",
+        new String[][] {
+            { "OpenAI", "0.28" },
+            { "SpaceX", "0.22" },
+            { "Anthropic", "0.18" },
+            { "xAI", "0.12" },
+            { "Stripe", "0.10" },
+            { "ByteDance", "0.06" },
+            { "Tether", "0.04" } }));
+    out.add(index(cid("hxai"), DAVID, HECTO_REG,
+        "15.5000000000", "HXAI", "Hecto AI Index", "121.40",
+        new String[][] {
+            { "OpenAI", "0.45" },
+            { "Anthropic", "0.35" },
+            { "xAI", "0.20" } }));
+    out.add(index(cid("hxspx"), DAVID, HECTO_REG,
+        "8.2500000000", "HXSPX", "Hecto Aerospace Index", "98.10",
+        new String[][] {
+            { "SpaceX", "0.80" },
+            { "Relativity", "0.15" },
+            { "Firefly", "0.05" } }));
     out.add(holding(cid("hecto"), HOLDING, DAVID, HECTO_REG,
         "100000.0000000000", "HECTO", "HECTO", "Hecto Allocator", HECTO_REG));
-    out.add(holding(cid("usyc"), HOLDING, DAVID, HASHNOTE,
-        "250000.00", "USYC", "USYC", "Hashnote Short Duration Yield", HASHNOTE));
+    out.add(cash(cid("usyc"), DAVID, HASHNOTE,
+        "250000.00", "USYC", "USYC", "Hashnote Short Duration Yield",
+        "T-bills and reverse repo", "0.0512", "18"));
     out.add(holding(cid("sbc"), HOLDING, DAVID, BRALE,
         "50000.00", "SBC", "SBC", "Brale US Dollar", BRALE));
 
@@ -164,6 +181,48 @@ public final class DemoPortfolio
                                   final String instrumentId, final String name,
                                   final String observer)
   {
+    return holding(id, templateId, owner, admin, amount, symbol, instrumentId,
+        name, observer, null);
+  }
+
+  private static Contract index(final String id, final String owner,
+                                final String admin, final String amount,
+                                final String symbol, final String name,
+                                final String nav, final String[][] basket)
+  {
+    final Map<String, String> extra = new LinkedHashMap<>();
+    extra.put("Nav", nav);
+    extra.put("AsOf", "2026-09-18");
+    extra.put("Constituents", namesOf(basket));
+    extra.put("Allocations", allocationsJson(basket));
+    for (final String[] row : basket)
+      extra.put("Weight" + attrToken(row[0]), row[1]);
+    return holding(id, HOLDING, owner, admin, amount, symbol, symbol, name,
+        admin, extra);
+  }
+
+  private static Contract cash(final String id, final String owner,
+                               final String admin, final String amount,
+                               final String symbol, final String instrumentId,
+                               final String name, final String underlying,
+                               final String yield, final String wamDays)
+  {
+    final Map<String, String> extra = new LinkedHashMap<>();
+    extra.put("Underlying", underlying);
+    extra.put("Yield", yield);
+    extra.put("WamDays", wamDays);
+    extra.put("AsOf", "2026-09-18");
+    return holding(id, HOLDING, owner, admin, amount, symbol, instrumentId,
+        name, admin, extra);
+  }
+
+  private static Contract holding(final String id, final String templateId,
+                                  final String owner, final String admin,
+                                  final String amount, final String symbol,
+                                  final String instrumentId, final String name,
+                                  final String observer,
+                                  final Map<String, String> extra)
+  {
     final Map<String, String> payload = payload(
         "Owner", owner,
         "Amount", amount,
@@ -171,8 +230,42 @@ public final class DemoPortfolio
         "InstrumentId", instrumentId,
         "InstrumentAdmin", admin,
         "Name", name);
+    if (extra != null)
+      payload.putAll(extra);
     return new Contract(id, templateId, payload,
         Arrays.asList(owner), Arrays.asList(observer));
+  }
+
+  private static String allocationsJson(final String[][] basket)
+  {
+    final StringBuilder sb = new StringBuilder();
+    sb.append('[');
+    for (int i = 0; i < basket.length; i++)
+    {
+      if (i > 0)
+        sb.append(',');
+      sb.append("{\"Name\":\"").append(basket[i][0])
+          .append("\",\"Weight\":\"").append(basket[i][1]).append("\"}");
+    }
+    sb.append(']');
+    return sb.toString();
+  }
+
+  private static String namesOf(final String[][] basket)
+  {
+    final StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < basket.length; i++)
+    {
+      if (i > 0)
+        sb.append(", ");
+      sb.append(basket[i][0]);
+    }
+    return sb.toString();
+  }
+
+  private static String attrToken(final String name)
+  {
+    return name.replaceAll("[^A-Za-z0-9]", "");
   }
 
   private static TemplateDesc holding(final String templateId)
@@ -184,7 +277,11 @@ public final class DemoPortfolio
             new FieldDesc("Symbol", "Text"),
             new FieldDesc("InstrumentId", "Text"),
             new FieldDesc("InstrumentAdmin", "Party"),
-            new FieldDesc("Name", "Text")),
+            new FieldDesc("Name", "Text"),
+            new FieldDesc("Nav", "Decimal"),
+            new FieldDesc("AsOf", "Text"),
+            new FieldDesc("Constituents", "Text"),
+            new FieldDesc("Allocations", "Text")),
         Collections.singletonList("Owner"),
         Collections.singletonList("InstrumentAdmin"),
         Arrays.asList(

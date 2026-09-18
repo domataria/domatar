@@ -232,6 +232,15 @@ order. The handle maps them as follows.
     TemplateId    String   (v1: "Iou")
     PackageId?    String   (empty on the mock)
 
+  Workshop demo holdings also carry instrument
+  economics as ordinary Attrs (Spreadsheet-citable):
+
+    Nav, AsOf, Constituents, Allocations (JSON list of
+    {Name, Weight}), and Weight\<Name\> scalars
+    (WeightOpenAI, WeightSpaceX, …). GetLnks / GetObj /
+    GetContract return them; `[handle]WeightOpenAI` works
+    like `[handle]Amount`.
+
 3.2  Stakeholders (signatory / observer) → Attrs, not Auth
 
   Signatories    ["String"]   Party ids
@@ -460,6 +469,8 @@ links, idempotent install.
     `DemoPortfolio.storeJson()` (ten contracts visible to
     `davidb-quippin::1220…`: CC, HECTX, HXAI, HXSPX, HECTO,
     USYC, SBC, LockedAmulet, pending CC transfer, DLR repo).
+    Index holdings include Allocations / Weight\<Name\> /
+    Nav / AsOf payload Attrs.
     That seed is file contents, not submitCreate. Default
     remains empty until the first Create.
     Save after each successful submitCreate / submitExercise:
@@ -639,7 +650,8 @@ the UX filter. It does not replace the ledger.
 
   Assets: `canton.html` (launcher: bind, create Iou, list
   Symbol/Name/Amount/Owner) and `iou.html?ContractDomId=`
-  (payload + stakeholders, Transfer / Settle / Archive).
+  (every payload Attr, Allocations rendered as a table,
+  Transfer / Settle / Archive).
   Party ids are text fields (`hint::1220…`, maxlength 255),
   not actId pickers. LaunchPath `/domatar/canton/canton.html`.
 
@@ -656,7 +668,8 @@ the UX filter. It does not replace the ledger.
 
 8.4  Spreadsheet
 
-  A cell may cite Amount (etc.) of this user's handle
+  A cell may cite Amount, Nav, Allocations, or WeightOpenAI
+  (etc.) of this user's handle
   ([Spreadsheet](Spreadsheet.md) PART 7.4). It cannot cite a
   counterparty's handle; that DomId is not theirs. Live fetch
   still runs hasRights as the spreadsheet owner.

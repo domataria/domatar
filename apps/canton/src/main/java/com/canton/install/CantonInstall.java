@@ -222,9 +222,17 @@ public class CantonInstall implements AppInstall
 
     attrs.add(attr("ContractId", "String"));
     attrs.add(attr("TemplateId", "String"));
+    attrs.add(attr("Name", "String"));
+    attrs.add(attr("Symbol", "String"));
+    attrs.add(attr("InstrumentId", "String"));
+    attrs.add(attr("Owner", "String"));
+    attrs.add(attr("Amount", "String"));
+    attrs.add(attr("Nav", "String"));
+    attrs.add(attr("AsOf", "String"));
+    attrs.add(attr("Constituents", "String"));
+    attrs.add(attr("Allocations", "String"));
     attrs.add(attrList("Signatories", "String"));
     attrs.add(attrList("Observers", "String"));
-    attrs.add(attr("Payload", "String"));
     msgs.add(msg("GetContract", "Read", null));
     msgs.add(msg("Exercise", "Write",
         parms(parm("Choice", "String"), parm("Argument", "String"))));

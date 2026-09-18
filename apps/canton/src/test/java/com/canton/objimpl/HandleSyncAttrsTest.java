@@ -26,7 +26,9 @@ public class HandleSyncAttrsTest
     payload.put("Issuer", "Bank");
     payload.put("Owner", "Alice");
     payload.put("Amount", "100");
-    payload.put("Currency", "USD");
+    payload.put("Allocations", "[{\"Name\":\"OpenAI\",\"Weight\":\"0.28\"}]");
+    payload.put("WeightOpenAI", "0.28");
+    payload.put("Nav", "104.25");
 
     final Contract c = new Contract("cid-1", IouTemplates.TEMPLATE_ID, payload,
         Arrays.asList("Bank"), Arrays.asList("Alice"));
@@ -37,6 +39,8 @@ public class HandleSyncAttrsTest
     assertEquals("Bank", attrs.getAttr("Issuer"));
     assertEquals("Alice", attrs.getAttr("Owner"));
     assertEquals("100", attrs.getAttr("Amount"));
+    assertEquals("0.28", attrs.getAttr("WeightOpenAI"));
+    assertTrue(attrs.getAttr("Allocations").contains("OpenAI"));
     assertTrue(attrs.getAttr("Signatories").contains("Bank"));
     assertTrue(attrs.getAttr("Observers").contains("Alice"));
   }

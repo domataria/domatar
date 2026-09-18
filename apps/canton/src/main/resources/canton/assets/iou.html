@@ -16,11 +16,14 @@
         .cn-header h2   { margin: 0; }
         .cn-back        { font-size: 0.88em; }
         .cn-card        { border: 1px solid var(--border); border-radius: var(--radius);
-                          padding: 16px 20px; margin-bottom: 20px; max-width: 640px; }
+                          padding: 16px 20px; margin-bottom: 20px; max-width: 760px; }
         .cn-card h3     { margin: 0 0 12px; font-size: 1.05em; }
-        .cn-dl          { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; }
+        .cn-dl          { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; }
         .cn-dl dt       { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
-        .cn-dl dd       { margin: 0; word-break: break-all; }
+        .cn-dl dd       { margin: 0; word-break: break-word; }
+        .cn-alloc       { width: 100%; border-collapse: collapse; }
+        .cn-alloc th, .cn-alloc td { text-align: left; padding: 3px 8px 3px 0; }
+        .cn-alloc th    { font-size: 0.78em; color: var(--page-muted); }
         .cn-row         { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
         .cn-row label   { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
         .cn-row input   { padding: 6px 9px; border: 1px solid var(--border);
@@ -101,34 +104,78 @@
 
     function renderIou(attrs)
     {
-        $('#f-contractid').text(field(attrs, 'ContractId'));
-        $('#f-templateid').text(field(attrs, 'TemplateId'));
-        $('#f-name').text(field(attrs, 'Name'));
-        $('#f-symbol').text(field(attrs, 'Symbol') || field(attrs, 'Currency'));
-        $('#f-instrument').text(field(attrs, 'InstrumentId'));
-        $('#f-issuer').text(field(attrs, 'Issuer') || field(attrs, 'InstrumentAdmin')
-            || field(attrs, 'Sender') || field(attrs, 'Operator'));
-        $('#f-owner').text(field(attrs, 'Owner') || field(attrs, 'Buyer')
-            || field(attrs, 'Receiver'));
-        $('#f-amount').text(field(attrs, 'Amount') || field(attrs, 'Par'));
-        $('#f-extra').text(extraLine(attrs));
-        $('#f-signatories').text(field(attrs, 'Signatories'));
-        $('#f-observers').text(field(attrs, 'Observers'));
+        var preferred = [
+            'ContractId', 'TemplateId', 'Name', 'Symbol', 'InstrumentId',
+            'InstrumentAdmin', 'Issuer', 'Owner', 'Buyer', 'Receiver', 'Sender',
+            'Operator', 'Amount', 'Par', 'Currency', 'Nav', 'AsOf',
+            'Constituents', 'Allocations', 'Yield', 'Underlying', 'WamDays',
+            'Collateral', 'Rate', 'Start', 'End', 'Status', 'LockContext',
+            'LockExpiry', 'Signatories', 'Observers'
+        ];
+        var seen = {};
+        var keys = [];
+        preferred.forEach(function(k)
+        {
+            if (attrs[k] != null && String(attrs[k]) !== '' && !seen[k])
+            {
+                seen[k] = true;
+                keys.push(k);
+            }
+        });
+        Object.keys(attrs).sort().forEach(function(k)
+        {
+            if (k === 'PackageId' && !attrs[k])
+                return;
+            if (attrs[k] != null && String(attrs[k]) !== '' && !seen[k])
+            {
+                seen[k] = true;
+                keys.push(k);
+            }
+        });
+
+        var html = '';
+        keys.forEach(function(k)
+        {
+            html += '<dt>' + escapeHtml(k) + '</dt><dd>' + formatAttr(k, attrs[k]) + '</dd>';
+        });
+        $('#attr-list').html(html || '<dt></dt><dd class="cn-hint">No attributes.</dd>');
         var title = field(attrs, 'Name') || field(attrs, 'Symbol') || 'Contract';
         $('#page-title').text(title);
         document.title = title;
     }
 
-    function extraLine(attrs)
+    function formatAttr(name, raw)
     {
-        var parts = [];
-        ['Status', 'Collateral', 'Rate', 'Start', 'End', 'LockContext', 'LockExpiry']
-            .forEach(function(k)
+        var value = String(raw);
+        if (name === 'Allocations' || (value.charAt(0) === '[' && value.indexOf('"Name"') >= 0))
+        {
+            try
             {
-                var v = field(attrs, k);
-                if (v) parts.push(k + ': ' + v);
-            });
-        return parts.join(' \u00b7 ');
+                var rows = JSON.parse(value);
+                if (Array.isArray(rows) && rows.length && rows[0].Name != null)
+                {
+                    var t = '<table class="cn-alloc"><thead><tr><th>Name</th><th>Weight</th></tr></thead><tbody>';
+                    rows.forEach(function(r)
+                    {
+                        t += '<tr><td>' + escapeHtml(r.Name) + '</td><td>'
+                            + escapeHtml(String(r.Weight)) + '</td></tr>';
+                    });
+                    t += '</tbody></table>';
+                    return t;
+                }
+            }
+            catch (e) { /* fall through */ }
+        }
+        return escapeHtml(value);
+    }
+
+    function escapeHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     function postChoice(action, extra)
@@ -214,19 +261,7 @@
 
         <div class="cn-card">
             <h3>Contract</h3>
-            <dl class="cn-dl">
-                <dt>ContractId</dt><dd id="f-contractid"></dd>
-                <dt>TemplateId</dt><dd id="f-templateid"></dd>
-                <dt>Name</dt><dd id="f-name"></dd>
-                <dt>Symbol</dt><dd id="f-symbol"></dd>
-                <dt>Instrument</dt><dd id="f-instrument"></dd>
-                <dt>Issuer / admin</dt><dd id="f-issuer"></dd>
-                <dt>Owner</dt><dd id="f-owner"></dd>
-                <dt>Amount</dt><dd id="f-amount"></dd>
-                <dt>Details</dt><dd id="f-extra"></dd>
-                <dt>Signatories</dt><dd id="f-signatories"></dd>
-                <dt>Observers</dt><dd id="f-observers"></dd>
-            </dl>
+            <dl class="cn-dl" id="attr-list"></dl>
         </div>
 
         <div class="cn-card">
