@@ -1,0 +1,12 @@
+AppId: canton
+Version: 1.0
+InstallClass: com.canton.install.CantonInstall
+AssetDirectory: canton/assets
+Handler: canton, app,       com.canton.objimpl.CantonAppImpl
+Handler: canton, party,     com.canton.objimpl.PartyImpl
+Handler: canton, contracts, com.canton.objimpl.ContractsImpl
+Handler: canton, iou,       com.canton.objimpl.ContractImpl
+Handler: canton, contract,  com.canton.objimpl.ContractImpl
+Wui:     PartyWui,          com.canton.webui.PartyWui
+Wui:     ContractsWui,      com.canton.webui.ContractsWui
+Wui:     IouWui,            com.canton.webui.IouWui

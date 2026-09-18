@@ -24,6 +24,7 @@
         <module>apps/bookstore</module>
         <module>apps/spreadsheet</module>
         <module>apps/money</module>
+        <module>apps/canton</module>
         <module>apps/search</module>
         <module>apps/chat</module>
         <module>apps/mail</module>
@@ -78,6 +79,11 @@
             <dependency>
                 <groupId>com.domatar</groupId>
                 <artifactId>money</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.domatar</groupId>
+                <artifactId>canton</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

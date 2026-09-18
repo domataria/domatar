@@ -1,0 +1,225 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Iou</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .cn-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
+        .cn-header h2   { margin: 0; }
+        .cn-back        { font-size: 0.88em; }
+        .cn-card        { border: 1px solid var(--border); border-radius: var(--radius);
+                          padding: 16px 20px; margin-bottom: 20px; max-width: 640px; }
+        .cn-card h3     { margin: 0 0 12px; font-size: 1.05em; }
+        .cn-dl          { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; }
+        .cn-dl dt       { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .cn-dl dd       { margin: 0; word-break: break-all; }
+        .cn-row         { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .cn-row label   { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .cn-row input   { padding: 6px 9px; border: 1px solid var(--border);
+                          border-radius: var(--radius); font-size: 0.95em; width: 100%;
+                          box-sizing: border-box; }
+        .cn-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
+                          margin-bottom: 10px; min-height: 1.2em; }
+        .cn-ok          { color: #15803d; font-size: 0.9em; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var contractDomId = '';
+
+    function failed(ret)
+    {
+        return !ret || ret.Error === 'Failure';
+    }
+
+    function errText(ret, fallback)
+    {
+        return (ret && ret.ErrorMsg) ? ret.ErrorMsg : fallback;
+    }
+
+    function showError(msg)
+    {
+        $('#page-error').text(msg || '');
+        $('#page-ok').text('');
+    }
+
+    function showOk(msg)
+    {
+        $('#page-error').text('');
+        $('#page-ok').text(msg || '');
+    }
+
+    function field(attrs, name)
+    {
+        return (attrs && attrs[name] != null) ? String(attrs[name]) : '';
+    }
+
+    function loadIou()
+    {
+        if (!contractDomId)
+        {
+            showError('Missing ContractDomId.');
+            return;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/IouWui',
+            data: 'Action=GetIou&ContractDomId=' + encodeURIComponent(contractDomId),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Failed to load Iou.'));
+                    return;
+                }
+                renderIou(ret.Attrs || {});
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function renderIou(attrs)
+    {
+        $('#f-contractid').text(field(attrs, 'ContractId'));
+        $('#f-templateid').text(field(attrs, 'TemplateId'));
+        $('#f-issuer').text(field(attrs, 'Issuer'));
+        $('#f-owner').text(field(attrs, 'Owner'));
+        $('#f-amount').text(field(attrs, 'Amount'));
+        $('#f-currency').text(field(attrs, 'Currency'));
+        $('#f-signatories').text(field(attrs, 'Signatories'));
+        $('#f-observers').text(field(attrs, 'Observers'));
+    }
+
+    function postChoice(action, extra)
+    {
+        if (!contractDomId)
+        {
+            showError('Missing ContractDomId.');
+            return;
+        }
+
+        showError('');
+        var data = 'Action=' + encodeURIComponent(action)
+            + '&ContractDomId=' + encodeURIComponent(contractDomId);
+        if (extra)
+            data += extra;
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/IouWui',
+            data: data,
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, action + ' failed.'));
+                    return;
+                }
+                window.location.href = '/domatar/canton/canton.html';
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function transferIou()
+    {
+        var newOwner = $.trim($('#new-owner').val());
+        if (!newOwner)
+        {
+            showError('NewOwner is required.');
+            return;
+        }
+        postChoice('Transfer', '&NewOwner=' + encodeURIComponent(newOwner));
+    }
+
+    function settleIou()
+    {
+        if (!window.confirm('Settle this Iou?'))
+            return;
+        postChoice('Settle');
+    }
+
+    function archiveIou()
+    {
+        if (!window.confirm('Archive this Iou?'))
+            return;
+        postChoice('Archive');
+    }
+
+    $(document).ready(function()
+    {
+        var params = new URLSearchParams(window.location.search);
+        contractDomId = params.get('ContractDomId') || '';
+        loadIou();
+    });
+
+</script>
+
+<div class="page">
+    <div class="page-content">
+        <div class="cn-header">
+            <h2>Iou</h2>
+            <a class="cn-back" href="/domatar/canton/canton.html">&larr; Active</a>
+        </div>
+
+        <div id="page-error" class="cn-error"></div>
+        <div id="page-ok" class="cn-ok"></div>
+
+        <div class="cn-card">
+            <h3>Contract</h3>
+            <dl class="cn-dl">
+                <dt>ContractId</dt><dd id="f-contractid"></dd>
+                <dt>TemplateId</dt><dd id="f-templateid"></dd>
+                <dt>Issuer</dt><dd id="f-issuer"></dd>
+                <dt>Owner</dt><dd id="f-owner"></dd>
+                <dt>Amount</dt><dd id="f-amount"></dd>
+                <dt>Currency</dt><dd id="f-currency"></dd>
+                <dt>Signatories</dt><dd id="f-signatories"></dd>
+                <dt>Observers</dt><dd id="f-observers"></dd>
+            </dl>
+        </div>
+
+        <div class="cn-card">
+            <h3>Choices</h3>
+            <div class="cn-row">
+                <label for="new-owner">NewOwner</label>
+                <input type="text" id="new-owner" placeholder="Bank"/>
+            </div>
+            <div class="cn-btns">
+                <button type="button" onclick="transferIou()">Transfer</button>
+                <button type="button" onclick="settleIou()">Settle</button>
+                <button type="button" onclick="archiveIou()">Archive</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

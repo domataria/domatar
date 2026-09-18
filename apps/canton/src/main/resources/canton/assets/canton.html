@@ -1,0 +1,353 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Canton</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .cn-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
+        .cn-header h2   { margin: 0; }
+        .cn-card        { border: 1px solid var(--border); border-radius: var(--radius);
+                          padding: 16px 20px; margin-bottom: 20px; max-width: 720px; }
+        .cn-card h3     { margin: 0 0 10px; font-size: 1.05em; }
+        .cn-hint        { color: var(--page-muted); font-size: 0.88em; margin: 0 0 14px; line-height: 1.45; }
+        .cn-row         { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .cn-row label   { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .cn-row input   { padding: 6px 9px; border: 1px solid var(--border);
+                          border-radius: var(--radius); font-size: 0.95em; width: 100%;
+                          box-sizing: border-box; }
+        .cn-form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+        .cn-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .cn-status      { font-size: 0.88em; color: var(--page-muted); margin-top: 8px; }
+        .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
+                          margin-bottom: 10px; min-height: 1.2em; }
+        table.cn-table  { width: 100%; border-collapse: collapse; }
+        table.cn-table th,
+        table.cn-table td { text-align: left; padding: 6px 8px; }
+        table.cn-table th { font-size: 0.82em; font-weight: 600; color: var(--page-muted);
+                            border-bottom: 1px solid var(--border); }
+        table.cn-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        .empty-msg      { color: var(--page-muted); font-style: italic; }
+        @media (max-width: 640px) {
+            .cn-form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    function failed(ret)
+    {
+        return !ret || ret.Error === 'Failure';
+    }
+
+    function errText(ret, fallback)
+    {
+        return (ret && ret.ErrorMsg) ? ret.ErrorMsg : fallback;
+    }
+
+    function showError(msg)
+    {
+        $('#page-error').text(msg || '');
+    }
+
+    function loadParty()
+    {
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/PartyWui',
+            data: 'Action=GetParty',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Failed to load Party.'));
+                    return;
+                }
+                var partyId = (ret.Attrs && ret.Attrs.PartyId) ? ret.Attrs.PartyId : '';
+                $('#party-id').val(partyId);
+                $('#party-status').text(partyId ? ('Bound: ' + partyId) : 'Bound: (none)');
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function bindParty()
+    {
+        var partyId = $.trim($('#party-id').val());
+        showError('');
+        $('#btn-bind').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/PartyWui',
+            data: 'Action=BindParty&PartyId=' + encodeURIComponent(partyId),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                $('#btn-bind').prop('disabled', false);
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Bind failed.'));
+                    return;
+                }
+                var bound = (ret.Attrs && ret.Attrs.PartyId) ? ret.Attrs.PartyId : partyId;
+                $('#party-status').text(bound ? ('Bound: ' + bound) : 'Bound: (none)');
+                loadContracts();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#btn-bind').prop('disabled', false);
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function createIou()
+    {
+        var issuer   = $.trim($('#issuer').val());
+        var owner    = $.trim($('#owner').val());
+        var amount   = $.trim($('#amount').val());
+        var currency = $.trim($('#currency').val());
+
+        if (!issuer || !owner || !amount || !currency)
+        {
+            showError('Issuer, Owner, Amount, and Currency are required.');
+            return;
+        }
+
+        showError('');
+        $('#btn-create').prop('disabled', true).text('Creating\u2026');
+
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ContractsWui',
+            data: 'Action=Create'
+                + '&Issuer='   + encodeURIComponent(issuer)
+                + '&Owner='    + encodeURIComponent(owner)
+                + '&Amount='   + encodeURIComponent(amount)
+                + '&Currency=' + encodeURIComponent(currency),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                $('#btn-create').prop('disabled', false).text('Create');
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Create failed.'));
+                    return;
+                }
+                loadContracts();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#btn-create').prop('disabled', false).text('Create');
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function syncContracts()
+    {
+        showError('');
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ContractsWui',
+            data: 'Action=Sync',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Sync failed.'));
+                    return;
+                }
+                loadContracts();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function loadContracts()
+    {
+        $('#cn-body').html('<tr><td colspan="6" class="empty-msg">Loading\u2026</td></tr>');
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/ContractsWui',
+            data: 'Action=GetContracts',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    $('#cn-body').html('<tr><td colspan="6">' +
+                        (errText(ret, 'Failed to load contracts.')) + '</td></tr>');
+                    return;
+                }
+                renderContracts((ret.Attrs && ret.Attrs.Contracts) ? ret.Attrs.Contracts : []);
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#cn-body').html('<tr><td colspan="6">Network error: ' + textStatus + '</td></tr>');
+            }
+        });
+    }
+
+    function renderContracts(list)
+    {
+        if (!list || list.length === 0)
+        {
+            $('#cn-body').html('<tr><td colspan="6" class="empty-msg">No visible contracts.</td></tr>');
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < list.length; i++)
+        {
+            var c = list[i] || {};
+            var cid = c.ContractId || '';
+            var href = c.ContractDomId
+                ? ('iou.html?ContractDomId=' + encodeURIComponent(c.ContractDomId))
+                : '';
+            var open = href
+                ? ('<a href="' + href + '">Open</a>')
+                : '';
+            html += '<tr>'
+                + '<td>' + escapeHtml(cid) + '</td>'
+                + '<td>' + escapeHtml(c.Issuer || '') + '</td>'
+                + '<td>' + escapeHtml(c.Owner || '') + '</td>'
+                + '<td>' + escapeHtml(c.Amount || '') + '</td>'
+                + '<td>' + escapeHtml(c.Currency || '') + '</td>'
+                + '<td>' + open + '</td>'
+                + '</tr>';
+        }
+        $('#cn-body').html(html);
+    }
+
+    function escapeHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    $(document).ready(function()
+    {
+        loadParty();
+        loadContracts();
+
+        $('#party-id').on('keydown', function(e)
+        {
+            if (e.key === 'Enter') bindParty();
+        });
+    });
+
+</script>
+
+<div class="page">
+    <div class="page-content">
+        <div class="cn-header">
+            <h2>Canton</h2>
+        </div>
+
+        <div id="page-error" class="cn-error"></div>
+
+        <div class="cn-card">
+            <h3>Party</h3>
+            <p class="cn-hint">
+                Bind the Canton Party this account acts as. Party ids are ledger
+                strings (Alice, Bob, Bank) &mdash; counterparties need not have Domatar.
+            </p>
+            <div class="cn-row">
+                <label for="party-id">PartyId</label>
+                <input type="text" id="party-id" placeholder="e.g. Alice" maxlength="80"/>
+            </div>
+            <div class="cn-btns">
+                <button type="button" id="btn-bind" onclick="bindParty()">Bind</button>
+            </div>
+            <div id="party-status" class="cn-status">Bound: (none)</div>
+        </div>
+
+        <div class="cn-card">
+            <h3>Create Iou</h3>
+            <p class="cn-hint">Creates on the bound Party. Issuer must be a signatory.</p>
+            <div class="cn-form-grid">
+                <div class="cn-row">
+                    <label for="issuer">Issuer</label>
+                    <input type="text" id="issuer" placeholder="Alice"/>
+                </div>
+                <div class="cn-row">
+                    <label for="owner">Owner</label>
+                    <input type="text" id="owner" placeholder="Bob"/>
+                </div>
+                <div class="cn-row">
+                    <label for="amount">Amount</label>
+                    <input type="text" id="amount" placeholder="100"/>
+                </div>
+                <div class="cn-row">
+                    <label for="currency">Currency</label>
+                    <input type="text" id="currency" placeholder="USD"/>
+                </div>
+            </div>
+            <div class="cn-btns">
+                <button type="button" id="btn-create" onclick="createIou()">Create</button>
+            </div>
+        </div>
+
+        <div class="cn-card">
+            <h3>Active contracts</h3>
+            <div class="cn-btns" style="margin-bottom: 12px;">
+                <button type="button" onclick="syncContracts()">Sync</button>
+                <button type="button" onclick="loadContracts()">Refresh</button>
+            </div>
+            <table class="cn-table">
+                <thead>
+                    <tr>
+                        <th>ContractId</th>
+                        <th>Issuer</th>
+                        <th>Owner</th>
+                        <th>Amount</th>
+                        <th>Currency</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="cn-body">
+                    <tr><td colspan="6" class="empty-msg">Loading&hellip;</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

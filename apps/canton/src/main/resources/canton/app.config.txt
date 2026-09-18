@@ -1,0 +1,6 @@
+AppId=canton
+AppName=Canton
+AppDesc=Handles on Canton contracts
+Version=1.0
+DependsOn=navigator,login,desktop
+ProviderHosts=

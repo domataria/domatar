@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+     width="16" height="16" role="img" aria-label="Iou">
+  <rect x="2" y="3" width="12" height="10" rx="1.5" fill="#0f766e"/>
+  <text x="8" y="11" text-anchor="middle" font-size="7" fill="#ccfbf1">IOU</text>
+</svg>

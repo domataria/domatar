@@ -7,8 +7,8 @@ LLM-native facade.
 
 Quippin is the worked *product* example ([Quippin](Quippin.md)). Read
 that spec for quips, follows, and the directory — not for how to
-structure an app. Bookstore, Money, Spreadsheet, and AI Agent use the
-same pattern.
+structure an app. Bookstore, Money, Spreadsheet, AI Agent, and Canton
+use the same pattern.
 
 The present-tense statements describe the reference Java realisation
 (Tomcat 10.1 / Jakarta EE 10 / Java 17, `domatar-core`). Domatar is a
