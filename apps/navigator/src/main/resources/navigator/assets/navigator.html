@@ -193,6 +193,18 @@
             margin-left: 12px;
         }
 
+        .detail-nest {
+            margin-left: 16px;
+        }
+
+        .detail-array-item {
+            margin-bottom: 12px;
+        }
+
+        .detail-array-item:last-child {
+            margin-bottom: 0;
+        }
+
         .detail-value {
             font-size: 14px;
             color: var(--text);
@@ -587,13 +599,9 @@
                 for (var i = 0; i < keys.length; i++)
                 {
                     var k = keys[i];
-                    var v = attrsMap[k];
-                    var vStr = (v !== null && typeof v === "object")
-                               ? JSON.stringify(v, null, 2)
-                               : (v != null ? String(v) : "");
                     html += '<div class="detail-section detail-sub">' +
                             '<div class="detail-label">' + esc(k) + '</div>' +
-                            '<div class="detail-value">' + esc(vStr) + '</div>' +
+                            renderAttrBody(attrsMap[k]) +
                             '</div>';
                 }
             }
@@ -603,6 +611,79 @@
             html = '<p class="detail-empty">No details available.</p>';
 
         $("#detail-pane").html(html);
+    }
+
+    function tryParseJson(v)
+    {
+        if (v !== null && typeof v === "object")
+            return v;
+        if (typeof v !== "string")
+            return v;
+
+        var s = v.trim();
+        if (!s || (s.charAt(0) !== "{" && s.charAt(0) !== "["))
+            return v;
+
+        try
+        {
+            return JSON.parse(s);
+        }
+        catch (e)
+        {
+            return v;
+        }
+    }
+
+    function isNested(v)
+    {
+        return v !== null && typeof v === "object";
+    }
+
+    function renderAttrBody(v)
+    {
+        v = tryParseJson(v);
+        if (isNested(v))
+            return '<div class="detail-nest">' + renderAttrNode(v) + '</div>';
+        return '<div class="detail-value">' + esc(v != null ? String(v) : "") + '</div>';
+    }
+
+    function renderAttrNode(v)
+    {
+        v = tryParseJson(v);
+        if (Array.isArray(v))
+            return renderAttrArray(v);
+        if (isNested(v))
+            return renderAttrObject(v);
+        return '<div class="detail-value">' + esc(v != null ? String(v) : "") + '</div>';
+    }
+
+    function renderAttrObject(obj)
+    {
+        var keys = Object.keys(obj);
+        var html = "";
+        for (var i = 0; i < keys.length; i++)
+        {
+            var k = keys[i];
+            html += '<div class="detail-section">' +
+                    '<div class="detail-label">' + esc(k) + '</div>' +
+                    renderAttrBody(obj[k]) +
+                    '</div>';
+        }
+        return html;
+    }
+
+    function renderAttrArray(arr)
+    {
+        var html = "";
+        for (var i = 0; i < arr.length; i++)
+        {
+            var item = tryParseJson(arr[i]);
+            if (isNested(item))
+                html += '<div class="detail-array-item">' + renderAttrNode(arr[i]) + '</div>';
+            else
+                html += renderAttrNode(arr[i]);
+        }
+        return html;
     }
 
     function df(label, value)
