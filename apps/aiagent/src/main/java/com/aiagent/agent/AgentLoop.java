@@ -50,7 +50,7 @@ public class AgentLoop
 {
   /** Recent turns only — keeps Groq on_demand requests under ~12k TPM. */
   private static final int MAX_HISTORY_MSGS     = 12;
-  private static final int MAX_TOOL_RESULT_CHARS = 1200;
+  private static final int MAX_TOOL_RESULT_CHARS = 4000;
 
   // ── public entry point ───────────────────────────────────────────────────
 
@@ -307,7 +307,7 @@ public class AgentLoop
                                           r.resultJson, r.status, shortText, toolTimeStr));
 
         history.add(new LlmMessage("tool",
-            r.resultJson != null ? r.resultJson : "",
+            llmToolContent(r.resultJson),
             call.id, null));
       }
 
@@ -442,6 +442,11 @@ public class AgentLoop
       policy = Policy.parse(newPolicyJson);
     }
 
+    // Reload useApp tools before dispatch. Approve of BindParty / ListContracts
+    // (and any other dynamic tool) must hit the registry, not the legacy path.
+    final DynamicToolRegistry registry = new DynamicToolRegistry();
+    reloadPreviousApps(convMsgs, callerDomId, callerContext, msgClient, registry);
+
     // ── Resolve the pending row ───────────────────────────────────────────
     lastTime = Math.max(System.currentTimeMillis(), lastTime + 1);
     final String resolvedTimeStr = Long.toString(lastTime);
@@ -453,7 +458,7 @@ public class AgentLoop
     {
       final LlmToolCall        call = new LlmToolCall(pendingId, toolCallName, toolArgs);
       final ToolDispatcher.Result r = ToolDispatcher.execute(callerDomId, callerContext,
-                                                              call, msgClient, null);
+                                                              call, msgClient, registry);
       resolvedStatus = r.status;
       resolvedResult = r.resultJson != null ? r.resultJson : "";
 
@@ -480,15 +485,14 @@ public class AgentLoop
     final List<Obj> freshMsgs = loadSortedConvMsgs(convDomId);
 
     // ── Build tool catalogue ──────────────────────────────────────────────
-    final DynamicToolRegistry registry  = new DynamicToolRegistry();
-    final List<LlmTool>       baseTools = new ArrayList<>();
+    final List<LlmTool> baseTools = new ArrayList<>();
     baseTools.add(AgentDefaults.toolListApps());
     baseTools.add(AgentDefaults.toolUseApp());
     systemPrompt = Primer.build(callerContext) + "\n\n" + systemPrompt;
 
     final List<LlmMessage> history = buildHistory(freshMsgs, systemPrompt);
 
-    // Re-register apps loaded by useApp in prior turns.
+    // Re-register from the resolved history (same registry used for Approve).
     reloadPreviousApps(freshMsgs, callerDomId, callerContext, msgClient, registry);
 
     final SideEffectClassifier classifier = new SideEffectClassifier(
@@ -607,7 +611,7 @@ public class AgentLoop
       newToolMsgs.add(new ToolMsgInfo(call.id, opName, targetSovStr, r.argsJson,
                                        r.resultJson, r.status, shortText, toolTimeStr));
       history.add(new LlmMessage("tool",
-          r.resultJson != null ? r.resultJson : "", call.id, null));
+          llmToolContent(r.resultJson), call.id, null));
     }
 
     // ── Continue main loop (if not paused again) ──────────────────────────
@@ -789,7 +793,7 @@ public class AgentLoop
           newToolMsgs.add(new ToolMsgInfo(call.id, call.name, targetSovStr, r.argsJson,
                                            r.resultJson, r.status, shortText, toolTimeStr));
           history.add(new LlmMessage("tool",
-              r.resultJson != null ? r.resultJson : "", call.id, null));
+              llmToolContent(r.resultJson), call.id, null));
         }
 
         if (!paused)
@@ -1036,13 +1040,19 @@ public class AgentLoop
         if ("rejected".equals(toolStatus))
           content = "User rejected this tool call.";
         else
-          content = truncateForLlm(toolResult != null ? toolResult : "");
+          content = llmToolContent(toolResult);
 
         history.add(new LlmMessage("tool", content, pendingId, null));
       }
     }
 
     return history;
+  }
+
+  /** Slim JSON for the completion prompt; the msg row still stores the full result. */
+  private static String llmToolContent(final String raw)
+  {
+    return truncateForLlm(ToolResultCompact.forLlm(raw));
   }
 
   private static String truncateForLlm(final String s)

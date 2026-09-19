@@ -11,7 +11,6 @@ import java.util.Map;
 import com.canton.ledger.CantonClients;
 import com.canton.ledger.IouTemplates;
 import com.canton.ledger.SubmitResult;
-import com.domatar.core.Auth;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
 import com.domatar.util.JsonArrayList;
@@ -38,26 +37,33 @@ public class ContractsImpl extends ObjImpl
     if (!hasRights(inMsg, obj, msgClient))
       return notAuthorized(inMsg);
 
+    final Obj target = CantonAuth.requireObj(inMsg, obj);
+    if (target == null)
+    {
+      outMsg.addError(opr, "Obj not found");
+      return outMsg.toString();
+    }
+
     if ("GetLnks".equals(opr))
     {
       try
       {
-        HandleSync.sync(obj.domId.actId);
+        HandleSync.sync(target.domId.actId);
       }
       catch (final DomatarException e)
       {
         outMsg.addError(opr, e.getMessage());
         return outMsg.toString();
       }
-      return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
+      return super.handleMsg(msg, target, contextPath, contextRealPath, msgClient);
     }
 
     if ("Sync".equals(opr))
-      sync(opr, obj, outMsg);
+      sync(opr, target, outMsg);
     else if ("Create".equals(opr))
-      create(opr, inMsg, obj, outMsg);
+      create(opr, inMsg, target, outMsg);
     else if ("GetContracts".equals(opr))
-      getContracts(opr, obj, outMsg);
+      getContracts(opr, target, outMsg);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -69,11 +75,7 @@ public class ContractsImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
-      return false;
-    if (obj == null || obj.domId == null)
-      return false;
-    return inMsg.getSrcId().actId.equals(obj.domId.actId);
+    return CantonAuth.isVerifiedOwner(inMsg, obj);
   }
 
   private static void sync(final String opr, final Obj obj, final JsonMsg outMsg)

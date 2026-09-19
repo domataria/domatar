@@ -346,7 +346,7 @@ public class ConvImpl extends ObjImpl
                                                   msgClient);
 
     final ObjAttrs out = new ObjAttrs();
-    out.addAttr("Resume", resumeData);
+    out.addAttrs("Resume", resumeData);
     outMsg.addResponseBody("Resume", out);
   }
 

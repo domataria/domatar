@@ -5,7 +5,6 @@
 package com.canton.objimpl;
 
 import com.canton.ledger.IouTemplates;
-import com.domatar.core.Auth;
 import com.domatar.util.DomId;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -32,7 +31,12 @@ public class CantonAppImpl extends ObjImpl
     if (!hasRights(inMsg, obj, msgClient))
       return notAuthorized(inMsg);
 
-    final String actId = obj.domId.actId;
+    final String actId = CantonAuth.destActId(inMsg, obj);
+    if (actId == null)
+    {
+      outMsg.addError(opr, "Obj not found");
+      return outMsg.toString();
+    }
 
     if ("BindParty".equals(opr) || "GetParty".equals(opr))
       forward(opr, opr, HandleSync.partyDomId(actId), "party",
@@ -80,11 +84,7 @@ public class CantonAppImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
-      return false;
-    if (obj == null || obj.domId == null)
-      return false;
-    return inMsg.getSrcId().actId.equals(obj.domId.actId);
+    return CantonAuth.isVerifiedOwner(inMsg, obj);
   }
 
   private static DomId handleOf(final JsonMsg inMsg, final String actId)

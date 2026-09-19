@@ -4,7 +4,6 @@
 
 package com.canton.objimpl;
 
-import com.domatar.core.Auth;
 import com.domatar.db.ObjDb;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -27,10 +26,17 @@ public class PartyImpl extends ObjImpl
     if (!hasRights(inMsg, obj, msgClient))
       return notAuthorized(inMsg);
 
+    final Obj target = CantonAuth.requireObj(inMsg, obj);
+    if (target == null)
+    {
+      outMsg.addError(opr, "Obj not found");
+      return outMsg.toString();
+    }
+
     if ("GetParty".equals(opr))
-      getParty(opr, obj, outMsg);
+      getParty(opr, target, outMsg);
     else if ("BindParty".equals(opr))
-      bindParty(opr, inMsg, obj, outMsg);
+      bindParty(opr, inMsg, target, outMsg);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -42,11 +48,7 @@ public class PartyImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
-      return false;
-    if (obj == null || obj.domId == null)
-      return false;
-    return inMsg.getSrcId().actId.equals(obj.domId.actId);
+    return CantonAuth.isVerifiedOwner(inMsg, obj);
   }
 
   private static void getParty(final String opr, final Obj obj,

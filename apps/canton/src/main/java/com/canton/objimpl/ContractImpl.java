@@ -13,7 +13,6 @@ import com.canton.ledger.SubmitResult;
 import com.canton.ledger.TemplateDesc;
 import com.canton.ledger.TemplateDesc.ChoiceDesc;
 import com.canton.ledger.TemplateDesc.FieldDesc;
-import com.domatar.core.Auth;
 import com.domatar.db.ObjDb;
 import com.domatar.util.Json;
 import com.domatar.util.JsonArrayList;
@@ -40,11 +39,18 @@ public class ContractImpl extends ObjImpl
     if (!hasRights(inMsg, obj, msgClient))
       return notAuthorized(inMsg);
 
+    final Obj target = CantonAuth.requireObj(inMsg, obj);
+    if (target == null)
+    {
+      outMsg.addError(opr, "Obj not found");
+      return outMsg.toString();
+    }
+
     if ("GetLnks".equals(opr) || "GetObj".equals(opr))
     {
       try
       {
-        if (HandleSync.refreshOrDrop(obj) == null)
+        if (HandleSync.refreshOrDrop(target) == null)
         {
           outMsg.addError(opr, "Contract no longer visible");
           return outMsg.toString();
@@ -55,17 +61,17 @@ public class ContractImpl extends ObjImpl
         outMsg.addError(opr, e.getMessage());
         return outMsg.toString();
       }
-      final Obj live = ObjDb.getObj(obj.domId);
-      return super.handleMsg(msg, live != null ? live : obj,
+      final Obj live = ObjDb.getObj(target.domId);
+      return super.handleMsg(msg, live != null ? live : target,
           contextPath, contextRealPath, msgClient);
     }
 
     if ("GetIou".equals(opr) || "GetContract".equals(opr))
-      readLive(opr, obj, outMsg);
+      readLive(opr, target, outMsg);
     else if ("Transfer".equals(opr) || "Settle".equals(opr) || "Archive".equals(opr))
-      exercise(opr, opr, inMsg, obj, outMsg);
+      exercise(opr, opr, inMsg, target, outMsg);
     else if ("Exercise".equals(opr))
-      exercise(opr, inMsg.getAttr("Choice"), inMsg, obj, outMsg);
+      exercise(opr, inMsg.getAttr("Choice"), inMsg, target, outMsg);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -77,11 +83,7 @@ public class ContractImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
-      return false;
-    if (obj == null || obj.domId == null)
-      return false;
-    if (!inMsg.getSrcId().actId.equals(obj.domId.actId))
+    if (!CantonAuth.isVerifiedOwner(inMsg, obj))
       return false;
 
     final String opr = inMsg.getOperation();
@@ -92,7 +94,10 @@ public class ContractImpl extends ObjImpl
 
     if ("Transfer".equals(opr) || "Settle".equals(opr)
         || "Archive".equals(opr) || "Exercise".equals(opr))
-      return isController(inMsg, obj, opr);
+    {
+      final Obj target = CantonAuth.requireObj(inMsg, obj);
+      return target != null && isController(inMsg, target, opr);
+    }
 
     return false;
   }

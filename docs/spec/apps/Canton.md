@@ -616,7 +616,11 @@ controllers again. hasRights is the Domatar pre-check and
 the UX filter. It does not replace the ledger.
 
   party object, active container, app node
-      verified and req.actId == obj.actId
+      verified and Context.actId == dest.actId
+      (the logged-in user the agent acts as, not the hop's
+      SrcId object). dest.actId comes from the obj row, or
+      from DstId when a class envelope left obj null — the
+      agent facade always sets the envelope.
 
   handle (iou / contract)
       Read  (Open, GetIou, GetContract):

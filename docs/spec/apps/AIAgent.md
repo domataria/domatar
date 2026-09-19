@@ -634,9 +634,8 @@ outer dispatch already does that, populating Context with the
 verified actId/usrId.
 
 Implementation status: ListConversations, GetConversation,
-SendMessage, RenameConversation, DeleteConversation are
-implemented. SetMode, SetPolicy, ApproveToolCall, RejectToolCall
-are deferred (PART 18.1, 18.3).
+SendMessage, RenameConversation, DeleteConversation, SetMode,
+SetPolicy, ApproveToolCall, and RejectToolCall are implemented.
 
 ## PART 8 — OBJ HANDLERS
 
@@ -1426,12 +1425,19 @@ For each user turn:
 
        d. Append a Role="tool" message to the conversation
           (PART 5.3) with ToolName, ToolTargetSov, ToolArgs,
-          ToolResult, FinishReason.
+          ToolResult, FinishReason. The msg row stores the
+          full reply (the WUI expand card). The completion
+          prompt gets a compact projection: list results such
+          as ListContracts keep Name/Symbol/Amount (and a few
+          display fields), Party fingerprints collapse to the
+          hint before `::`, and a char cap still applies. Groq
+          Dev-tier TPM on the small models is 70–80k; a raw
+          ACS dump plus history exceeds that.
 
   6. After all tool calls in this batch resolve, loop back to
-     step 3 with the augmented history. The LLM sees the tool
-     outputs and either calls more tools or produces a
-     natural-language answer.
+     step 3 with the augmented history. The LLM sees the
+     compacted tool outputs and either calls more tools or
+     produces a natural-language answer.
 
 15.3 Termination and budgets
 
@@ -1795,7 +1801,11 @@ When a prompt is required:
      For Destructive tools, [Approve always] is still shown
      but has no effect on future turns (the tool will always
      prompt again).
-  3. On Approve once: the agent runs the tool, the loop resumes.
+  3. On Approve once: the agent rebuilds the useApp tool
+     registry from conversation history, runs the tool, then
+     the loop resumes. ConvImpl nests the resume payload with
+     `addAttrs("Resume", …)` so the WUI receives a JSON object
+     (not a raw ObjAttrs, which cannot be serialised).
   4. On Approve always (Write only): the agent runs the tool AND
      adds the (ClsAppId.ClsId.Operation) to the conversation's
      PreApprovedWrites. (Conversation-scoped only; never a
