@@ -599,10 +599,14 @@
                 for (var i = 0; i < keys.length; i++)
                 {
                     var k = keys[i];
-                    html += '<div class="detail-section detail-sub">' +
-                            '<div class="detail-label">' + esc(k) + '</div>' +
-                            renderAttrBody(attrsMap[k]) +
-                            '</div>';
+                    var parsed = tryParseJson(attrsMap[k]);
+                    if (Array.isArray(parsed))
+                        html += renderAttrArray(parsed, k, "detail-sub");
+                    else
+                        html += '<div class="detail-section detail-sub">' +
+                                '<div class="detail-label">' + esc(k) + '</div>' +
+                                renderAttrBody(attrsMap[k], k) +
+                                '</div>';
                 }
             }
         }
@@ -639,21 +643,13 @@
         return v !== null && typeof v === "object";
     }
 
-    function renderAttrBody(v)
-    {
-        v = tryParseJson(v);
-        if (isNested(v))
-            return '<div class="detail-nest">' + renderAttrNode(v) + '</div>';
-        return '<div class="detail-value">' + esc(v != null ? String(v) : "") + '</div>';
-    }
-
-    function renderAttrNode(v)
+    function renderAttrBody(v, valueName)
     {
         v = tryParseJson(v);
         if (Array.isArray(v))
-            return renderAttrArray(v);
+            return '<div class="detail-nest">' + renderAttrArray(v, valueName || "", "") + '</div>';
         if (isNested(v))
-            return renderAttrObject(v);
+            return '<div class="detail-nest">' + renderAttrObject(v) + '</div>';
         return '<div class="detail-value">' + esc(v != null ? String(v) : "") + '</div>';
     }
 
@@ -666,22 +662,29 @@
             var k = keys[i];
             html += '<div class="detail-section">' +
                     '<div class="detail-label">' + esc(k) + '</div>' +
-                    renderAttrBody(obj[k]) +
+                    renderAttrBody(obj[k], k) +
                     '</div>';
         }
         return html;
     }
 
-    function renderAttrArray(arr)
+    function renderAttrArray(arr, arrayPath, extraClass)
     {
         var html = "";
+        var cls = extraClass ? ("detail-section " + extraClass) : "detail-section";
         for (var i = 0; i < arr.length; i++)
         {
+            var itemPath = arrayPath + "[" + i + "]";
             var item = tryParseJson(arr[i]);
-            if (isNested(item))
-                html += '<div class="detail-array-item">' + renderAttrNode(arr[i]) + '</div>';
+            html += '<div class="' + cls + (isNested(item) ? " detail-array-item" : "") + '">' +
+                    '<div class="detail-label">' + esc(itemPath) + '</div>';
+            if (Array.isArray(item))
+                html += '<div class="detail-nest">' + renderAttrArray(item, itemPath, "") + '</div>';
+            else if (isNested(item))
+                html += '<div class="detail-nest">' + renderAttrObject(item) + '</div>';
             else
-                html += renderAttrNode(arr[i]);
+                html += '<div class="detail-value">' + esc(item != null ? String(item) : "") + '</div>';
+            html += '</div>';
         }
         return html;
     }

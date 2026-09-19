@@ -165,7 +165,12 @@ public class FormulaEvaluator
                            + node.attrName.substring(1);
         val = lookup.getAttr(cap);
       }
-      return val != null ? val : ERR_NA;
+      if (val == null)
+        return ERR_NA;
+      if (node.path == null || node.path.equals(node.attrName))
+        return val;
+      final String walked = AttrPath.walk(val, node.path.substring(node.attrName.length()));
+      return walked != null ? walked : ERR_NA;
     }
     catch (DomatarException e)
     {

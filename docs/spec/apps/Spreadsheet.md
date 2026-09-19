@@ -23,7 +23,8 @@ entirely on their own provider sub-host; there is no shared central catalog.
       - Perform arithmetic  (+  −  *  /)
       - Reference other cells in the same sheet  ($A1, $C5)
       - Read an attribute from any Domatar object by DomId
-        ([hstId.appId.actId.objId]attrName)
+        ([hstId.appId.actId.objId]path) — path is attrName, or
+        attrName plus 0-based [n] and .field steps into JSON
   * When a sheet is viewed, all formulas are evaluated server-side and their
     computed values are shown in the grid.
   * A "Parse" button forces re-evaluation (useful when referenced objects
@@ -542,10 +543,12 @@ Operations:
   colLabel   = letter { letter } .      (* A, B, … Z, AA, AB, … *)
   rowNum     = digit { digit } .        (* 1, 2, … Rows *)
 
-  objAttr    = "[" domId "]" attrName .
+  objAttr    = "[" domId "]" path .
   domId      = hstId "." appId "." actId "." objId .
                (* all four parts, separated by dots;
                   actId contains '@' but no dot *)
+  path       = attrName { index | "." attrName } .
+  index      = "[" digits "]" .         (* 0-based *)
   attrName   = letter { letter | digit | "_" } .
 
   letter     = "A" | … | "Z" | "a" | … | "z" .
@@ -562,22 +565,43 @@ Operations:
   Circular dependencies ($A1 → $B1 → $A1) yield #CIRC in all participating
   cells.
 
-7.4  Object attribute references  ([domId]attrName)
+7.4  Object attribute references  ([domId]path)
 -----------------------------------------------------
-  Retrieves a named attribute from any Domatar object reachable by DomId.
+  Retrieves a named attribute from any Domatar object reachable by DomId,
+  optionally walking into a JSON object or array stored in that Attr.
 
   Syntax:
     [quippin-micha@quippin.quippin.micha@quippin.quip-0NX6oBrH]text
+    [canton-<actId>.canton.<actId>.<cid>]Allocations[2].Name
+
+  The suffix after ']' is a path. The first attrName is the Attr key
+  (same first-letter-capitalisation as before: text → Text). Each
+  following [n] indexes a JSON array (0-based). Each .attrName selects
+  a field of a JSON object. Navigator's right pane labels array
+  elements as Allocations[0], Allocations[1], … so the path is visible
+  ([Navigator](Navigator.md) PART 6.6).
+
+    [handle]Allocations           the whole Attr (JSON string)
+    [handle]Allocations[2]        that element's JSON
+    [handle]Allocations[2].Name   Anthropic
+    [handle]Signatories[0]        the first party string
 
   Resolution:
     1. Parse the DomId between [ and ].
     2. Send an Open message to that DomId using the caller's msgClient.
-    3. Read the named attribute from the response Attrs.
-    4. If the object is unreachable or the attribute is absent, return #N/A.
-    5. The returned attribute value is treated as a string in formulas.
+    3. Read the root Attr from the response Attrs.
+    4. If the path has [n] or .field steps, parse the Attr as JSON
+       when it is an object or array and walk those steps. A leftover
+       nested value is returned as JSON. A scalar is returned as text.
+    5. If the object is unreachable, the Attr is absent, or any step
+       misses (bad index, missing field, value is not JSON), return #N/A.
+    6. The returned value is treated as a string in formulas.
        To use it as a number, wrap in a numeric coercion (future arithmetic
        on strings with numeric content is attempted automatically; if it
        fails, #VALUE is returned).
+
+  Do not store Attrs named Allocations[2].Name. The path is evaluated
+  after Open; the object's Attr map stays flat.
 
   Security:
     The Open call propagates the authenticated caller's context.  Only
@@ -804,8 +828,11 @@ Pass D — Build and Smoke Test
       Set A1=10, B1=20, C1=$A1+$B1.  Verify C1 shows 30 after parse.
   D3. Set A2="Hello ", B2="World", C2=$A2+$B2.
       Verify C2 shows "Hello World".
-  D4. Set a cell to an objAttr formula referencing a known quip.
+      D4. Set a cell to an objAttr formula referencing a known quip.
       Verify the attribute value appears in the cell.
+      D4b. On a Canton holding whose Allocations is a JSON list, set a
+      cell to [handle]Allocations[2].Name and verify the Name at
+      index 2. Navigator on that handle shows Allocations[2].
   D5. Verify circular reference (#CIRC) by setting A3=$B3 and B3=$A3.
 
 Pass E — LLM-native layer

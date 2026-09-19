@@ -151,8 +151,10 @@ Right pane, when the node is the selected one:
     Scalar values stay one line. Values that parse as JSON objects
     or arrays (including JSON stored as a string) expand in place
     with indentation, unlimited depth: object keys as nested
-    labels, array elements one per line (objects in an array are
-    stacked, not wrapped in `[]` / `{}`).
+    labels; array elements labelled `AttrName[0]`, `AttrName[1]`, …
+    (0-based) so the Spreadsheet path `[domId]AttrName[n].Field`
+    can be read off the pane. Braces and brackets of the raw JSON
+    are not shown.
 
 Anything else - SeqNum, Tag, lnk Val, etc. - is metadata about
 the EDGE the user came in on (the parent->child lnk), not about
@@ -582,10 +584,12 @@ Address bar / breadcrumbs / search box are TODO (PART 14).
 Renders DomId (with HstId/AppId/ActId/ObjId split), PrvId (the
 hosting provider from hst.PrvId), ClsAppId, ClsId, ObjName,
 ObjDesc, Attrs from the cached Open response. Attrs is rendered as
-a definition list. A value that is (or parses as) a JSON object
-is shown as nested label/value rows, each level indented; a JSON
-array lists elements one per line (nested objects/arrays recurse
-the same way). Brackets and braces are not shown. Values that
+a definition list. A JSON object is nested label/value rows. A
+JSON array is labelled `Name[0]`, `Name[1]`, … (0-based); each
+element indents its fields or, for primitives, the value. Nested
+arrays append another `[n]` (`Holders[0][1]`). Those labels are
+the Spreadsheet path after `]` ([Spreadsheet](Spreadsheet.md)
+PART 7.4). Raw `{}` / `[]` are not shown. Values that
 look like DomIds (regex: contains exactly three '.'s and looks
 like a DomId) are rendered as clickable links that scroll the
 tree to that DomId, expanding it on the way if needed.

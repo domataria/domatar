@@ -23,7 +23,7 @@ client to the JSON Ledger API implements the same `CantonClient`;
 Companion documents:
 
 - [Writing Apps](Writing-Apps.md) — manifest, AppInstall, ObjImpl, WUI, facade
-- [Spreadsheet](Spreadsheet.md) PART 7.4 — `[domId]attrName` via Open (GetLnks)
+- [Spreadsheet](Spreadsheet.md) PART 7.4 — `[domId]path` via Open (GetLnks)
 - [Class](../platform/Class.md) — GetCls; Iou service + class at install
 - [Navigator](Navigator.md) — Open (v1 read-only: exercise is WUI + agent)
 - [Identifiers](../platform/Identifiers.md) — actId as object owner, not as a Party
@@ -152,9 +152,10 @@ The Java realisation is `apps/canton/` (Maven module, JAR under
 2.4  Live reads (integration)
 
   Other apps do not call GetIou or Sync. Spreadsheet
-  ([Spreadsheet](Spreadsheet.md) PART 7.4) cites `[domId]attrName`
+  ([Spreadsheet](Spreadsheet.md) PART 7.4) cites `[domId]path`
   by sending Open (GetLnks) to that DomId as the caller and reading
-  the named Attr from the response. The AI Agent and
+  the named Attr from the response (then walking `[n]` / `.field`
+  when the Attr is JSON). The AI Agent and
   Navigator do the same. hasRights on the handle is
   therefore the integration gate: if the caller may Open
   this user's handle, they see the payload; if not, #N/A
@@ -238,8 +239,9 @@ order. The handle maps them as follows.
     Nav, AsOf, Constituents, Allocations (JSON list of
     {Name, Weight}), and Weight\<Name\> scalars
     (WeightOpenAI, WeightSpaceX, …). GetLnks / GetObj /
-    GetContract return them; `[handle]WeightOpenAI` works
-    like `[handle]Amount`.
+    GetContract return them. `[handle]Allocations[0].Weight`
+    walks the list; `[handle]WeightOpenAI` remains sugar
+    for the same scalar.
 
 3.2  Stakeholders (signatory / observer) → Attrs, not Auth
 
@@ -668,8 +670,9 @@ the UX filter. It does not replace the ledger.
 
 8.4  Spreadsheet
 
-  A cell may cite Amount, Nav, Allocations, or WeightOpenAI
-  (etc.) of this user's handle
+  A cell may cite Amount, Nav, Allocations, Allocations[n].Name,
+  Allocations[n].Weight, or WeightOpenAI (etc.) of this user's
+  handle
   ([Spreadsheet](Spreadsheet.md) PART 7.4). It cannot cite a
   counterparty's handle; that DomId is not theirs. Live fetch
   still runs hasRights as the spreadsheet owner.

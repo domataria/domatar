@@ -22,7 +22,8 @@ import java.math.BigDecimal;
  *               | number
  *               | quotedString
  *               | cellRef       ($ColRow)
- *               | objAttr       ([domId]attrName)
+ *               | objAttr       ([domId]path)
+ *   path        = attrName { '[' digits ']' | '.' attrName }
  *   unaryMinus  = '-' factor
  */
 public class FormulaParser
@@ -64,16 +65,23 @@ public class FormulaParser
     }
   }
 
-  /** [hstId.appId.actId.objId]attrName */
+  /** [hstId.appId.actId.objId]path  path = attrName { [n] | .field } */
   public static class ObjAttrNode implements Node
   {
     public final String domIdStr;
     public final String attrName;
+    public final String path;
 
     public ObjAttrNode(final String domId, final String attr)
     {
+      this(domId, attr, attr);
+    }
+
+    public ObjAttrNode(final String domId, final String attr, final String path)
+    {
       this.domIdStr = domId;
       this.attrName = attr;
+      this.path = path;
     }
   }
 
@@ -236,7 +244,7 @@ public class FormulaParser
       return new UnaryMinusNode(operand);
     }
 
-    // Object attribute reference: [domId]attrName
+    // Object attribute reference: [domId]path
     if (c == '[')
       return parseObjAttr();
 
@@ -282,15 +290,53 @@ public class FormulaParser
     if (pos < src.length())
       pos++; // skip ']'
 
-    final StringBuilder attrBuf = new StringBuilder();
-    while (pos < src.length()
-           && (Character.isLetterOrDigit(src.charAt(pos)) || src.charAt(pos) == '_'))
-      attrBuf.append(src.charAt(pos++));
-
-    if (domIdBuf.length() == 0 || attrBuf.length() == 0)
+    final StringBuilder pathBuf = new StringBuilder();
+    if (!appendAttrName(pathBuf))
       return new ErrorNode("#ERR");
 
-    return new ObjAttrNode(domIdBuf.toString(), attrBuf.toString());
+    while (pos < src.length())
+    {
+      final char ch = src.charAt(pos);
+      if (ch == '[')
+      {
+        pathBuf.append('[');
+        pos++;
+        final int digitStart = pos;
+        while (pos < src.length() && Character.isDigit(src.charAt(pos)))
+          pathBuf.append(src.charAt(pos++));
+        if (pos == digitStart || pos >= src.length() || src.charAt(pos) != ']')
+          return new ErrorNode("#ERR");
+        pathBuf.append(']');
+        pos++;
+      }
+      else if (ch == '.')
+      {
+        pathBuf.append('.');
+        pos++;
+        if (!appendAttrName(pathBuf))
+          return new ErrorNode("#ERR");
+      }
+      else
+        break;
+    }
+
+    if (domIdBuf.length() == 0)
+      return new ErrorNode("#ERR");
+
+    final String path = pathBuf.toString();
+    return new ObjAttrNode(domIdBuf.toString(), AttrPath.rootName(path), path);
+  }
+
+  private boolean appendAttrName(final StringBuilder buf)
+  {
+    final int start = buf.length();
+    if (pos >= src.length() || !Character.isLetter(src.charAt(pos)))
+      return false;
+    buf.append(src.charAt(pos++));
+    while (pos < src.length()
+           && (Character.isLetterOrDigit(src.charAt(pos)) || src.charAt(pos) == '_'))
+      buf.append(src.charAt(pos++));
+    return buf.length() > start;
   }
 
   private Node parseQuotedString()
