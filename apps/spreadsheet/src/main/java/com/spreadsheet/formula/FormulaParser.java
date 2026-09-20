@@ -5,6 +5,10 @@
 package com.spreadsheet.formula;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Recursive-descent parser for the Spreadsheet formula language.
@@ -23,6 +27,7 @@ import java.math.BigDecimal;
  *               | quotedString
  *               | cellRef       ($ColRow)
  *               | objAttr       ([domId]path)
+ *               | call          (NAME(expr, …))
  *   path        = attrName { '[' digits ']' | '.' attrName }
  *   unaryMinus  = '-' factor
  */
@@ -106,6 +111,19 @@ public class FormulaParser
     public UnaryMinusNode(final Node n)
     {
       this.operand = n;
+    }
+  }
+
+  /** Function call: ROUND(expr, digits). Name is stored upper-cased. */
+  public static class CallNode implements Node
+  {
+    public final String     name;
+    public final List<Node> args;
+
+    public CallNode(final String name, final List<Node> args)
+    {
+      this.name = name;
+      this.args = Collections.unmodifiableList(new ArrayList<>(args));
     }
   }
 
@@ -256,6 +274,10 @@ public class FormulaParser
     if (c == '"')
       return parseQuotedString();
 
+    // Function call: NAME(...)
+    if (Character.isLetter(c))
+      return parseCall();
+
     // Number
     if (Character.isDigit(c) || c == '.')
       return parseNumber();
@@ -339,6 +361,42 @@ public class FormulaParser
     return buf.length() > start;
   }
 
+  private Node parseCall()
+  {
+    final int start = pos;
+    pos++;
+    while (pos < src.length()
+           && (Character.isLetterOrDigit(src.charAt(pos)) || src.charAt(pos) == '_'))
+      pos++;
+    final String name = src.substring(start, pos).toUpperCase(Locale.ROOT);
+
+    skipWs();
+    if (pos >= src.length() || src.charAt(pos) != '(')
+      return new ErrorNode("#ERR");
+    pos++;
+
+    final List<Node> args = new ArrayList<>();
+    skipWs();
+    if (pos < src.length() && src.charAt(pos) != ')')
+    {
+      args.add(parseExpr());
+      while (true)
+      {
+        skipWs();
+        if (pos >= src.length() || src.charAt(pos) != ',')
+          break;
+        pos++;
+        args.add(parseExpr());
+      }
+    }
+
+    skipWs();
+    if (pos >= src.length() || src.charAt(pos) != ')')
+      return new ErrorNode("#ERR");
+    pos++;
+    return new CallNode(name, args);
+  }
+
   private Node parseQuotedString()
   {
     pos++; // skip opening '"'
@@ -356,7 +414,7 @@ public class FormulaParser
     while (pos < src.length())
     {
       final char ch = src.charAt(pos);
-      if (Character.isDigit(ch) || ch == '.' || ch == ',')
+      if (Character.isDigit(ch) || ch == '.')
         pos++;
       else
         break;

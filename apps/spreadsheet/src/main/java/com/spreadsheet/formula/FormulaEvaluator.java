@@ -97,6 +97,9 @@ public class FormulaEvaluator
     if (node instanceof FormulaParser.BinaryOpNode)
       return evalBinaryOp((FormulaParser.BinaryOpNode) node);
 
+    if (node instanceof FormulaParser.CallNode)
+      return evalCall((FormulaParser.CallNode) node);
+
     return ERR_ERR;
   }
 
@@ -220,6 +223,47 @@ public class FormulaEvaluator
       default:
         return ERR_ERR;
     }
+  }
+
+  private String evalCall(final FormulaParser.CallNode node)
+  {
+    if ("ROUND".equals(node.name))
+      return evalRound(node);
+    return ERR_ERR;
+  }
+
+  private String evalRound(final FormulaParser.CallNode node)
+  {
+    if (node.args.size() != 2)
+      return ERR_ERR;
+
+    final String nStr = eval(node.args.get(0));
+    if (isError(nStr))
+      return nStr;
+    final String dStr = eval(node.args.get(1));
+    if (isError(dStr))
+      return dStr;
+
+    final BigDecimal n = SpreadsheetNumbers.parseForArithmetic(nStr);
+    final BigDecimal d = SpreadsheetNumbers.parseForArithmetic(dStr);
+    if (n == null || d == null)
+      return ERR_VALUE;
+
+    final BigDecimal digitsBd = d.stripTrailingZeros();
+    if (digitsBd.scale() > 0)
+      return ERR_VALUE;
+
+    final int digits;
+    try
+    {
+      digits = digitsBd.intValueExact();
+    }
+    catch (final ArithmeticException e)
+    {
+      return ERR_VALUE;
+    }
+
+    return SpreadsheetNumbers.format(SpreadsheetNumbers.round(n, digits));
   }
 
   // -------------------------------------------------------------------------

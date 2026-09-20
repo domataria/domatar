@@ -21,6 +21,7 @@ entirely on their own provider sub-host; there is no shared central catalog.
   * A cell stores either a raw value (number or quoted string) or an
     = formula.  Formulas may:
       - Perform arithmetic  (+  −  *  /)
+      - Round a number      ROUND(number, digits)
       - Reference other cells in the same sheet  ($A1, $C5)
       - Read an attribute from any Domatar object by DomId
         ([hstId.appId.actId.objId]path) — path is attrName, or
@@ -532,7 +533,8 @@ Operations:
              | number
              | quotedString
              | cellRef
-             | objAttr .
+             | objAttr
+             | call .
 
   number     = [ "-" ] digit { digit } [ "." digit { digit } ] .
   digit      = "0" | … | "9" .
@@ -550,6 +552,10 @@ Operations:
   path       = attrName { index | "." attrName } .
   index      = "[" digits "]" .         (* 0-based *)
   attrName   = letter { letter | digit | "_" } .
+
+  call       = funcName "(" [ expr { "," expr } ] ")" .
+  funcName   = letter { letter | digit | "_" } .
+               (* matched case-insensitively; stored upper-case *)
 
   letter     = "A" | … | "Z" | "a" | … | "z" .
 
@@ -626,7 +632,7 @@ Operations:
   #N/A    Object attribute unreachable or attribute absent.
   #VALUE  Type mismatch in arithmetic.
   #DIV0   Division by zero.
-  #ERR    Formula syntax error (unparseable expression).
+  #ERR    Formula syntax error, unknown function, or wrong arity.
 
   Errors propagate: a cell whose formula references an error cell returns
   the same error token (first encountered, left-to-right, in expressions).
@@ -635,13 +641,26 @@ Operations:
 ---------------------
   ParseSheet evaluates cells in dependency-topological order:
     1. Collect all cells containing a "=" formula.
-    2. For each, extract $ColRow references as dependencies.
+    2. For each, extract $ColRow references as dependencies (including
+       those nested in function arguments).
        ObjAttr references are treated as having no sheet-local dependency
        (they are fetched fresh at evaluation time).
     3. Kahn's algorithm to topological-sort.  Any cell in a cycle is marked
        #CIRC before evaluation; its dependents propagate #CIRC.
     4. Evaluate leaf cells first, then consumers.
     5. Non-formula cells need no re-evaluation (Raw IS the Value).
+
+7.8  Functions
+--------------
+  Names are case-insensitive. Unknown names and wrong arity yield #ERR.
+  Errors in arguments propagate left-to-right before the call runs.
+
+  ROUND(number, digits)
+    Excel-style half-away-from-zero. `digits` is the number of places
+    after the decimal (negative rounds to tens, hundreds, …).
+    `digits` must be an integer; a fractional digits argument is #VALUE.
+    Non-numeric `number`: #VALUE.
+    ROUND($B6/$B7, 2) → 0.29 when $B6/$B7 is 0.29319….
 
 ## PART 8 — FRONTEND UI
 

@@ -70,6 +70,12 @@ public final class SpreadsheetNumbers
     return left.divide(right, DIV_CONTEXT);
   }
 
+  /** Excel-style ROUND: half away from zero, {@code digits} may be negative. */
+  public static BigDecimal round(final BigDecimal value, final int digits)
+  {
+    return value.setScale(digits, RoundingMode.HALF_UP);
+  }
+
   /** Format for cell display: plain decimal, no trailing zeros. */
   public static String format(final BigDecimal value)
   {

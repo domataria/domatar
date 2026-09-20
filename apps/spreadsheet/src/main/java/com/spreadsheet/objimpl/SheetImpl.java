@@ -454,6 +454,11 @@ public class SheetImpl extends ObjImpl
     }
     else if (node instanceof FormulaParser.UnaryMinusNode)
       collectCellRefs(((FormulaParser.UnaryMinusNode) node).operand, out);
+    else if (node instanceof FormulaParser.CallNode)
+    {
+      for (final FormulaParser.Node arg : ((FormulaParser.CallNode) node).args)
+        collectCellRefs(arg, out);
+    }
   }
 
   /** Check whether a cellRef string falls within the sheet's declared bounds. */
