@@ -26,6 +26,7 @@ entirely on their own provider sub-host; there is no shared central catalog.
       - Read an attribute from any Domatar object by DomId
         ([hstId.appId.actId.objId]path) — path is attrName, or
         attrName plus 0-based [n] and .field steps into JSON
+  * A cell may be bold (whole-cell style, stored as Bold, not in the formula).
   * When a sheet is viewed, all formulas are evaluated server-side and their
     computed values are shown in the grid.
   * A "Parse" button forces re-evaluation (useful when referenced objects
@@ -59,7 +60,8 @@ entirely on their own provider sub-host; there is no shared central catalog.
 --------------------------
   * Cross-sheet cell references (future: $Sheet2!A1 syntax).
   * Built-in aggregate functions (SUM, AVERAGE, IF, …).
-  * Cell formatting (bold, colour, number format).
+  * Further cell formatting (colour, number format). Bold is in v1
+    (PART 3.1, PART 8.2).
   * Collaborative real-time editing.
   * Charts or pivot tables.
   * Export to CSV / XLSX.
@@ -144,8 +146,9 @@ entirely on their own provider sub-host; there is no shared central catalog.
                          "[domId]attr", or "" for empty)
       Value   : string  (last computed value; updated on parse; empty if Raw
                          contains no formula)
+      Bold    : string  ("true" / "false"; whole-cell bold. Absent = false)
 
-    Cells are stored only when they carry a value or formula (Raw ≠ "").
+    Cells are stored when they carry a value, a formula, or Bold=true.
     An absent cell is treated as the empty string "" in formulas.
 
 3.2  Link types
@@ -251,7 +254,7 @@ Steps (all idempotent via addObjIfMissing / addLnkIfMissing / upsertClsObj):
           .Description  = "Spreadsheet app. Entry point for LLM-native
                            operations on the user's spreadsheets."
           .Msgs         = "GetSpreadsheets, GetSpreadsheet(Name),
-                           SetCell(Name,CellRef,Raw),
+                           SetCell(Name,CellRef,Raw?,Bold?),
                            DeleteSpreadsheet(Name)"
           .Attrs        = "DisplayName, IconPath, LaunchPath"
           .SideEffect   = "GetSpreadsheets:None, GetSpreadsheet:None,
@@ -270,7 +273,7 @@ Steps (all idempotent via addObjIfMissing / addLnkIfMissing / upsertClsObj):
      c. (spreadsheet, sheet)  — individual spreadsheet class
           .Description  = "A named grid spreadsheet.  Cells are child objects."
           .Msgs         = "GetSheet, EditSheet(Name?,Cols?,Rows?),
-                           SetCell(CellRef,Raw), ParseSheet"
+                           SetCell(CellRef,Raw?,Bold?), ParseSheet"
           .Attrs        = "Name, Cols, Rows, ColLabels, CreatedAt"
           .SideEffect   = "GetSheet:None, EditSheet:Write,
                            SetCell:Write, ParseSheet:Write"
@@ -280,7 +283,7 @@ Steps (all idempotent via addObjIfMissing / addLnkIfMissing / upsertClsObj):
           .Description  = "One cell in a spreadsheet. Holds a literal value
                            or = formula."
           .Msgs         = "GetObj"
-          .Attrs        = "SheetId, CellRef, Raw, Value"
+          .Attrs        = "SheetId, CellRef, Raw, Value, Bold"
           .SideEffect   = "GetObj:None"
           .Auth         = "isVerified"
 
@@ -328,7 +331,7 @@ Operations:
   GetSpreadsheet
     In:  Name  (string, case-insensitive)
     Out: { Name, Cols, Rows, ColLabels,
-           Cells: [ {CellRef, Raw, Value}, … ] }
+           Cells: [ {CellRef, Raw, Value, Bold}, … ] }
 
     Returns the full content of the named spreadsheet in one call.
 
@@ -339,15 +342,16 @@ Operations:
          and return its result without exposing SheetId.
 
   SetCell
-    In:  Name (spreadsheet name), CellRef (e.g. "B3"), Raw
-    Out: { CellRef, Value }
+    In:  Name (spreadsheet name), CellRef (e.g. "B3"), Raw?, Bold?
+    Out: { CellRef, Value, Bold }
 
-    Writes a single cell in the named spreadsheet.
+    Writes a single cell in the named spreadsheet. Same Raw/Bold rules
+    as SheetImpl.SetCell.
 
     Steps:
       a. Resolve Name → sheetId (same as GetSpreadsheet step a).
-      b. Delegate to SheetImpl.setCell(sheetId, cellRef, raw) and return
-         the result.
+      b. Delegate to SheetImpl.setCellCore(sheetId, cellRef, raw, bold)
+         and return the result.
 
   DeleteSpreadsheet
     In:  Name (string, case-insensitive)
@@ -444,10 +448,11 @@ Package-private helpers (used also by SpreadsheetAppImpl):
     response body.  Extracted so SpreadsheetAppImpl.GetSpreadsheet can
     delegate without duplicating code.
 
-  setCell(DomId sheetId, String cellRef, String raw) → JsonObject
+  setCell(DomId sheetId, String cellRef, String raw, String bold) → JsonObject
     Core logic of SetCell.  Validates bounds, creates/updates the cell
-    object, evaluates the formula, and returns { CellRef, Value }.
-    Called by SpreadsheetAppImpl.SetCell.
+    object, evaluates the formula when Raw is supplied, and returns
+    { CellRef, Value, Bold }. raw or bold may be null to leave that
+    field unchanged. Called by SpreadsheetAppImpl.SetCell.
 
   recalcAndPersist(DomId sheetId)
     Previously private; made package-private.  Re-evaluates all formulas
@@ -459,7 +464,7 @@ Operations:
   GetSheet
     In:  (none)
     Out: { Name, Cols, Rows, ColLabels,
-           Cells: [ {CellRef, Raw, Value}, … ] }
+           Cells: [ {CellRef, Raw, Value, Bold}, … ] }
 
     Delegates to getSheetData(this.sheetId).
 
@@ -482,15 +487,18 @@ Operations:
       e. If Rows decreased: delete cells whose row index > new Rows.
 
   SetCell
-    In:  CellRef (e.g. "B3"), Raw (the raw string to store)
-    Out: { CellRef, Value }   (Value = immediate computed result or Raw for
-                                non-formula values)
+    In:  CellRef (e.g. "B3"), Raw? (the raw string to store),
+         Bold? ("true" / "false")
+    Out: { CellRef, Value, Bold, UpdatedCells }
 
-    Delegates to setCell(this.sheetId, cellRef, raw).
+    At least one of Raw or Bold is required. Omitting Raw leaves the
+    value unchanged (style-only). Omitting Bold leaves style unchanged.
+    Clearing Raw to "" deletes the cell unless Bold is true (empty
+    bold cell). Delegates to setCellCore.
 
   ParseSheet
     In:  (none)
-    Out: { Cells: [ {CellRef, Raw, Value}, … ] }
+    Out: { Cells: [ {CellRef, Raw, Value, Bold}, … ] }
 
     Re-evaluates every formula in the sheet in dependency order and updates
     each cell's stored Value.  Returns the complete updated cell list.
@@ -701,14 +709,17 @@ Operations:
         Each cell is an <input> or <textarea>.
         Initially shows the computed Value; when a cell is focused, switches
         to show Raw so the user can edit the formula.
-        On blur (leaving a cell): POST SetCell with the new Raw.  The
-        returned Value is immediately shown in the cell.
+        On blur (leaving a cell): POST SetCell with the new Raw and current
+        Bold. The returned Value is immediately shown in the cell.
+    - "B" toggle — bolds the last-focused cell (Ctrl+B does the same).
+      Writes the cell's Bold Attr; the grid input uses font-weight 700.
+      The button's pressed state follows the focused cell.
     - "Resize" button — opens a modal to change Cols and/or Rows (calls
       EditSheet).  Warns if shrinking will delete data.
 
   AJAX calls:
     GET  /domatar/SheetWui?Action=GetSheet&SheetId=…
-    POST /domatar/SheetWui  Action=SetCell   SheetId=… CellRef=… Raw=…
+    POST /domatar/SheetWui  Action=SetCell   SheetId=… CellRef=… [Raw=…] [Bold=…]
     POST /domatar/SheetWui  Action=ParseSheet SheetId=…
     POST /domatar/SheetWui  Action=EditSheet  SheetId=… [Name=…] [Cols=…] [Rows=…]
 

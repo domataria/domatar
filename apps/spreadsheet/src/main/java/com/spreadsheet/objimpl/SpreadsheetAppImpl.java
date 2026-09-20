@@ -150,6 +150,7 @@ public class SpreadsheetAppImpl extends ObjImpl
     final String name    = in.getAttr("Name");
     final String cellRef = in.getAttr("CellRef");
     String raw           = in.getAttr("Raw");
+    final String bold    = in.getAttr("Bold");
 
     if (name == null)
     {
@@ -161,7 +162,7 @@ public class SpreadsheetAppImpl extends ObjImpl
       outMsg.addError(opr, "Missing CellRef");
       return;
     }
-    if (raw == null)
+    if (raw == null && bold == null)
       raw = "";
 
     final DomId sheetsId = sheetsIdFor(appDomId);
@@ -173,7 +174,7 @@ public class SpreadsheetAppImpl extends ObjImpl
     }
 
     final SheetImpl helper = new SheetImpl();
-    final ObjAttrs result  = helper.setCellCore(sheetId, cellRef, raw, msgClient);
+    final ObjAttrs result  = helper.setCellCore(sheetId, cellRef, raw, bold, msgClient);
 
     if (result.getAttr("Error") != null)
     {
@@ -184,6 +185,7 @@ public class SpreadsheetAppImpl extends ObjImpl
     final ObjAttrs out = new ObjAttrs();
     out.addAttr("CellRef", result.getAttr("CellRef"));
     out.addAttr("Value",   result.getAttr("Value"));
+    out.addAttr("Bold",    result.getAttr("Bold"));
     outMsg.addResponseBody(opr, out);
   }
 

@@ -30,6 +30,7 @@ import com.domatar.util.DomatarMsgClient;
 
 import com.spreadsheet.formula.FormulaEvaluator;
 import com.spreadsheet.formula.FormulaParser;
+import com.spreadsheet.style.CellStyle;
 
 /**
  * Handler for class (spreadsheet, sheet).
@@ -168,18 +169,21 @@ public class SheetImpl extends ObjImpl
   {
     final ObjAttrs in    = inMsg.getAttrs();
     final String cellRef = in.getAttr("CellRef");
-    String raw           = in.getAttr("Raw");
+    final String raw     = in.getAttr("Raw");
+    final String bold    = in.getAttr("Bold");
 
     if (cellRef == null)
     {
       outMsg.addError(opr, "Missing CellRef");
       return;
     }
+    if (raw == null && bold == null)
+    {
+      outMsg.addError(opr, "Missing Raw or Bold");
+      return;
+    }
 
-    if (raw == null)
-      raw = "";
-
-    final ObjAttrs result = setCellCore(sheetId, cellRef, raw, msgClient);
+    final ObjAttrs result = setCellCore(sheetId, cellRef, raw, bold, msgClient);
     if (result.getAttr("Error") != null)
     {
       outMsg.addError(opr, result.getAttr("Error"));
@@ -189,6 +193,7 @@ public class SheetImpl extends ObjImpl
     final ObjAttrs out = new ObjAttrs();
     out.addAttr("CellRef",      result.getAttr("CellRef"));
     out.addAttr("Value",        result.getAttr("Value"));
+    out.addAttr("Bold",         result.getAttr("Bold"));
     out.addAttr("UpdatedCells", result.getAttrList("UpdatedCells"));
     outMsg.addResponseBody(opr, out);
   }
@@ -196,17 +201,22 @@ public class SheetImpl extends ObjImpl
   /**
    * Core cell-write logic.  Validates bounds, persists the cell, cascades
    * recalculation, and returns a result map with CellRef and Value.
+   * {@code raw} or {@code bold} may be null to leave that field unchanged.
    * Returns an attrs map with an "Error" key if something goes wrong.
    * Package-private so SpreadsheetAppImpl can call it without duplicating code.
    */
-  ObjAttrs setCellCore(final DomId sheetId, final String cellRef, String raw,
+  ObjAttrs setCellCore(final DomId sheetId, final String cellRef, final String raw,
                        final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    final ObjAttrs result = new ObjAttrs();
+    return setCellCore(sheetId, cellRef, raw, null, msgClient);
+  }
 
-    if (raw == null)
-      raw = "";
+  ObjAttrs setCellCore(final DomId sheetId, final String cellRef, String raw,
+                       final String bold, final DomatarMsgClient msgClient)
+      throws DomatarException
+  {
+    final ObjAttrs result = new ObjAttrs();
 
     final Obj sheet = ObjDb.getObj(sheetId);
     if (sheet != null && !isInBounds(cellRef, sheet))
@@ -217,30 +227,50 @@ public class SheetImpl extends ObjImpl
 
     final String cellObjId = sheetId.objId + "-" + cellRef;
     final DomId  cellId    = new DomId(sheetId.hstId, "spreadsheet", sheetId.actId, cellObjId);
+    final Obj    existing  = ObjDb.getObj(cellId);
 
-    if (raw.isEmpty())
+    final String existingRaw = existing != null
+        ? nullToEmpty(existing.attrs.getAttr("Raw")) : "";
+    final boolean existingBold = CellStyle.parse(
+        existing != null ? existing.attrs.getAttr("Bold") : null);
+
+    final boolean rawGiven = raw != null;
+    if (!rawGiven)
+      raw = existingRaw;
+    final boolean newBold = bold != null ? CellStyle.parse(bold) : existingBold;
+    final boolean styleOnly = !rawGiven;
+
+    if (raw.isEmpty() && !newBold)
     {
       ObjDb.deleteObj(cellId);
       LnkDb.deleteLnks(sheetId, cellId, "spreadsheet", "cell", null, null);
       result.addAttr("CellRef", cellRef);
       result.addAttr("Value",   "");
+      result.addAttr("Bold",    CellStyle.attr(false));
       return result;
     }
 
-    final Map<String, String> cellRaws = loadCellRaws(sheetId);
-    cellRaws.put(cellRef, raw);
-
-    final String value = new FormulaEvaluator(cellRaws, new HashSet<String>(), msgClient)
-                             .evalRaw(raw);
+    final String value;
+    if (styleOnly && existing != null)
+      value = nullToEmpty(existing.attrs.getAttr("Value"));
+    else if (raw.isEmpty())
+      value = "";
+    else
+    {
+      final Map<String, String> cellRaws = loadCellRaws(sheetId);
+      cellRaws.put(cellRef, raw);
+      value = new FormulaEvaluator(cellRaws, new HashSet<String>(), msgClient)
+                  .evalRaw(raw);
+    }
 
     final ObjAttrs cellAttrs = new ObjAttrs();
     cellAttrs.addAttr("SheetId", sheetId.objId);
     cellAttrs.addAttr("CellRef", cellRef);
     cellAttrs.addAttr("Raw",     raw);
     cellAttrs.addAttr("Value",   value);
+    cellAttrs.addAttr("Bold",    CellStyle.attr(newBold));
 
-    final Obj existing = ObjDb.getObj(cellId);
-    final Obj cellObj  = new Obj(cellId, "spreadsheet", "cell", cellRef, "Cell", cellAttrs);
+    final Obj cellObj = new Obj(cellId, "spreadsheet", "cell", cellRef, "Cell", cellAttrs);
 
     if (existing != null)
       ObjDb.modifyObj(cellObj);
@@ -254,13 +284,37 @@ public class SheetImpl extends ObjImpl
                             cellRef, 0));
     }
 
-    // Cascade recalculation so dependents of this cell get updated values.
-    final JsonList updatedCells = recalcAndPersist(sheetId, msgClient);
+    final JsonList updatedCells;
+    if (styleOnly)
+    {
+      updatedCells = new JsonArrayList();
+      updatedCells.add(cellEntry(cellRef, raw, value, newBold).toMap());
+    }
+    else
+      updatedCells = recalcAndPersist(sheetId, msgClient);
 
     result.addAttr("CellRef",      cellRef);
     result.addAttr("Value",        value);
+    result.addAttr("Bold",         CellStyle.attr(newBold));
     result.addAttr("UpdatedCells", updatedCells);
     return result;
+  }
+
+  private static String nullToEmpty(final String s)
+  {
+    return s != null ? s : "";
+  }
+
+  private static ObjAttrs cellEntry(final String ref, final String raw,
+                                    final String value, final boolean bold)
+      throws DomatarException
+  {
+    final ObjAttrs entry = new ObjAttrs();
+    entry.addAttr("CellRef", ref);
+    entry.addAttr("Raw",     raw != null ? raw : "");
+    entry.addAttr("Value",   value != null ? value : "");
+    entry.addAttr("Bold",    CellStyle.attr(bold));
+    return entry;
   }
 
   private void parseSheet(final String opr, final JsonMsg outMsg, final DomId sheetId,
@@ -275,7 +329,7 @@ public class SheetImpl extends ObjImpl
 
   /**
    * Re-evaluate every cell in topological order, persist updated Values,
-   * and return a JsonList of {CellRef, Raw, Value} for all cells.
+   * and return a JsonList of {CellRef, Raw, Value, Bold} for all cells.
    * Used by GetSheet (fresh load), SetCell (cascade), ParseSheet, and
    * SpreadsheetAppImpl (package-private access).
    */
@@ -354,6 +408,7 @@ public class SheetImpl extends ObjImpl
       final String raw   = cellRaws.get(ref);
       final String value = computed.get(ref);
 
+      boolean bold = false;
       final DomId cellId = cellDomIds.get(ref);
       if (cellId != null)
       {
@@ -362,14 +417,10 @@ public class SheetImpl extends ObjImpl
         {
           cell.attrs.addAttr("Value", value);
           ObjDb.modifyObj(cell);
+          bold = CellStyle.parse(cell.attrs.getAttr("Bold"));
         }
       }
-
-      final ObjAttrs entry = new ObjAttrs();
-      entry.addAttr("CellRef", ref);
-      entry.addAttr("Raw",     raw);
-      entry.addAttr("Value",   value);
-      cells.add(entry.toMap());
+      cells.add(cellEntry(ref, raw, value, bold).toMap());
     }
     return cells;
   }

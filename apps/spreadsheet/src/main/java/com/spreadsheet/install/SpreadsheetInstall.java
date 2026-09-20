@@ -96,8 +96,8 @@ public class SpreadsheetInstall implements AppInstall
         "{\"Name\":\"GetSpreadsheets\",\"Description\":\"List all spreadsheets owned by the current user, with their name, dimensions, and creation date.\",\"SideEffect\":\"Read\"}," +
         "{\"Name\":\"GetSpreadsheet\",\"Description\":\"Get the full contents of a specific spreadsheet by name, including all cell values.\",\"SideEffect\":\"Read\"," +
         "\"Parms\":[{\"Name\":\"Name\",\"Type\":\"String\",\"Description\":\"The name of the spreadsheet to retrieve.\"}]}," +
-        "{\"Name\":\"SetCell\",\"Description\":\"Set the value of a cell in a named spreadsheet. Use a formula (=A1+B1) or a plain value.\",\"SideEffect\":\"Write\"," +
-        "\"Parms\":[{\"Name\":\"Name\",\"Type\":\"String\",\"Description\":\"The name of the spreadsheet.\"},{\"Name\":\"CellRef\",\"Type\":\"String\",\"Description\":\"The cell reference, e.g. A1 or B12.\"},{\"Name\":\"Raw\",\"Type\":\"String\",\"Description\":\"The value or formula to store.\"}]}," +
+        "{\"Name\":\"SetCell\",\"Description\":\"Set the value and/or bold style of a cell in a named spreadsheet. Use a formula (= $A1+$B1) or a plain value. Omit Raw to change Bold only.\",\"SideEffect\":\"Write\"," +
+        "\"Parms\":[{\"Name\":\"Name\",\"Type\":\"String\",\"Description\":\"The name of the spreadsheet.\"},{\"Name\":\"CellRef\",\"Type\":\"String\",\"Description\":\"The cell reference, e.g. A1 or B12.\"},{\"Name\":\"Raw\",\"Type\":\"String\",\"Description\":\"The value or formula to store. Omit to leave the value unchanged.\"},{\"Name\":\"Bold\",\"Type\":\"String\",\"Description\":\"true or false. Whole-cell bold. Omit to leave style unchanged.\"}]}," +
         "{\"Name\":\"DeleteSpreadsheet\",\"Description\":\"Permanently delete a spreadsheet by name.\",\"SideEffect\":\"Destructive\"," +
         "\"Parms\":[{\"Name\":\"Name\",\"Type\":\"String\",\"Description\":\"The name of the spreadsheet to delete.\"}]}" +
         "]," +
@@ -133,7 +133,7 @@ public class SpreadsheetInstall implements AppInstall
         "A single named spreadsheet with cells",
         "{" +
         "\"Description\":\"A named spreadsheet grid. Cells are child objects identified by CellRef (A1, B12, ...). Raw stores user input; Value stores the last computed result.\"," +
-        "\"Msgs\":\"GetSheet() -> {Name,Cols,Rows,ColLabels,Cells:[{CellRef,Raw,Value}]}; EditSheet(Name?,Cols?,Rows?) -> {Updated}; SetCell(CellRef,Raw) -> {CellRef,Value,UpdatedCells}; ParseSheet() -> {Cells}\"," +
+        "\"Msgs\":\"GetSheet() -> {Name,Cols,Rows,ColLabels,Cells:[{CellRef,Raw,Value,Bold}]}; EditSheet(Name?,Cols?,Rows?) -> {Updated}; SetCell(CellRef,Raw?,Bold?) -> {CellRef,Value,Bold,UpdatedCells}; ParseSheet() -> {Cells}\"," +
         "\"Attrs\":\"Name, Cols, Rows, ColLabels, CreatedAt\"" +
         "}");
 
@@ -149,9 +149,9 @@ public class SpreadsheetInstall implements AppInstall
     SrvInstall.addSrvObj(sheetsId, "spreadsheet", "cell",
         "One cell in a spreadsheet",
         "{" +
-        "\"Description\":\"One cell in a spreadsheet. Raw is the user input (number, quoted string, or =formula). Value is the last computed result.\"," +
-        "\"Msgs\":\"GetObj() -> {SheetId,CellRef,Raw,Value}\"," +
-        "\"Attrs\":\"SheetId, CellRef, Raw, Value\"" +
+        "\"Description\":\"One cell in a spreadsheet. Raw is the user input (number, quoted string, or =formula). Value is the last computed result. Bold is whole-cell style (true/false).\"," +
+        "\"Msgs\":\"GetObj() -> {SheetId,CellRef,Raw,Value,Bold}\"," +
+        "\"Attrs\":\"SheetId, CellRef, Raw, Value, Bold\"" +
         "}");
 
     ClsInstall.upsertClsImplementing(sheetsId, "spreadsheet", "cell",

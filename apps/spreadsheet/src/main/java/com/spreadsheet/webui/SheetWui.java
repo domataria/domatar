@@ -84,7 +84,11 @@ public class SheetWui extends DomatarServlet
       // inside formula expressions (e.g. =$A1+$B1) to a space.
       final String rawParam = req.getParameter("Raw");
       attrs.addAttr("CellRef", getParam(req, "CellRef"));
-      attrs.addAttr("Raw",     rawParam != null ? rawParam.trim() : "");
+      if (rawParam != null)
+        attrs.addAttr("Raw", rawParam.trim());
+      final String boldParam = req.getParameter("Bold");
+      if (boldParam != null)
+        attrs.addAttr("Bold", boldParam.trim());
     }
     else if ("ParseSheet".equals(opr))
     {
