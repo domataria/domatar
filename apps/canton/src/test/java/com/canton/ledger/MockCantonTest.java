@@ -136,6 +136,47 @@ public class MockCantonTest
     assertTrue(choiceNames.contains("Archive"));
   }
 
+  @Test
+  public void patchPayloadKeepsContractIdAndMergesExistingKeys() throws Exception
+  {
+    final File tmp = Files.createTempFile("canton-mock-patch", ".json").toFile();
+
+    assertTrue(tmp.delete());
+    final MockCanton mock = new MockCanton(tmp);
+    final String cid = mock.submitCreate("Bank", IouTemplates.TEMPLATE_ID,
+        iou("Bank", "Alice")).created.get(0).contractId;
+    final Map<String, String> fields = new LinkedHashMap<>();
+
+    fields.put("Amount", "250");
+    fields.put("NotAField", "ignored");
+    final Contract patched = mock.patchPayload(cid, fields);
+
+    assertEquals(cid, patched.contractId);
+    assertEquals("250", patched.payload.get("Amount"));
+    assertEquals("USD", patched.payload.get("Currency"));
+    assertEquals("Alice", patched.payload.get("Owner"));
+
+    final MockCanton reloaded = new MockCanton(tmp);
+
+    assertEquals("250", reloaded.getContract(cid).payload.get("Amount"));
+    assertEquals(cid, reloaded.getContract(cid).contractId);
+  }
+
+  @Test
+  public void patchPayloadUnknownContractFails() throws DomatarException
+  {
+    final MockCanton mock = new MockCanton(null);
+
+    assertThrows(DomatarException.class,
+        () -> mock.patchPayload("cid-missing", Collections.singletonMap("Amount", "1")));
+  }
+
+  @Test
+  public void mockOrNullReturnsMockCanton()
+  {
+    assertTrue(CantonClients.mockOrNull() instanceof MockCanton);
+  }
+
   private static Map<String, String> iou(final String issuer, final String owner)
   {
     final Map<String, String> payload = new LinkedHashMap<>();

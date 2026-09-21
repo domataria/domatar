@@ -35,6 +35,17 @@ public final class CantonClients
     return INSTANCE;
   }
 
+  /**
+   * Workshop MockNetworkWui only. Handlers keep calling {@link #get()}.
+   * Null when the singleton is not a {@link MockCanton}.
+   */
+  public static MockCanton mockOrNull()
+  {
+    final CantonClient c = INSTANCE;
+
+    return (c instanceof MockCanton) ? (MockCanton) c : null;
+  }
+
   static synchronized void replaceForTest(final CantonClient c)
   {
     try

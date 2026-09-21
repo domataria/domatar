@@ -10,3 +10,4 @@ Handler: canton, contract,  com.canton.objimpl.ContractImpl
 Wui:     PartyWui,          com.canton.webui.PartyWui
 Wui:     ContractsWui,      com.canton.webui.ContractsWui
 Wui:     IouWui,            com.canton.webui.IouWui
+Wui:     MockNetworkWui,    com.canton.webui.MockNetworkWui

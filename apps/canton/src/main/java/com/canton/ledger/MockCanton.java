@@ -184,6 +184,52 @@ public final class MockCanton implements CantonClient
     return new SubmitResult(archived, created);
   }
 
+  /**
+   * Workshop operator lookup. Not on {@link CantonClient}: no party
+   * filter, so the mock-network page can load a row by ContractId.
+   */
+  public synchronized Contract getContract(final String contractId)
+  {
+    if (contractId == null || contractId.isEmpty())
+      return null;
+    return contracts.get(contractId);
+  }
+
+  /**
+   * In-place payload merge on the same ContractId. Signatories,
+   * observers, and template stay put. Only keys already on the
+   * payload are updated, then the JSON store is written.
+   */
+  public synchronized Contract patchPayload(final String contractId,
+      final Map<String, String> fields) throws DomatarException
+  {
+    final Contract current = contracts.get(contractId);
+
+    if (current == null)
+      throw new DomatarException("Unknown contract: " + contractId);
+
+    if (fields == null || fields.isEmpty())
+      return current;
+
+    final Map<String, String> next = new LinkedHashMap<>(current.payload);
+
+    for (final Map.Entry<String, String> e : fields.entrySet())
+    {
+      final String key = e.getKey();
+
+      if (key == null || key.isEmpty() || !next.containsKey(key))
+        continue;
+      next.put(key, e.getValue() != null ? e.getValue() : "");
+    }
+
+    final Contract updated = new Contract(current.contractId, current.templateId,
+        next, current.signatories, current.observers);
+
+    contracts.put(contractId, updated);
+    save();
+    return updated;
+  }
+
   private static ChoiceDesc findChoice(final TemplateDesc t, final String choice)
   {
     if (choice == null)

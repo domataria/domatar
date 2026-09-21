@@ -30,6 +30,7 @@
                           border-radius: var(--radius); font-size: 0.95em; width: 100%;
                           box-sizing: border-box; }
         .cn-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .cn-hint        { color: var(--page-muted); font-size: 0.88em; margin: 8px 0 0; line-height: 1.45; }
         .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
                           margin-bottom: 10px; min-height: 1.2em; }
         .cn-ok          { color: #15803d; font-size: 0.9em; margin-top: 8px; }
@@ -240,6 +241,17 @@
         postChoice('Archive');
     }
 
+    function openNetwork()
+    {
+        if (!contractDomId)
+        {
+            showError('Missing ContractDomId.');
+            return;
+        }
+        window.location.href = '/domatar/canton/mock-network.html?ContractDomId='
+            + encodeURIComponent(contractDomId);
+    }
+
     $(document).ready(function()
     {
         var params = new URLSearchParams(window.location.search);
@@ -274,7 +286,9 @@
                 <button type="button" onclick="transferIou()">Transfer</button>
                 <button type="button" onclick="settleIou()">Settle</button>
                 <button type="button" onclick="archiveIou()">Archive</button>
+                <button type="button" onclick="openNetwork()">Network</button>
             </div>
+            <p class="cn-hint">Network opens the mock ACS for this contract. It is not a ledger choice.</p>
         </div>
     </div>
 </div>

@@ -1,0 +1,236 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mock network</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .cn-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
+        .cn-header h2   { margin: 0; }
+        .cn-back        { font-size: 0.88em; }
+        .cn-card        { border: 1px solid var(--border); border-radius: var(--radius);
+                          padding: 16px 20px; margin-bottom: 20px; max-width: 760px; }
+        .cn-card h3     { margin: 0 0 12px; font-size: 1.05em; }
+        .cn-hint        { color: var(--page-muted); font-size: 0.88em; margin: 0 0 14px; line-height: 1.45; }
+        .cn-dl          { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; margin-bottom: 16px; }
+        .cn-dl dt       { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .cn-dl dd       { margin: 0; word-break: break-word; }
+        .cn-row         { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .cn-row label   { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .cn-row input,
+        .cn-row textarea { padding: 6px 9px; border: 1px solid var(--border);
+                          border-radius: var(--radius); font-size: 0.95em; width: 100%;
+                          box-sizing: border-box; font-family: inherit; }
+        .cn-row textarea { min-height: 72px; resize: vertical; }
+        .cn-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
+                          margin-bottom: 10px; min-height: 1.2em; }
+        .cn-ok          { color: #15803d; font-size: 0.9em; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var contractDomId = '';
+    var META = { ContractId: 1, TemplateId: 1, Signatories: 1, Observers: 1, PackageId: 1 };
+
+    function failed(ret)
+    {
+        return !ret || ret.Error === 'Failure';
+    }
+
+    function errText(ret, fallback)
+    {
+        return (ret && ret.ErrorMsg) ? ret.ErrorMsg : fallback;
+    }
+
+    function showError(msg)
+    {
+        $('#page-error').text(msg || '');
+        $('#page-ok').text('');
+    }
+
+    function showOk(msg)
+    {
+        $('#page-error').text('');
+        $('#page-ok').text(msg || '');
+    }
+
+    function field(attrs, name)
+    {
+        return (attrs && attrs[name] != null) ? String(attrs[name]) : '';
+    }
+
+    function escapeHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function backHref()
+    {
+        return '/domatar/canton/iou.html?ContractDomId=' + encodeURIComponent(contractDomId);
+    }
+
+    function loadContract()
+    {
+        if (!contractDomId)
+        {
+            showError('Missing ContractDomId.');
+            return;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: 'Wui/MockNetworkWui',
+            data: 'Action=Get&ContractDomId=' + encodeURIComponent(contractDomId),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Failed to load mock contract.'));
+                    return;
+                }
+                renderContract(ret.Attrs || {});
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+            }
+        });
+    }
+
+    function renderContract(attrs)
+    {
+        var cid = field(attrs, 'ContractId');
+        var template = field(attrs, 'TemplateId');
+        var title = field(attrs, 'Name') || field(attrs, 'Symbol') || 'Contract';
+
+        $('#page-title').text('Mock network — ' + title);
+        document.title = 'Mock network — ' + title;
+        $('#meta-list').html(
+            '<dt>ContractId</dt><dd>' + escapeHtml(cid) + '</dd>'
+            + '<dt>TemplateId</dt><dd>' + escapeHtml(template) + '</dd>');
+
+        var keys = Object.keys(attrs).filter(function(k) { return !META[k]; });
+        keys.sort();
+        var html = '';
+        keys.forEach(function(k)
+        {
+            var value = field(attrs, k);
+            var longVal = value.length > 80 || value.indexOf('{') >= 0 || value.indexOf('[') >= 0;
+            html += '<div class="cn-row"><label for="f-' + escapeHtml(k) + '">'
+                + escapeHtml(k) + '</label>';
+            if (longVal)
+            {
+                html += '<textarea id="f-' + escapeHtml(k) + '" name="' + escapeHtml(k)
+                    + '" rows="3">' + escapeHtml(value) + '</textarea>';
+            }
+            else
+            {
+                html += '<input type="text" id="f-' + escapeHtml(k) + '" name="'
+                    + escapeHtml(k) + '" value="' + escapeHtml(value) + '"/>';
+            }
+            html += '</div>';
+        });
+        $('#payload-fields').html(html || '<p class="cn-hint">No payload fields.</p>');
+        $('#btn-apply').prop('disabled', false);
+    }
+
+    function applyPatch()
+    {
+        if (!contractDomId)
+        {
+            showError('Missing ContractDomId.');
+            return;
+        }
+
+        var data = 'Action=Patch&ContractDomId=' + encodeURIComponent(contractDomId);
+        $('#payload-fields').find('input, textarea').each(function()
+        {
+            var name = this.name;
+            if (!name) return;
+            data += '&' + encodeURIComponent(name) + '=' + encodeURIComponent($(this).val());
+        });
+
+        $('#btn-apply').prop('disabled', true);
+        showError('');
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/MockNetworkWui',
+            data: data,
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Patch failed.'));
+                    $('#btn-apply').prop('disabled', false);
+                    return;
+                }
+                window.location.href = backHref();
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+                $('#btn-apply').prop('disabled', false);
+            }
+        });
+    }
+
+    $(document).ready(function()
+    {
+        var params = new URLSearchParams(window.location.search);
+        contractDomId = params.get('ContractDomId') || '';
+        $('#back-link').attr('href', backHref());
+        loadContract();
+    });
+
+</script>
+
+<div class="page">
+    <div class="page-content">
+        <div class="cn-header">
+            <h2 id="page-title">Mock network</h2>
+            <a class="cn-back" id="back-link" href="/domatar/canton/canton.html">&larr; Contract</a>
+        </div>
+
+        <div id="page-error" class="cn-error"></div>
+        <div id="page-ok" class="cn-ok"></div>
+
+        <div class="cn-card">
+            <h3>Mock Canton ACS</h3>
+            <p class="cn-hint">This writes the in-process mock ledger for this contract,
+                same ContractId. It is not a Daml choice and does not go through the handle.</p>
+            <dl class="cn-dl" id="meta-list"></dl>
+            <form id="payload-form" onsubmit="return false;">
+                <div id="payload-fields"></div>
+                <div class="cn-btns">
+                    <button type="button" id="btn-apply" onclick="applyPatch()" disabled>Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

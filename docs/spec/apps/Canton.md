@@ -49,7 +49,9 @@ The Java realisation is `apps/canton/` (Maven module, JAR under
 
   G4  `CantonClient` is the only ledger dependency. `MockCanton` is
       disposable. Replacing it with a real Canton client does not
-      change handlers, WUI, install, or class descriptors.
+      change handlers, install, or class descriptors. The workshop
+      `MockNetworkWui` / `mock-network.html` are `MockCanton`-only
+      and are deleted with the mock.
 
 1.2  Non-goals
 
@@ -475,10 +477,32 @@ links, idempotent install.
     Nav / AsOf payload Attrs.
     That seed is file contents, not submitCreate. Default
     remains empty until the first Create.
-    Save after each successful submitCreate / submitExercise:
-    write \<path\>.tmp then replace (no new JSON libraries —
-    `JsonHashMap` / `Json.toJson` and the existing parse path).
+    Save after each successful submitCreate / submitExercise /
+    patchPayload: write \<path\>.tmp then replace (no new JSON
+    libraries — `JsonHashMap` / `Json.toJson` and the existing
+    parse path).
     Corrupt file: fail construction (do not silently empty).
+
+  Workshop operator (`MockCanton`-only; NOT a `CantonClient`
+  method):
+
+    getContract(contractId) → Contract | null
+        Map lookup, no party filter. The mock-network page
+        loads one row by ContractId.
+
+    patchPayload(contractId, fields)
+        Same ContractId, template, signatories, observers.
+        Merge only keys already on the payload. Then save().
+        This is an in-place issuer/oracle mark, not a
+        consuming choice, so spreadsheet `[domId]` citations
+        keep resolving.
+
+  `CantonClients.mockOrNull()` returns the singleton when it
+  is a `MockCanton`, else null. Handlers still call `get()`
+  only. `MockNetworkWui` is the only caller of `mockOrNull`
+  / `getContract` / `patchPayload`. Do not push the patched
+  row into handle objs (D4); the next Open / GetIou / sheet
+  Parse pulls.
 
   Not in MockCanton: participants, synchronizers, Daml,
   DAR, party allocation, completions, MySQL tables,
@@ -499,15 +523,16 @@ links, idempotent install.
   Later:   ContractImpl → CantonClients.get() → JsonLedgerApiCanton
            (HTTP to Canton's JSON Ledger API)
 
-  Then DELETE MockCanton and canton-mock-*.json. No
-  handler, WUI, or install change if they only ever
-  saw `CantonClient` via `CantonClients.get()`.
+  Then DELETE MockCanton, canton-mock-*.json,
+  `CantonClients.mockOrNull`, `MockNetworkWui`, and
+  `mock-network.html`. No handler or install change if they
+  only ever saw `CantonClient` via `CantonClients.get()`.
 
   Forbidden (makes replacement a rewrite):
 
     * Handlers importing MockCanton or reading its map
     * CantonClient methods the JSON API cannot implement
-      (IouTransfer, persistMock, syncToMysql, ...)
+      (IouTransfer, persistMock, patchPayload, syncToMysql, ...)
     * actId on the client interface
     * Template field names hard-coded in ContractImpl
       instead of TemplateDesc
@@ -648,18 +673,33 @@ the UX filter. It does not replace the ledger.
 
 8.1  WUI
 
-  Translators only ([Writing Apps](Writing-Apps.md) PART 7).
+  Translators only ([Writing Apps](Writing-Apps.md) PART 7),
+  except `MockNetworkWui`.
 
     PartyWui        BindParty / GetParty
     ContractsWui    Sync, Create, list
     IouWui          GetIou, Transfer, Settle, Archive
+    MockNetworkWui  Get, Patch
+                    Plain `HttpServlet`, not a
+                    `DomatarServlet` translator. Talks to
+                    `MockCanton` via `mockOrNull()`, not to
+                    a handle. Same canton app (no new AppId).
 
   Assets: `canton.html` (launcher: bind, create Iou, list
   Symbol/Name/Amount/Owner) and `iou.html?ContractDomId=`
   (every payload Attr, Allocations rendered as a table,
-  Transfer / Settle / Archive).
+  Transfer / Settle / Archive, plus Network which navigates
+  to `mock-network.html?ContractDomId=`).
+  `mock-network.html` edits that contract's payload on the
+  mock ACS (same ContractId). It is not a ledger choice.
+  Successful Apply returns to `iou.html?ContractDomId=`.
+  Failure stays on the page with ErrorMsg.
+  If `mockOrNull()` is null the page reports
+  "Mock Canton is not available".
   Party ids are text fields (`hint::1220…`, maxlength 255),
   not actId pickers. LaunchPath `/domatar/canton/canton.html`.
+  Do not edit Attrs in Navigator. Do not add `Action=Network`
+  on `IouWui`.
 
 8.2  Navigator
 
@@ -679,7 +719,9 @@ the UX filter. It does not replace the ledger.
   handle
   ([Spreadsheet](Spreadsheet.md) PART 7.4). It cannot cite a
   counterparty's handle; that DomId is not theirs. Live fetch
-  still runs hasRights as the spreadsheet owner.
+  still runs hasRights as the spreadsheet owner. After a
+  mock-network `patchPayload`, Parse (or reload GetSheet) on
+  the sheet re-Opens the handle and picks up the new Attrs.
 
 
 ## PART 9 — MODULE LAYOUT
@@ -705,9 +747,11 @@ the UX filter. It does not replace the ledger.
       webui/PartyWui.java
       webui/ContractsWui.java
       webui/IouWui.java
+      webui/MockNetworkWui.java     mock ACS Get / Patch
     src/main/resources/
       META-INF/domatar/app.manifest
       canton/assets/                canton.html, iou.html,
+                                    mock-network.html,
                                     icons/cls/*.svg
 
   Parent pom module apps/canton. platform/war copies the JAR
@@ -715,7 +759,8 @@ the UX filter. It does not replace the ledger.
 
   Manifest AppId=canton, InstallClass=CantonInstall,
   Handler lines for app, party, contracts, iou, contract,
-  Wui lines for the three WUIs.
+  Wui lines for PartyWui, ContractsWui, IouWui, and
+  MockNetworkWui.
 
   How a handler obtains CantonClient: `CantonClients.get()`
   returning the JVM singleton mock (KD11). Later the accessor
@@ -789,6 +834,8 @@ of field names: `IouTemplates`. Install must not drift.
       Amount); the handle is dropped
     * JSON file round-trip: new MockCanton(tmp) after
       create sees the same ACS; nextId continues
+    * patchPayload keeps ContractId, merges existing
+      payload keys only, and reloads from the JSON file
     * --force-recreate reloads canton-mock-{prvId}.json;
       handles remain live
 
@@ -841,8 +888,10 @@ of field names: `IouTemplates`. Install must not drift.
        canton-mock-{prvId}.json on the provider-keys
        volume (5.2). Iou Transfer successor hard-coded.
        ACS visibility filter. Two provider JVMs are two
-       mock networks and two files. Persistence is not
-       on CantonClient.
+       mock networks and two files. Persistence and the
+       workshop in-place `patchPayload` are not on
+       CantonClient. `MockNetworkWui` is the operator
+       face; it is not a handle message.
 
   KD8  First template Iou (PART 10). Generic (canton,
        contract) exists for later templates. The mock
@@ -859,14 +908,17 @@ of field names: `IouTemplates`. Install must not drift.
        default MockCanton. The interface stays a pure
        interface. CantonClients.replaceForTest is
        package-private and JUnit-only.
+       CantonClients.mockOrNull() is workshop WUI only.
 
 
 ## PART 13 — DIRECTION
 
   D1  JsonLedgerApiCanton: HTTP to a real participant.
-      Delete MockCanton and canton-mock-*.json. BindParty
-      becomes a Party the participant actually hosts.
-      getTemplate from package/codegen.
+      Delete MockCanton, canton-mock-*.json,
+      `CantonClients.mockOrNull`, `MockNetworkWui`, and
+      `mock-network.html`. BindParty becomes a Party the
+      participant actually hosts. getTemplate from
+      package/codegen.
 
   D2  Further templates: add TemplateDesc + class/service
       at install (or generate from DAR). Same ContractImpl.
