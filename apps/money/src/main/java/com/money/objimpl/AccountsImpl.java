@@ -8,11 +8,15 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import com.domatar.core.Auth;
+import com.domatar.core.HttpClient;
 import com.domatar.db.ActDb;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
+import com.domatar.log.OpLog;
+import com.domatar.saga.SagaSlot;
 import com.domatar.util.Act;
 import com.domatar.util.JsonArrayList;
+import com.domatar.util.JsonHashMap;
 import com.domatar.util.JsonList;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Lnk;
@@ -37,6 +41,8 @@ import com.domatar.util.DomatarMsgClient;
  */
 public class AccountsImpl extends ObjImpl
 {
+  static final String SAGA_CREDIT_KEY = "SagaCreditKey";
+
   @Override
   public String handleMsg(final String msg, final Obj obj, final String contextPath,
                           final String contextRealPath, final DomatarMsgClient msgClient)
@@ -44,6 +50,10 @@ public class AccountsImpl extends ObjImpl
   {
     final JsonMsg inMsg  = new JsonMsg(msg);
     final String  opr    = inMsg.getOperation();
+
+    if ("Compensate".equals(opr))
+      return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
+
     final JsonMsg outMsg = new JsonMsg();
 
     final DomId accountsDomId = inMsg.getDstId();
@@ -65,6 +75,8 @@ public class AccountsImpl extends ObjImpl
         getAccounts(opr, outMsg, accountsDomId);
       else if ("CreateAccount".equals(opr))
         createAccount(opr, inMsg, outMsg, accountsDomId, msgClient);
+      else if ("Debit".equals(opr))
+        debit(opr, inMsg, outMsg, accountsDomId, msgClient);
       else
         return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
     }
@@ -219,15 +231,66 @@ public class AccountsImpl extends ObjImpl
     outMsg.addResponseBody(opr, out);
   }
 
+  private void debit(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
+                     final DomId accountsDomId, final DomatarMsgClient msgClient)
+      throws DomatarException
+  {
+    final ObjAttrs in = inMsg.getAttrs();
+    final String amountStr = in.getAttr("Amount");
+    final String customerActId = resolveCustomerActId(in.getAttr("CustomerActId"));
+
+    if (customerActId == null || amountStr == null || amountStr.isEmpty())
+    {
+      outMsg.addError(opr, "Missing CustomerActId or Amount");
+      return;
+    }
+
+    final BigDecimal amount = parsePositiveAmount(opr, outMsg, amountStr);
+    if (amount == null)
+      return;
+
+    final DomId acctDomId = acctDomId(accountsDomId, customerActId);
+    final Obj acct = ObjDb.getObj(acctDomId);
+    if (acct == null)
+    {
+      outMsg.addError(opr, "Account not found: " + customerActId);
+      return;
+    }
+
+    final BigDecimal balance = BankImpl.dec(acct.attrs.getAttr("Balance"));
+    if (amount.compareTo(balance) > 0)
+    {
+      outMsg.addError(opr, "Insufficient funds");
+      return;
+    }
+
+    final BigDecimal newBalance = balance.subtract(amount);
+    acct.attrs.addAttr("Balance", newBalance.toPlainString());
+    ObjDb.modifyObj(acct);
+
+    attachDebitSaga(inMsg, msgClient, amount.toPlainString(), customerActId);
+
+    final ObjAttrs out = new ObjAttrs();
+    out.addAttr("Balance", newBalance.toPlainString());
+    outMsg.addResponseBody(opr, out);
+  }
+
   /**
    * Credit — called cross-host by another bank's BankTransfer.
    * Finds or creates the customer's account at this bank and adds Amount.
    * Does NOT touch bank.AvailableFunds (funds arrive from outside).
+   * skipVisit apply (Compensates of Debit) is idempotent on OrigContextId.
    */
   private void credit(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
                       final DomId accountsDomId, final DomatarMsgClient msgClient)
       throws DomatarException
   {
+    if (OpLog.isSkipVisit())
+    {
+      creditCompensateApply(opr, inMsg, outMsg, accountsDomId);
+      return;
+    }
+
     final ObjAttrs in    = inMsg.getAttrs();
     String customerActId = in.getAttr("CustomerActId");
     String customerName  = in.getAttr("CustomerName");
@@ -318,6 +381,114 @@ public class AccountsImpl extends ObjImpl
    * Fire-and-forget: tell the customer's myaccounts about this new account.
    * Errors are silently swallowed — the customer may not have Money installed.
    */
+  private void creditCompensateApply(final String opr, final JsonMsg inMsg,
+      final JsonMsg outMsg, final DomId accountsDomId) throws DomatarException
+  {
+    final ObjAttrs in = inMsg.getAttrs();
+    final String amountStr = in.getAttr("Amount");
+    final String origContextId = in.getAttr("OrigContextId");
+    final String customerActId = resolveCustomerActId(in.getAttr("CustomerActId"));
+
+    if (customerActId == null || amountStr == null || amountStr.isEmpty()
+        || origContextId == null || origContextId.isEmpty())
+    {
+      outMsg.addError(opr, "Missing Amount, CustomerActId, or OrigContextId");
+      return;
+    }
+
+    final BigDecimal amount = parsePositiveAmount(opr, outMsg, amountStr);
+    if (amount == null)
+      return;
+
+    final Obj acct = ObjDb.getObj(acctDomId(accountsDomId, customerActId));
+    if (acct == null)
+    {
+      outMsg.addError(opr, "Account not found: " + customerActId);
+      return;
+    }
+
+    final String already = acct.attrs.getAttr(SAGA_CREDIT_KEY);
+    if (origContextId.equals(already))
+    {
+      final ObjAttrs out = new ObjAttrs();
+      out.addAttr("Balance", acct.attrs.getAttr("Balance"));
+      outMsg.addResponseBody(opr, out);
+      return;
+    }
+
+    final BigDecimal newBalance = BankImpl.dec(acct.attrs.getAttr("Balance"))
+        .add(amount);
+    acct.attrs.addAttr("Balance", newBalance.toPlainString());
+    acct.attrs.addAttr(SAGA_CREDIT_KEY, origContextId);
+    ObjDb.modifyObj(acct);
+
+    final ObjAttrs out = new ObjAttrs();
+    out.addAttr("Balance", newBalance.toPlainString());
+    outMsg.addResponseBody(opr, out);
+  }
+
+  private static void attachDebitSaga(final JsonMsg inMsg,
+      final DomatarMsgClient msgClient, final String amount,
+      final String customerActId) throws DomatarException
+  {
+    if (!(msgClient instanceof HttpClient))
+      return;
+
+    final HttpClient client = (HttpClient) msgClient;
+    final String ctx = client.inboundContext() != null
+        ? client.inboundContext().contextId
+        : (inMsg.getContext() != null ? inMsg.getContext().contextId : null);
+    if (ctx == null)
+      return;
+
+    final JsonHashMap effect = new JsonHashMap();
+    effect.put("Amount", amount);
+    effect.put("CustomerActId", customerActId);
+    effect.put("OrigContextId", ctx);
+    client.attach(SagaSlot.SLOT, SagaSlot.applied("Credit", effect),
+        OpLog.nowMs() + OpLog.sagaTtlMs());
+  }
+
+  private static String resolveCustomerActId(final String raw)
+      throws DomatarException
+  {
+    if (raw == null || raw.isEmpty())
+      return null;
+
+    Act act = ActDb.getAct(raw);
+    if (act == null)
+      act = ActDb.getActByUsrId(raw);
+    return act != null ? act.actId : raw;
+  }
+
+  private static DomId acctDomId(final DomId accountsDomId,
+      final String customerActId) throws DomatarException
+  {
+    return new DomId(accountsDomId.hstId, "money", customerActId,
+        "acct-" + customerActId);
+  }
+
+  private static BigDecimal parsePositiveAmount(final String opr,
+      final JsonMsg outMsg, final String amountStr) throws DomatarException
+  {
+    BigDecimal amount;
+    try
+    {
+      amount = new BigDecimal(amountStr);
+    }
+    catch (final NumberFormatException e)
+    {
+      outMsg.addError(opr, "Amount must be a valid decimal number");
+      return null;
+    }
+    if (amount.compareTo(BigDecimal.ZERO) <= 0)
+    {
+      outMsg.addError(opr, "Amount must be greater than zero");
+      return null;
+    }
+    return amount;
+  }
+
   static void sendRegisterAccount(final DomId acctDomId, final String bankName,
                                    final String customerActId,
                                    final DomatarMsgClient msgClient)

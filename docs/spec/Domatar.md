@@ -572,6 +572,18 @@ Direction (Option C):
   do not INSERT. Current-request `alreadyEntered` /
   `priorVisitCount` are a snapshot taken before this admit.
 
+  `ObjImpl` also handles the platform operations `GetObj`,
+  `GetLnks`, and `Compensate`. `Compensate` (default handler
+  `ObjImpl.compensate`) takes `OrigContextId` and `OrigMsgName`
+  and returns a `CompensateResult` tree (`Outcome`, `Reason`,
+  `Children`). It walks this visit's `op_msg` edges in reverse
+  `Seq`, sending `Compensate` to each child and waiting for the
+  ack, then invokes the class-descriptor `Compensates` Msg
+  in-process under `OpLog.skipVisit` (not a visit, and not
+  `send()`). Dispatch admits `Compensate` with `Compensate.admit`
+  before `handleMsg`; it does not call the subclass `hasRights`
+  for that operation ([Class](platform/Class.md) PART 3).
+
   Direction: richer dynamic policies (owner-match, follower-status,
   ban-list consultation, ...) are each just another branch inside a
   handler's hasRights() override. The class-descriptor object
@@ -703,8 +715,10 @@ Tables, with the columns that matter to the runtime:
        PK (HstId, ContextId, DstDomId, MsgName).
        One admitted `handleMsg` on this host: this object, this Msg,
        this operation. Deny is not a row. `Attachment` is named JSON
-       slots (reserved: `saga`, `payment`); the platform does not
-       interpret Body. `VisitExpiresAt` is visitTTL; a live
+       slots (reserved: `saga`, `payment`). Slot `saga` Body is
+       owned by Compensate: `status`, `compensates`, `effect`
+       (PART 6.3). The platform does not interpret any other slot
+       Body. `VisitExpiresAt` is visitTTL; a live
        `AttachExpiresAt` keeps the row past the visit window. GC is
        per HstId.
 

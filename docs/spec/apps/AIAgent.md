@@ -1475,6 +1475,11 @@ The audit trail is not a security boundary - it is a UX feature.
 Authorization is enforced at the destination (PART 12.3). The
 audit is for the user's confidence and for offline review.
 
+`CompensateResult` (the reply of platform Msg Compensate,
+[Domatar](../Domatar.md) PART 6.3) is v1 evidence of what this
+provider claims happened. A returned causal tree is Direction
+([Security](../platform/Security.md) PART 15).
+
 ## PART 16 — THE ADAPTIVE TOOLSET AND THE DOMATAR PRIMER
 
 The agent exposes two fixed base tools (listApps, useApp) at the
@@ -1776,6 +1781,9 @@ falls into.
 17.3 Write and Destructive confirmation
 
 In Agent mode, the confirmation rule keys off the operation's
+SideEffect. Direction: once Compensates is publisher-signed
+([Security](../platform/Security.md) PART 15), the consent axis
+becomes irreversible / reversible-with-trace. v1 stays on
 SideEffect. With the minimal toolset (PART 16) the fixed read tools
 are Read by construction, and a SendMsg call's SideEffect is
 classified at dispatch time from the target class's descriptor

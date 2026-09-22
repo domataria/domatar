@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
+import com.domatar.log.OpDst;
 import com.domatar.log.OpMsg;
 import com.domatar.util.DomatarException;
 import com.domatar.util.Json;
@@ -303,6 +304,50 @@ public final class OpLogDb
             rset.getLong(7)));
       }
       return out;
+    }
+    catch (final SQLException e)
+    {
+      throw new DomatarException(e);
+    }
+    finally
+    {
+      close(rset, pstmt, null, conn);
+    }
+  }
+
+  public static OpDst getVisit(
+      final String hstId, final String contextId, final String dstDomId,
+      final String msgName) throws DomatarException
+  {
+    DbConnection conn = null;
+    PreparedStatement pstmt = null;
+    ResultSet rset = null;
+
+    try
+    {
+      conn = new DbConnection(OpLogDb.class, "getVisit");
+      pstmt = conn.prepareStatement(
+          "SELECT HstId,ContextId,DstDomId,MsgName,ActId,CallerDomId,Trust,"
+          + "VisitCount,FirstSeenAt,LastSeenAt,VisitExpiresAt,"
+          + "CAST(Attachment AS CHAR CHARACTER SET utf8mb4),AttachExpiresAt"
+          + " FROM op_dst"
+          + " WHERE HstId=? AND ContextId=? AND DstDomId=? AND MsgName=?");
+      pstmt.setString(1, hstId);
+      pstmt.setString(2, contextId);
+      pstmt.setString(3, dstDomId);
+      pstmt.setString(4, msgName);
+      rset = pstmt.executeQuery();
+      if (!rset.next())
+        return null;
+
+      final long attachExp = rset.getLong(13);
+      final Long attachExpiresAt = rset.wasNull() ? null : Long.valueOf(attachExp);
+      return new OpDst(
+          rset.getString(1), rset.getString(2), rset.getString(3),
+          rset.getString(4), rset.getString(5), rset.getString(6),
+          rset.getString(7), rset.getInt(8), rset.getLong(9),
+          rset.getLong(10), rset.getLong(11), rset.getString(12),
+          attachExpiresAt);
     }
     catch (final SQLException e)
     {

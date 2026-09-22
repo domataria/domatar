@@ -178,6 +178,9 @@ JsonMsg inMsg  = new JsonMsg(msg);
 String  opr    = inMsg.getOperation();
 JsonMsg outMsg = new JsonMsg();
 
+if ("Compensate".equals(opr))
+  return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
+
 if (!hasRights(inMsg, obj, msgClient))
   return outMsg.addError(opr, "Unauthorized").toString();
 
@@ -220,6 +223,16 @@ object ([Domatar](../Domatar.md) PART 6.3, PART 7). Handlers query;
 they do not INSERT. `Context.getContextId()` is the current lineage;
 `attach(contextId, msgName, slot, …)` names a past visit. A ContextId
 is not authorization.
+
+A `handleMsg` override that authenticates before the operation
+switch must forward `Compensate` to `super.handleMsg` first (the
+sample above). After a successful compensable effect, attach slot
+`saga` on the original MsgName. `attach(contextId, "Compensate",
+"saga")` is the wrong row: Compensate reads
+`attachment(OrigContextId, OrigMsgName, "saga")`. The Compensates
+Msg must be idempotent from `slot.effect` and `OrigContextId`, not
+only from `slot.status` ([Money](Money.md) PART 6.3,
+[Domatar](../Domatar.md) PART 6.3).
 
 
 ## PART 7 — WUI servlets

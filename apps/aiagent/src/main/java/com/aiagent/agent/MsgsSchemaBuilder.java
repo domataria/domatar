@@ -23,6 +23,7 @@ import com.aiagent.llm.LlmTool;
  *   Structured: "Msgs" is a JsonList. Each element is a JsonMap with fields:
  *                 Name (required), Description, SideEffect, Srv
  *                 (Srv = "srvAppId.srvId" from the resolved descriptor),
+ *                 Compensates (optional MsgName; metadata only),
  *                 Parms (JsonList of {Name, Type, Description}).
  *               Optional parms have a Type ending with "?".
  *
@@ -46,18 +47,28 @@ public final class MsgsSchemaBuilder
    *           Null for plain-text descriptors that have no Srv tag.
    * srvId     The service identifier (e.g. "forsale").
    *           Null for plain-text descriptors.
+   * compensates  Optional undo MsgName from GetCls. Metadata only —
+   *           not a consent signal (SideEffect stays the v1 gate).
    */
   public static class ToolEntry
   {
     public final LlmTool tool;
     public final String  srvAppId;
     public final String  srvId;
+    public final String  compensates;
 
     public ToolEntry(final LlmTool tool, final String srvAppId, final String srvId)
     {
-      this.tool     = tool;
-      this.srvAppId = srvAppId;
-      this.srvId    = srvId;
+      this(tool, srvAppId, srvId, null);
+    }
+
+    public ToolEntry(final LlmTool tool, final String srvAppId, final String srvId,
+                     final String compensates)
+    {
+      this.tool        = tool;
+      this.srvAppId    = srvAppId;
+      this.srvId       = srvId;
+      this.compensates = compensates;
     }
   }
 
@@ -138,10 +149,18 @@ public final class MsgsSchemaBuilder
           }
         }
 
+        // WHY: Compensates is copied as ToolEntry metadata only. LlmTool /
+        // SideEffectClassifier / confirmation still use SideEffect until
+        // publisher-signed descriptors (Spec-Saga KD8). GetCls already
+        // carries the string for Saga.
+        String compensates = msg.getString("Compensates");
+        if (compensates != null && compensates.isEmpty())
+          compensates = null;
+
         result.add(new ToolEntry(
             new LlmTool(name, description,
                 buildSchema(parmNames, parmDescs, required), sideEffect),
-            srvAppId, srvId));
+            srvAppId, srvId, compensates));
       }
       return result;
     }

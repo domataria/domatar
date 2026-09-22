@@ -142,6 +142,67 @@ public class ClsResolver
     return resolvedJson;
   }
 
+  /**
+   * Compensates MsgName for {@code msgName} on a resolved GetCls Attrs map,
+   * or null if absent / empty (irreversible).
+   */
+  public static String compensates(final JsonMap mergedMsgListHolder,
+      final String msgName)
+  {
+    if (mergedMsgListHolder == null || msgName == null || msgName.isEmpty())
+      return null;
+
+    final Object msgsRaw = mergedMsgListHolder.get("Msgs");
+    if (!(msgsRaw instanceof JsonList))
+      return null;
+
+    for (final Object m : (JsonList) msgsRaw)
+    {
+      if (!(m instanceof JsonMap))
+        continue;
+      final JsonMap msg = (JsonMap) m;
+      if (!msgName.equals(msg.getString("Name")))
+        continue;
+      final String compensates = msg.getString("Compensates");
+      if (compensates == null || compensates.isEmpty())
+        return null;
+      return compensates;
+    }
+    return null;
+  }
+
+  /**
+   * Compensates MsgName for a class, via ClsMap then local resolve.
+   * Unknown class or missing field → null (irreversible).
+   */
+  public static String compensates(final String clsAppId, final String clsId,
+      final String msgName, final DomId clsObjHint) throws DomatarException
+  {
+    if (msgName == null || msgName.isEmpty())
+      return null;
+
+    String json = null;
+    if (clsAppId != null && clsId != null)
+      json = ClsMap.get(clsAppId, clsId);
+
+    if (json == null && clsObjHint != null)
+      json = resolve(clsObjHint, clsAppId, clsId);
+
+    if (json == null)
+      return null;
+
+    final JsonMap doc;
+    try
+    {
+      doc = Json.parseMap(json);
+    }
+    catch (final Exception e)
+    {
+      return null;
+    }
+    return compensates(doc, msgName);
+  }
+
   // ---------------------------------------------------------------------------
   // Service flattening (recursive; handles Extends diamond dedup)
   // ---------------------------------------------------------------------------
@@ -312,8 +373,10 @@ public class ClsResolver
    * For each merged message, set "SideEffect" and "Auth" from clsDoc.MsgPolicy
    * matching {Srv, Name}. Class policy wins; otherwise keep the service's
    * declared value; otherwise default to "Write" / "Verified".
+   * Compensates is copied the same way but has no default: absent or empty
+   * omits the key (irreversible).
    */
-  private static void applyMsgPolicy(JsonList mergedMsgs, JsonMap clsDoc)
+  static void applyMsgPolicy(JsonList mergedMsgs, JsonMap clsDoc)
   {
     Object policyRaw = clsDoc.get("MsgPolicy");
     JsonList policy = (policyRaw instanceof JsonList) ? (JsonList) policyRaw : null;
@@ -330,11 +393,19 @@ public class ClsResolver
 
       String sideEffect = (entry != null) ? entry.getString("SideEffect") : null;
       String auth       = (entry != null) ? entry.getString("Auth")       : null;
+      String compensates = (entry != null) ? entry.getString("Compensates") : null;
 
       msg.put("SideEffect", pickDeclared(sideEffect, msg.getString("SideEffect"),
                                           DEFAULT_SIDE_EFFECT));
       msg.put("Auth",       pickDeclared(auth, msg.getString("Auth"),
                                           DEFAULT_AUTH));
+
+      final String picked = pickDeclared(compensates, msg.getString("Compensates"),
+          null);
+      if (picked != null)
+        msg.put("Compensates", picked);
+      else
+        msg.remove("Compensates");
     }
   }
 

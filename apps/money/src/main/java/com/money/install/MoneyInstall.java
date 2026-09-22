@@ -12,6 +12,7 @@ import com.domatar.install.CatalogInstall;
 import com.domatar.install.ClsInstall;
 import com.domatar.install.SrvInstall;
 import com.domatar.util.Lnk;
+import com.domatar.util.Obj;
 import com.domatar.util.ObjAttrs;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
@@ -33,6 +34,7 @@ public class MoneyInstall implements AppInstall
       throws DomatarException
   {
     CatalogInstall.registerInCatalog(prvId, "money");
+    refreshAccountsDescriptors();
   }
 
   @Override
@@ -164,22 +166,7 @@ public class MoneyInstall implements AppInstall
         "{\"Srv\":\"money.bank\",\"Name\":\"GetBank\",\"SideEffect\":\"Read\"}" +
         "]}");
 
-    // money.accounts — bank-side accounts container
-    SrvInstall.addSrvObj(profileId, "money", "accounts",
-        "Bank-side container of all customer accounts at one bank",
-        "{\"SrvAppId\":\"money\",\"SrvId\":\"accounts\",\"Attrs\":[]," +
-        "\"Msgs\":[" +
-        "{\"Name\":\"GetAccounts\",\"Type\":{\"Accounts\":[{\"CustomerActId\":\"String\",\"CustomerName\":\"String\",\"Balance\":\"String\",\"BankActId\":\"String\",\"BankName\":\"String\"}]},\"Parms\":[]}," +
-        "{\"Name\":\"CreateAccount\",\"Parms\":[{\"Name\":\"CustomerActId\",\"Type\":\"String\"},{\"Name\":\"CustomerName\",\"Type\":\"String?\"},{\"Name\":\"BankActId\",\"Type\":\"String\"},{\"Name\":\"BankName\",\"Type\":\"String?\"}],\"Type\":{\"Balance\":\"String\"}}," +
-        "{\"Name\":\"Credit\",\"Parms\":[{\"Name\":\"CustomerActId\",\"Type\":\"String\"},{\"Name\":\"Amount\",\"Type\":\"String\"}],\"Type\":{\"Balance\":\"String\"}}]}");
-
-    ClsInstall.upsertClsImplementing(profileId, "money", "accounts",
-        "Bank-side container of all customer accounts at one bank",
-        "{\"ClsAppId\":\"money\",\"ClsId\":\"accounts\"," +
-        "\"Implements\":[\"money.accounts\"]," +
-        "\"MsgPolicy\":[" +
-        "{\"Srv\":\"money.accounts\",\"Name\":\"GetAccounts\",\"SideEffect\":\"Read\"}" +
-        "]}");
+    upsertAccountsDescriptors(profileId);
 
     // money.account — individual bank account
     SrvInstall.addSrvObj(profileId, "money", "account",
@@ -216,6 +203,54 @@ public class MoneyInstall implements AppInstall
         "\"MsgPolicy\":[" +
         "{\"Srv\":\"money.myaccounts\",\"Name\":\"GetMyAccounts\",\"SideEffect\":\"Read\"}" +
         "]}");
+  }
+
+  private static final String ACCOUNTS_SRV_JSON =
+      "{\"SrvAppId\":\"money\",\"SrvId\":\"accounts\",\"Attrs\":[]," +
+      "\"Msgs\":[" +
+      "{\"Name\":\"GetAccounts\",\"Type\":{\"Accounts\":[{\"CustomerActId\":\"String\",\"CustomerName\":\"String\",\"Balance\":\"String\",\"BankActId\":\"String\",\"BankName\":\"String\"}]},\"Parms\":[]}," +
+      "{\"Name\":\"CreateAccount\",\"Parms\":[{\"Name\":\"CustomerActId\",\"Type\":\"String\"},{\"Name\":\"CustomerName\",\"Type\":\"String?\"},{\"Name\":\"BankActId\",\"Type\":\"String\"},{\"Name\":\"BankName\",\"Type\":\"String?\"}],\"Type\":{\"Balance\":\"String\"}}," +
+      "{\"Name\":\"Debit\",\"Description\":\"Decrease a customer account at this bank.\"," +
+      "\"SideEffect\":\"Write\",\"Compensates\":\"Credit\"," +
+      "\"Parms\":[{\"Name\":\"CustomerActId\",\"Type\":\"String\"},{\"Name\":\"Amount\",\"Type\":\"String\"}]}," +
+      "{\"Name\":\"Credit\",\"Description\":\"Increase a customer account at this bank.\"," +
+      "\"SideEffect\":\"Write\"," +
+      "\"Parms\":[{\"Name\":\"CustomerActId\",\"Type\":\"String\"},{\"Name\":\"Amount\",\"Type\":\"String\"}],\"Type\":{\"Balance\":\"String\"}}]}";
+
+  private static final String ACCOUNTS_CLS_JSON =
+      "{\"ClsAppId\":\"money\",\"ClsId\":\"accounts\"," +
+      "\"Implements\":[\"money.accounts\"]," +
+      "\"MsgPolicy\":[" +
+      "{\"Srv\":\"money.accounts\",\"Name\":\"GetAccounts\",\"SideEffect\":\"Read\"}," +
+      "{\"Srv\":\"money.accounts\",\"Name\":\"Debit\",\"SideEffect\":\"Write\"," +
+      "\"Compensates\":\"Credit\"}," +
+      "{\"Srv\":\"money.accounts\",\"Name\":\"Credit\",\"SideEffect\":\"Write\"}" +
+      "]}";
+
+  static void upsertAccountsDescriptors(final DomId baseId)
+      throws DomatarException
+  {
+    SrvInstall.upsertSrvObj(baseId, "money", "accounts",
+        "Bank-side container of all customer accounts at one bank",
+        ACCOUNTS_SRV_JSON);
+    ClsInstall.upsertClsImplementing(baseId, "money", "accounts",
+        "Bank-side container of all customer accounts at one bank",
+        ACCOUNTS_CLS_JSON);
+  }
+
+  /**
+   * WHY: Setup only calls installProvider for existing users. Re-upsert
+   * money.accounts so Debit Compensates Credit lands on live descriptors.
+   */
+  private static void refreshAccountsDescriptors() throws DomatarException
+  {
+    for (final Obj cls : ObjDb.listClsDescriptors())
+    {
+      if (cls.domId == null || !"money".equals(cls.domId.appId)
+          || !"accountsCls".equals(cls.domId.objId))
+        continue;
+      upsertAccountsDescriptors(cls.domId);
+    }
   }
 
   public static void addLnkIfMissing(final DomId domId,

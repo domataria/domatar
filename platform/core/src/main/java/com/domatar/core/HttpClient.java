@@ -32,6 +32,7 @@ import com.domatar.db.ObjDb;
 import com.domatar.db.OpLogDb;
 import com.domatar.log.OpLog;
 import com.domatar.log.OpMsg;
+import com.domatar.saga.Compensate;
 import com.domatar.util.Base64Encoder;
 import com.domatar.util.Hst;
 import com.domatar.util.Json;
@@ -141,6 +142,21 @@ public class HttpClient implements DomatarMsgClient
   public Context inboundContext()
   {
     return srcContext;
+  }
+
+  public Provenance inboundProvenance()
+  {
+    return prov;
+  }
+
+  public String handlerContextPath()
+  {
+    return srcContextPath;
+  }
+
+  public String handlerContextRealPath()
+  {
+    return srcContextRealPath;
   }
 
   /**
@@ -601,12 +617,26 @@ public class HttpClient implements DomatarMsgClient
       final ObjImpl impl = (ObjImpl) msgHandler;
       msgClient.snapshotPriors(childCtx.contextId, jsonMsg.getDstId().toString(),
           jsonMsg.getOperation());
+      if ("Compensate".equals(jsonMsg.getOperation()))
+      {
+        if (!Compensate.admitInbound(jsonMsg, msgClient, extended,
+            childCtx.actId))
+          return impl.notAuthorized(jsonMsg);
+        OpLog.admitIfNeeded(msgClient, jsonMsg, obj, extended);
+        return msgHandler.handleMsg(jsonMsg.toString(), obj, srcContextPath,
+            srcContextRealPath, msgClient);
+      }
       if (!impl.hasRights(jsonMsg, obj, msgClient))
         return impl.notAuthorized(jsonMsg);
       OpLog.admitIfNeeded(msgClient, jsonMsg, obj, extended);
     }
 
-    return msgHandler.handleMsg(jsonMsg.toString(), obj, srcContextPath, srcContextRealPath, msgClient);
+    final String ret = msgHandler.handleMsg(jsonMsg.toString(), obj,
+        srcContextPath, srcContextRealPath, msgClient);
+    if (msgHandler instanceof ObjImpl
+        && !"Compensate".equals(jsonMsg.getOperation()))
+      Compensate.autoAttachIfNeeded(msgClient, jsonMsg, obj, ret);
+    return ret;
   }
 
   private static String errorMsg(final String operation, final String errorMsg) throws DomatarException

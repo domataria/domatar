@@ -20,7 +20,7 @@ import com.domatar.util.DomatarMsgClient;
  * Routes Money accounts-container operations to the caller's (money, accounts)
  * object.
  *
- * Supported actions: GetAccounts, CreateAccount.
+ * Supported actions: GetAccounts, CreateAccount, Debit, Compensate.
  * (Credit is called internally by AccountImpl.BankTransfer, not from the UI.)
  * Spec: Spec-Money.txt PART 9
  *
@@ -60,6 +60,18 @@ public class MoneyAccountsWui extends DomatarServlet
       attrs.addAttr("CustomerActId",  getParam(req, "CustomerActId"));
       attrs.addAttr("CustomerName",   getParam(req, "CustomerName"));
       attrs.addAttr("InitialBalance", getParam(req, "InitialBalance"));
+    }
+    else if ("Debit".equals(opr))
+    {
+      attrs.addAttr("CustomerActId", getParam(req, "CustomerActId"));
+      attrs.addAttr("Amount",        getParam(req, "Amount"));
+    }
+    else if ("Compensate".equals(opr))
+    {
+      attrs.addAttr("OrigContextId", getParam(req, "OrigContextId"));
+      final String origMsg = getParam(req, "OrigMsgName");
+      attrs.addAttr("OrigMsgName",
+          origMsg != null && !origMsg.isEmpty() ? origMsg : "Debit");
     }
     else
     {

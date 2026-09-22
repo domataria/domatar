@@ -27,6 +27,7 @@ import com.domatar.db.ObjDb;
 import com.domatar.install.DirectoryKeyResolver;
 import com.domatar.install.OfferedHostsInstall;
 import com.domatar.log.OpLog;
+import com.domatar.saga.Compensate;
 import com.domatar.util.Hst;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -216,13 +217,27 @@ public class Msg extends HttpServlet
                     final ObjImpl impl = (ObjImpl) msgHandler;
                     client.snapshotPriors(dispatchContext.contextId,
                         jsonMsg.getDstId().toString(), jsonMsg.getOperation());
-                    if (!impl.hasRights(jsonMsg, obj, client))
+                    if ("Compensate".equals(jsonMsg.getOperation()))
+                    {
+                      if (!Compensate.admitInbound(jsonMsg, client, inboundProv,
+                          dispatchContext.actId))
+                        retMsg = impl.notAuthorized(jsonMsg);
+                      else
+                      {
+                        OpLog.admitIfNeeded(client, jsonMsg, obj, inboundProv);
+                        retMsg = msgHandler.handleMsg(msg, obj, contextPath,
+                            contextRealPath, client);
+                      }
+                    }
+                    else if (!impl.hasRights(jsonMsg, obj, client))
                       retMsg = impl.notAuthorized(jsonMsg);
                     else
                     {
                       OpLog.admitIfNeeded(client, jsonMsg, obj, inboundProv);
                       retMsg = msgHandler.handleMsg(msg, obj, contextPath,
                           contextRealPath, client);
+                      Compensate.autoAttachIfNeeded(client, jsonMsg, obj,
+                          retMsg);
                     }
                   }
                   else

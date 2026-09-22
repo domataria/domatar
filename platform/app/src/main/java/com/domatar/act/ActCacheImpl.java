@@ -26,6 +26,10 @@ public class ActCacheImpl extends ObjImpl
     final JsonMsg outMsg = new JsonMsg();
     final String  opr    = inMsg.getOperation();
 
+    if ("Compensate".equals(opr))
+      return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
+
+
     if (!hasRights(inMsg, obj, msgClient))
       return notAuthorized(inMsg);
 

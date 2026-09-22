@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.domatar.install.OpLogInstall;
+import com.domatar.log.OpDst;
 import com.domatar.log.OpMsg;
 import com.domatar.util.DomatarException;
 
@@ -111,6 +112,32 @@ public class OpLogDbTest
         hst, ctx));
     assertEquals("ACCOUNT", scalar("SELECT Trust FROM op_dst WHERE HstId=? AND ContextId=?",
         hst, ctx));
+  }
+
+  @Test
+  public void getVisit_roundTrip() throws Exception
+  {
+    assertTrue(OpLogDb.upsertVisit(hst, ctx, dst, "Ping", "actA", src,
+        "ACCOUNT", now, TTL));
+    final OpDst v = OpLogDb.getVisit(hst, ctx, dst, "Ping");
+    assertEquals(hst, v.hstId);
+    assertEquals(ctx, v.contextId);
+    assertEquals(dst, v.dstDomId);
+    assertEquals("Ping", v.msgName);
+    assertEquals("actA", v.actId);
+    assertEquals(src, v.callerDomId);
+    assertEquals("ACCOUNT", v.trust);
+    assertEquals(1, v.visitCount);
+    assertEquals(now, v.firstSeenAt);
+    assertEquals(now, v.lastSeenAt);
+    assertEquals(now + TTL, v.visitExpiresAt);
+    assertNull(v.attachExpiresAt);
+  }
+
+  @Test
+  public void getVisit_missingIsNull() throws Exception
+  {
+    assertNull(OpLogDb.getVisit(hst, ctx, dst, "Ping"));
   }
 
   @Test

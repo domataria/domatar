@@ -11,7 +11,7 @@ import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
 
 /**
- * Operation-log facade: skipVisit nesting, visit TTL, and visit admit.
+ * Operation-log facade: skipVisit nesting, visit TTL, saga TTL, and visit admit.
  */
 public final class OpLog
 {
@@ -51,6 +51,11 @@ public final class OpLog
   public static long visitTtlMs()
   {
     return DomatarConfig.getVisitTtlMs();
+  }
+
+  public static long sagaTtlMs()
+  {
+    return DomatarConfig.getSagaTtlMs();
   }
 
   public static long nowMs()

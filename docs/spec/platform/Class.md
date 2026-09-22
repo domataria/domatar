@@ -101,6 +101,7 @@ Navigator, WUI builders, and the AI Agent see one schema per class.
         "Name"        : "<msgName>",
         "Description" : "<sentence or short paragraph>",
         "SideEffect"  : "Read" | "Write" | "Destructive",
+        "Compensates" : "<msgName>",
         "Auth"        : "Public" | "Verified" | "Owner" | "Follower" | "<policy>",
         "Type"        : <type>,
         "Parms" : [
@@ -147,6 +148,18 @@ Fields:
                                               persistent state.
                                "Destructive" — the operation deletes or
                                               irrevocably transforms data.
+
+                 Compensates (optional) The MsgName on this class that
+                             semantically undoes this message. Absent means
+                             the message is irreversible. The named target
+                             MUST NOT itself declare Compensates (a
+                             compensation is a leaf; Credit has none).
+                             The string is provider-asserted. It is not a
+                             consent signal until descriptors are
+                             publisher-signed ([Security](Security.md)
+                             PART 15). Compensate reads it after children
+                             and invokes that Msg in-process
+                             ([Domatar](../Domatar.md) PART 6.3).
 
                  Auth        (optional) The minimum authorization level required:
                                "Public"    — no authentication needed.
@@ -195,7 +208,8 @@ Recommended practice for new classes:
   1. Write a Description of 1–5 sentences.
   2. Fill in Conventions.ObjId, Conventions.Owner, and
      Conventions.Containment.
-  3. For every Msg, set SideEffect and Auth explicitly; add a Description
+  3. For every Msg, set SideEffect and Auth explicitly; set
+     Compensates when the message is reversible; add a Description
      of 1–2 sentences.
   4. For Parms that might be ambiguous, add a one-line Description.
 
@@ -666,11 +680,12 @@ Attrs:
         "Name"        : "String",
         "Description" : "String",
         "SideEffect"  : "String",
+        "Compensates" : "String",
         "Auth"        : "String",
         "Type"        : "String",
         "Parms"       : [{ "Name" : "String", "Type" : "String", "Description" : "String" }]
       }],
-      "Description" : "Array of message definitions; each entry has Name, Type, Parms, and optional Description/SideEffect/Auth."
+      "Description" : "Array of message definitions; each entry has Name, Type, Parms, and optional Description/SideEffect/Compensates/Auth."
     }
   ],
   "Msgs" : [
@@ -689,6 +704,7 @@ Attrs:
           "Name"        : "String",
           "Description?": "String",
           "SideEffect?" : "String",
+          "Compensates?": "String",
           "Auth?"       : "String",
           "Type"        : "String",
           "Parms"       : [{ "Name" : "String", "Type" : "String", "Description?" : "String" }]
@@ -744,9 +760,12 @@ ClsMap.
 Implemented in this version:
 
   * Agent-friendly fields: Description, Conventions, per-Attr Description,
-    per-Msg Description / SideEffect / Auth, per-Parm Description
-    (PART 3 / PART 3.1). Used by the AI Agent tool catalogue
-    ([AI Agent](../apps/AIAgent.md) PART 16).
+    per-Msg Description / SideEffect / Compensates / Auth, per-Parm
+    Description (PART 3 / PART 3.1). Used by the AI Agent tool catalogue
+    ([AI Agent](../apps/AIAgent.md) PART 16). Compensates is metadata
+    for Compensate ([Domatar](../Domatar.md) PART 6.3); consent stays
+    on SideEffect until publisher-signed descriptors
+    ([Security](Security.md) PART 15).
 
   * GetCls on (domatar, cls) returns the resolved Attrs document
     (ClsImpl; [AI Agent](../apps/AIAgent.md) PART 16.1).

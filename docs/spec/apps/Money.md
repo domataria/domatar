@@ -340,6 +340,24 @@ hasRights (general): bank user only, EXCEPT for Credit (see Credit below).
           may not have Money installed yet, or may install it later)
       e. Return { AccountDomId }.
 
+  Debit
+    In:  CustomerActId, Amount (decimal string > "0.00")
+    Out: { Balance }
+    Who: bank user (same hasRights as GetAccounts).
+    Compensates: Credit.
+
+    Steps:
+      a. Find the existing (money, account) for CustomerActId.
+         Missing account or Amount greater than Balance is an error;
+         no saga slot is attached.
+      b. Subtract Amount from account.Balance.
+      c. Attach slot "saga" on this Debit visit:
+           status = applied
+           compensates = Credit
+           effect = { Amount, CustomerActId, OrigContextId }
+           OrigContextId is the current client contextId.
+         ExpiresAt is now + sagaTTL.
+
   Credit   (called cross-host by another bank performing a BankTransfer)
     In:  CustomerActId, CustomerName, Amount (decimal string > "0.00")
     Out: { Balance }
@@ -357,7 +375,14 @@ hasRights (general): bank user only, EXCEPT for Credit (see Credit below).
       c. Return { Balance: <new balance> }.
 
     Note: Credit does NOT touch bank.AvailableFunds or bank.TotalFunds.
-    The funds arrive from outside this bank's ledger.
+    The funds arrive from outside this bank's ledger. Credit declares
+    no Compensates. When Compensate applies Credit in-process
+    (OpLog.skipVisit), the apply is idempotent on OrigContextId:
+    the account attr SagaCreditKey stores the last applied
+    OrigContextId, and a second apply with the same id returns the
+    current Balance without adding Amount again. A normal
+    BankTransfer Credit (skipVisit false) is unchanged and does not
+    write SagaCreditKey.
 
 6.4  AccountImpl   (money, account)
 -------------------------------------
@@ -467,6 +492,7 @@ hasRights (RegisterAccount): any authenticated user.
   (money, bank)       SetFunds           bank user
   (money, accounts)   GetAccounts        bank user
   (money, accounts)   CreateAccount      bank user
+  (money, accounts)   Debit              bank user
   (money, accounts)   Credit             any authenticated Domatar user
   (money, account)    GetAccount         bank user OR owning customer
   (money, account)    Deposit            bank user
@@ -573,6 +599,10 @@ to the handler.  Omitting it lets the dispatcher load the object normally.)
     Action=GetAccounts   → dst = money-<actId>.money.<actId>.accounts / GetAccounts
     Action=CreateAccount → dst = (same) / CreateAccount
                            Params: CustomerActId, CustomerName, InitialBalance
+    Action=Debit         → dst = (same) / Debit
+                           Params: CustomerActId, Amount
+    Action=Compensate    → dst = (same) / Compensate
+                           Params: OrigContextId, OrigMsgName (default Debit)
     Action=Credit        → dst = money-<destBankActId>.money.<destBankActId>.accounts
                            Params: CustomerActId, CustomerName, Amount
                            (called internally by AccountImpl.BankTransfer, not by UI)

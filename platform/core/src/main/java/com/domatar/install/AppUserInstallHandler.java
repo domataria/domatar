@@ -59,6 +59,10 @@ public class AppUserInstallHandler extends ObjImpl
   {
     JsonMsg inMsg  = new JsonMsg(msg);
     String  opr    = inMsg.getOperation();
+
+    if ("Compensate".equals(opr))
+      return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
+
     JsonMsg outMsg = new JsonMsg();
 
     if ("InstallUser".equals(opr))

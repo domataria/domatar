@@ -39,6 +39,10 @@ public class HostImpl extends ObjImpl
   {
     final JsonMsg inMsg  = new JsonMsg(msg);
     final String  opr    = inMsg.getOperation();
+
+    if ("Compensate".equals(opr))
+      return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
+
     final JsonMsg outMsg = new JsonMsg();
 
     if (!hasRights(inMsg, obj, msgClient))
