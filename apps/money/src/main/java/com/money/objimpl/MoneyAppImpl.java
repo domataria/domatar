@@ -76,7 +76,7 @@ public class MoneyAppImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
     // Allow access: owner check is deferred to sub-object operations.
     return true;

@@ -51,7 +51,7 @@ public class MyAccountsImpl extends ObjImpl
     if ("RegisterAccount".equals(opr))
     {
       // Open to any authenticated user (a bank calling on the customer's behalf).
-      if (!Auth.isVerified(inMsg))
+      if (!Auth.isVerified(msgClient))
         return notAuthorized(inMsg);
       registerAccount(opr, inMsg, outMsg, myAccountsDomId);
     }
@@ -77,7 +77,7 @@ public class MyAccountsImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
     if (obj == null)
       return false;

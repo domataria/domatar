@@ -71,7 +71,7 @@ public class QuipImpl extends ObjImpl
   public boolean hasRights(final JsonMsg inMsg, final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return Auth.isVerified(inMsg);
+    return Auth.isVerified(msgClient);
   }
 
   private void getQuip(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
@@ -135,7 +135,7 @@ public class QuipImpl extends ObjImpl
                                final Obj obj, final DomatarMsgClient msgClient) throws DomatarException
   {
     // Only the owner of the quip can delete its children
-    if (obj.domId.actId.equals(inMsg.getContext().actId))
+    if (obj.domId.actId.equals(Auth.actId(msgClient)))
     {
       final DomId dstDomId = inMsg.getDstId();
       final String childIdStr = inMsg.getAttrs().getAttr("ChildQuipId");
@@ -211,7 +211,7 @@ public class QuipImpl extends ObjImpl
   private void deleteQuip(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
                           final Obj obj, final DomatarMsgClient msgClient) throws DomatarException
   {
-    if (!obj.domId.actId.equals(inMsg.getContext().actId))
+    if (!obj.domId.actId.equals(Auth.actId(msgClient)))
     {
       outMsg.addError(opr, "Not authorized");
       return;

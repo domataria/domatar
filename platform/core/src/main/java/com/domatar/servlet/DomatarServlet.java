@@ -18,10 +18,9 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import com.domatar.core.BrowserSession;
 import com.domatar.core.Context;
-import com.domatar.core.Trust;
 import com.domatar.core.HttpClient;
-import com.domatar.core.LoginRemote;
 import com.domatar.core.DomatarConfig;
 import com.domatar.db.DbConnection;
 import com.domatar.util.Act;
@@ -159,64 +158,25 @@ public abstract class DomatarServlet extends HttpServlet
           contextRealPath = contextRealPath.substring(0, contextRealPath.length() - 1);
       }
 
-      Act act;
+      final BrowserSession session = HttpClient.openBrowserSession(
+          isAnonymousAccess(req), usrId, token, usrIp, httpHeaders,
+          srcDomain, contextPath, contextRealPath, prvHstId);
 
-      if (isAnonymousAccess(req))
-        act = new Act("act@act", "act@act", "Act", null);
-      else
+      if (session == null)
       {
-        // Pre-verify context: unverified by definition - we are CALLING
-        // verifyLogin, not having been verified yet.
-        final Context loginContext = new Context(null,
-                                                 usrId,
-                                                 null,
-                                                 usrIp,
-                                                 token,
-                                                 Trust.NONE,
-                                                 null,
-                                                 httpHeaders);
+        final JsonMsg errorMsg = new JsonMsg();
 
-        final DomId loginDomId = new DomId(prvHstId, "act", "login@act", "loginObj");
+        errorMsg.addError("", "Not Logged in");
 
-        final DomatarMsgClient loginMsgClient = new HttpClient(loginDomId,
-                                                               srcDomain,
-                                                               loginContext,
-                                                               contextPath,
-                                                               contextRealPath);
+        out.print(errorMsg.getWui());
 
-        act = LoginRemote.verifyLogin(usrId, null, token, usrIp, loginMsgClient);
-
-        if (act == null)
-        {
-          final JsonMsg errorMsg = new JsonMsg();
-
-          errorMsg.addError("", "Not Logged in");
-
-          out.print(errorMsg.getWui());
-
-          return;
-        }
+        return;
       }
 
-      final DomId srcDomId = new DomId(prvHstId, "ui", act.actId, "uiObj");
-
-      // Trust boundary: cookie/token matched the local act table. Stamp
-      // Trust.ACCOUNT so downstream handlers authorize via isVerified() —
-      // no per-handler DB hit.
-      final Context context = new Context(act.actId,
-                                          usrId,
-                                          act.usrName,
-                                          usrIp,
-                                          token,
-                                          Trust.ACCOUNT,
-                                          null,
-                                          httpHeaders);
-
-      final HttpClient msgClient = new HttpClient(srcDomId,
-                                                  srcDomain,
-                                                  context,
-                                                  contextPath,
-                                                  contextRealPath);
+      final Act act = session.act();
+      final Context context = session.context();
+      final DomId srcDomId = session.srcDomId();
+      final DomatarMsgClient msgClient = session.client();
 
       final JsonMsg msg = getMsg(req, srcDomId, context, act, msgClient);
 
@@ -227,7 +187,7 @@ public abstract class DomatarServlet extends HttpServlet
         return;
       }
 
-      final JsonMsg retMsg = msgClient.root(msg.getDstId(), msg);
+      final JsonMsg retMsg = session.root(msg.getDstId(), msg);
 
       final JsonList jsonCookies = retMsg.getCookies();
 

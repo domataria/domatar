@@ -78,7 +78,7 @@ public class AppstoreRegistryImpl extends ObjImpl
 
     if ("SearchApps".equals(op) || "GetListing".equals(op)
         || "RegisterOffer".equals(op) || "WithdrawOffer".equals(op))
-      return Auth.isVerified(inMsg);
+      return Auth.isVerified(msgClient);
 
     return super.hasRights(inMsg, obj, msgClient);
   }

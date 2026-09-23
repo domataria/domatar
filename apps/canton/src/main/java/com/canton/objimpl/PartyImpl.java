@@ -52,7 +52,7 @@ public class PartyImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return CantonAuth.isVerifiedOwner(inMsg, obj);
+    return CantonAuth.isVerifiedOwner(inMsg, obj, msgClient);
   }
 
   private static void getParty(final String opr, final Obj obj,

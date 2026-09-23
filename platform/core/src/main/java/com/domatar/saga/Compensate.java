@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
+import com.domatar.core.Auth;
 import com.domatar.core.ClsResolver;
-import com.domatar.core.HttpClient;
-import com.domatar.crypto.Provenance;
+import com.domatar.core.Context;
 import com.domatar.db.OpLogDb;
 import com.domatar.log.OpDst;
 import com.domatar.log.OpLog;
@@ -15,6 +15,7 @@ import com.domatar.log.OpMsg;
 import com.domatar.pay.Payment;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
+import com.domatar.util.DomatarMsgClient;
 import com.domatar.util.JsonMap;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -29,7 +30,7 @@ public final class Compensate
   @FunctionalInterface
   interface ChildSender
   {
-    JsonMsg send(HttpClient client, DomId dst, JsonMsg msg)
+    JsonMsg send(DomatarMsgClient client, DomId dst, JsonMsg msg)
         throws DomatarException;
   }
 
@@ -69,19 +70,12 @@ public final class Compensate
         && inboundSrcDomId.equals(visit.callerDomId);
   }
 
-  public static String inboundSrcDomId(final HttpClient client,
-      final Provenance prov) throws DomatarException
+  public static boolean admitInbound(final JsonMsg inMsg, final DomatarMsgClient client)
+      throws DomatarException
   {
-    if (prov == null || prov.isEmpty())
-      return client.getSrcId().toString();
+    if (!Auth.isPlatformClient(client) || inMsg == null)
+      return false;
 
-    return prov.path().last().srcDomId;
-  }
-
-  public static boolean admitInbound(final JsonMsg inMsg,
-      final HttpClient client, final Provenance prov,
-      final String verdictActId) throws DomatarException
-  {
     final String origMsgName = inMsg.getAttr("OrigMsgName");
     if (origMsgName == null || origMsgName.isEmpty())
       return false;
@@ -92,13 +86,23 @@ public final class Compensate
         : OpLogDb.getVisit(dst.hstId, origContextId, dst.toString(), origMsgName);
     final JsonMap slot = SagaSlot.parse(
         client.attachment(origContextId, origMsgName, SagaSlot.SLOT));
-    return admit(origMsgName, visit, slot, verdictActId,
-        inboundSrcDomId(client, prov));
+    return admit(origMsgName, visit, slot, Auth.actId(client),
+        Auth.callerDomId(client));
   }
 
   public static String run(final ObjImpl impl, final JsonMsg inMsg,
-      final Obj obj, final HttpClient client) throws DomatarException
+      final Obj obj, final DomatarMsgClient client) throws DomatarException
   {
+    if (!Auth.isPlatformClient(client))
+    {
+      return reply(CompensateResult.failed(
+          inMsg != null ? inMsg.getAttr("OrigContextId") : null,
+          inMsg != null && inMsg.getDstId() != null
+              ? inMsg.getDstId().toString() : null,
+          inMsg != null ? inMsg.getAttr("OrigMsgName") : null,
+          "client"));
+    }
+
     final String origContextId = inMsg.getAttr("OrigContextId");
     final String origMsgName = inMsg.getAttr("OrigMsgName");
     final DomId dstId = inMsg.getDstId();
@@ -215,7 +219,7 @@ public final class Compensate
     return reply(ok);
   }
 
-  public static void autoAttachIfNeeded(final HttpClient client,
+  public static void autoAttachIfNeeded(final DomatarMsgClient client,
       final JsonMsg inMsg, final Obj obj, final String retMsg)
       throws DomatarException
   {
@@ -234,8 +238,7 @@ public final class Compensate
     if (compensates == null || compensates.isEmpty())
       return;
 
-    final String ctx = client.inboundContext() != null
-        ? client.inboundContext().contextId : null;
+    final String ctx = client.contextId();
     if (ctx == null)
       return;
 
@@ -248,7 +251,7 @@ public final class Compensate
   }
 
   private static CompensateResult invokeCompensates(final ObjImpl impl,
-      final Obj obj, final HttpClient client, final JsonMsg inMsg,
+      final Obj obj, final DomatarMsgClient client, final JsonMsg inMsg,
       final String compensatesName, final JsonMap slot,
       final String origContextId, final String dstDomId,
       final String origMsgName) throws DomatarException
@@ -258,13 +261,14 @@ public final class Compensate
     {
       final JsonMsg apply = new JsonMsg();
       final DomId dst = inMsg.getDstId();
-      if (dst != null && client.inboundContext() != null)
-        apply.addRequestHead(client.getSrcId(), dst, client.inboundContext());
+      final Context stamped = Auth.stampedContext(client);
+      if (dst != null && stamped != null)
+        apply.addRequestHead(client.getSrcId(), dst, stamped);
       if (obj != null && obj.clsAppId != null && obj.clsId != null)
         apply.addClsId(obj.clsAppId, obj.clsId);
       apply.addRequestBody(compensatesName, effectAttrs(slot));
-      if (client.inboundContext() != null)
-        apply.setContext(client.inboundContext());
+      if (stamped != null)
+        apply.setContext(stamped);
 
       if (!impl.hasRights(apply, obj, client))
       {
@@ -276,7 +280,7 @@ public final class Compensate
       }
 
       final String applyRet = impl.handleMsg(apply.toString(), obj,
-          client.handlerContextPath(), client.handlerContextRealPath(), client);
+          Auth.contextPath(client), Auth.contextRealPath(client), client);
       final JsonMsg applyMsg = new JsonMsg(applyRet);
       if (applyMsg.isFailure() || applyMsg.getErrorMsg() != null)
       {
@@ -342,7 +346,7 @@ public final class Compensate
     }
   }
 
-  private static JsonMsg defaultSendChild(final HttpClient client,
+  private static JsonMsg defaultSendChild(final DomatarMsgClient client,
       final DomId dst, final JsonMsg msg) throws DomatarException
   {
     return client.send(dst, msg);

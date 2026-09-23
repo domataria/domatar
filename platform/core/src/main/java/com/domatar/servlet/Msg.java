@@ -11,28 +11,15 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import com.domatar.core.Context;
 import com.domatar.core.HttpClient;
-import com.domatar.core.ImplMap;
 import com.domatar.core.RequestContext;
-import com.domatar.core.Trust;
 import com.domatar.core.DomatarConfig;
 import com.domatar.crypto.Provenance;
 import com.domatar.crypto.SecWire;
-import com.domatar.crypto.Verdict;
-import com.domatar.db.ActDb;
 import com.domatar.db.DbConnection;
-import com.domatar.db.HstDb;
-import com.domatar.db.ObjDb;
-import com.domatar.install.DirectoryKeyResolver;
 import com.domatar.install.OfferedHostsInstall;
-import com.domatar.util.Hst;
 import com.domatar.util.JsonMsg;
-import com.domatar.util.Obj;
-import com.domatar.util.ObjImpl;
 import com.domatar.util.DomatarException;
-import com.domatar.util.DomatarInterface;
-import com.domatar.util.DomId;
 
 /**
  * Servlet implementation class Msg
@@ -43,9 +30,6 @@ public class Msg extends HttpServlet
   private static final long serialVersionUID = -1048792698141910023L;
 
   private static String dbConnection = null;
-  // This server's own hstId (from DOMATAR_HSTID); used to decide whether an incoming
-  // DomId can be served here (i.e. its hst.PrvId equals this value).
-  private static String prvHstId = null;
 
   @Override
   public void init(ServletConfig config)
@@ -54,8 +38,6 @@ public class Msg extends HttpServlet
     super.init(config);
 
     final ServletContext servletContext = getServletContext();
-
-    prvHstId = DomatarConfig.getHstId();
 
     final String dbOverride = DomatarConfig.getDbUrlOverride();
 
@@ -95,12 +77,9 @@ public class Msg extends HttpServlet
    *    Verdict; informational fields come from the wire Context. We never
    *    trust the wire's ActId, Verified, contextId, or DomIdPath.
    *
-   *  - AUTHORIZATION and the visit: {@link HttpClient#deliverLocal}, the
-   *    same in-process path as a same-JVM send. It runs hasRights (or
-   *    Compensate.admit), writes op_dst, and calls handleMsg. It does
-   *    not append a hop and does not write op_msg. {@code
-   *    requiresPath()} stays here: a non-ACCOUNT verdict is fatal for
-   *    that class (KD14).
+   *  - DELIVERY: {@link HttpClient#receive} verifies the chain, stamps
+   *    trust, applies requiresPath, and delivers in-process. It does
+   *    not append a hop and does not write op_msg.
    *
    * Unsigned HTTP messages (no {@code Sec=} parameter, empty path, or
    * unsigned hop 0) are rejected. "Unsigned is allowed" would be a
@@ -144,9 +123,6 @@ public class Msg extends HttpServlet
 
           final JsonMsg jsonMsg = new JsonMsg(msg);
 
-          final DomId dstDomId = jsonMsg.getDstId();
-          final boolean directory = isDirectoryDispatch(jsonMsg);
-
           Provenance inboundProv;
           try
           {
@@ -158,62 +134,9 @@ public class Msg extends HttpServlet
             inboundProv = null;
           }
 
-          if (inboundProv != null && !directory && inboundProv.isUnsignedHttp())
-          {
-            retMsg = errorMsg(jsonMsg.getOperation(), "Unsigned message");
-          }
-          else if (inboundProv != null)
-          {
-            final Verdict verdict = verifyInbound(inboundProv, jsonMsg);
-
-            final Context dispatchContext = stampFromVerdict(jsonMsg, verdict);
-            jsonMsg.setContext(dispatchContext);
-
-            String clsAppId = jsonMsg.getClsAppId();
-            String clsId    = jsonMsg.getClsId();
-            Obj    obj      = null;
-
-            if (clsAppId == null || clsId == null)
-            {
-              obj = ObjDb.getObj(dstDomId);
-
-              if (obj != null)
-              {
-                clsAppId = obj.clsAppId;
-                clsId    = obj.clsId;
-              }
-            }
-
-            if (obj == null && (clsAppId == null || clsId == null))
-            {
-              final Hst hst = HstDb.getHst(dstDomId.hstId);
-
-              if (hst == null || hst.prvId == null || !hst.prvId.equals(prvHstId))
-                retMsg = errorMsg(jsonMsg.getOperation(), "Hst not found");
-              else
-                retMsg = errorMsg(jsonMsg.getOperation(), "Obj not found");
-            }
-            else
-            {
-              final DomatarInterface msgHandler = ImplMap.get(clsAppId, clsId);
-
-              if (msgHandler != null)
-              {
-                if (msgHandler instanceof ObjImpl
-                    && ((ObjImpl) msgHandler).requiresPath()
-                    && verdict.trust != Trust.ACCOUNT)
-                {
-                  System.out.println("WARN: requiresPath: " + verdict.reason);
-                  retMsg = errorMsg(jsonMsg.getOperation(), "Not authorized");
-                }
-                else
-                  retMsg = HttpClient.deliverLocal(dstDomId, jsonMsg, dispatchContext,
-                      srcDomain, contextPath, contextRealPath, inboundProv);
-              }
-              else
-                retMsg = errorMsg(jsonMsg.getOperation(), "Handler not found");
-            }
-          }
+          if (inboundProv != null)
+            retMsg = HttpClient.receive(jsonMsg, inboundProv, srcDomain,
+                contextPath, contextRealPath);
         }
         catch (DomatarException e)
         {
@@ -265,51 +188,6 @@ public class Msg extends HttpServlet
       // Non-fatal: mTLS enforcement in handlers will simply see null.
       System.out.println("WARN: extractClientCert failed: " + e);
     }
-  }
-
-  private Verdict verifyInbound(final Provenance prov, final JsonMsg jsonMsg)
-      throws DomatarException
-  {
-    if (isDirectoryDispatch(jsonMsg))
-      return Verdict.none("directory carve-out");
-
-    int fpVersion = 1;
-    Long localBindingVersion = null;
-    final String hopActId = prov.hop0ActId();
-
-    if (hopActId != null)
-    {
-      fpVersion = ActDb.getFpVersion(hopActId);
-      final ActDb.BindingRow local = ActDb.getBindingRow(hopActId);
-      if (local != null)
-        localBindingVersion = Long.valueOf(local.version);
-    }
-
-    return prov.verify(jsonMsg.getBodyMap(), DirectoryKeyResolver.INSTANCE,
-                       fpVersion, localBindingVersion);
-  }
-
-  private static boolean isDirectoryDispatch(final JsonMsg jsonMsg)
-      throws DomatarException
-  {
-    return "hst".equals(jsonMsg.getClsAppId())
-        && "hsts".equals(jsonMsg.getClsId());
-  }
-
-  private static Context stampFromVerdict(final JsonMsg jsonMsg,
-                                          final Verdict verdict)
-      throws DomatarException
-  {
-    final Context wireCtx = jsonMsg.getContext();
-
-    return new Context(verdict.actId,
-                       wireCtx == null ? null : wireCtx.usrId,
-                       wireCtx == null ? null : wireCtx.usrName,
-                       wireCtx == null ? null : wireCtx.usrIp,
-                       wireCtx == null ? null : wireCtx.token,
-                       verdict.trust,
-                       verdict.contextId,
-                       wireCtx == null ? null : wireCtx.httpHeaders);
   }
 
   private static String errorMsg(final String operation, final String errorMsg) throws ServletException

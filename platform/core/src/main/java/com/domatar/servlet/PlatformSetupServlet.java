@@ -4,6 +4,7 @@
 
 package com.domatar.servlet;
 
+import com.domatar.core.SetupServlet;
 import com.domatar.app.App;
 import com.domatar.app.AppRegistry;
 import com.domatar.core.DomatarConfig;

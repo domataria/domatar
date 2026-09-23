@@ -49,7 +49,7 @@ public class HostImpl extends ObjImpl
       return notAuthorized(inMsg);
 
     if ("UpdateHst".equals(opr))
-      updateHst(opr, inMsg, outMsg, obj);
+      updateHst(opr, inMsg, outMsg, obj, msgClient);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -60,14 +60,14 @@ public class HostImpl extends ObjImpl
   public boolean hasRights(final JsonMsg inMsg, final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return Auth.isVerified(inMsg);
+    return Auth.isVerified(msgClient);
   }
 
-  private boolean isOwner(final JsonMsg inMsg, final Obj obj) throws DomatarException
+  private boolean isOwner(final DomatarMsgClient msgClient, final Obj obj)
   {
-    final Context ctx = inMsg.getContext();
-    return ctx != null && ctx.actId != null
-        && obj != null && ctx.actId.equals(obj.domId.actId);
+    final String actId = Auth.actId(msgClient);
+    return actId != null && obj != null && obj.domId != null
+        && actId.equals(obj.domId.actId);
   }
 
   /**
@@ -77,10 +77,11 @@ public class HostImpl extends ObjImpl
    * The hstId is derived from the obj row's ObjId (strip "host-" prefix).
    */
   private void updateHst(final String opr, final JsonMsg inMsg,
-                         final JsonMsg outMsg, final Obj obj)
+                         final JsonMsg outMsg, final Obj obj,
+                         final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isOwner(inMsg, obj))
+    if (!isOwner(msgClient, obj))
     {
       outMsg.addError(opr, "Not authorized");
       return;

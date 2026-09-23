@@ -26,6 +26,8 @@ import com.domatar.crypto.CanonicalJson;
 import com.domatar.crypto.Path;
 import com.domatar.crypto.Provenance;
 import com.domatar.crypto.SecWire;
+import com.domatar.crypto.Verdict;
+import com.domatar.install.DirectoryKeyResolver;
 import com.domatar.db.ActDb;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
@@ -33,6 +35,7 @@ import com.domatar.db.OpLogDb;
 import com.domatar.log.OpLog;
 import com.domatar.log.OpMsg;
 import com.domatar.saga.Compensate;
+import com.domatar.util.Act;
 import com.domatar.util.Base64Encoder;
 import com.domatar.util.Hst;
 import com.domatar.util.Json;
@@ -93,7 +96,7 @@ public class HttpClient implements DomatarMsgClient
     }
   }
 
-  public HttpClient(DomId domId, String domain, Context context, String contextPath, String contextRealPath)
+  HttpClient(DomId domId, String domain, Context context, String contextPath, String contextRealPath)
   {
     this(domId, domain, context, contextPath, contextRealPath, Provenance.empty(), true);
   }
@@ -103,7 +106,7 @@ public class HttpClient implements DomatarMsgClient
    * carrying the verified chain. The returned client can only extend
    * that chain; it cannot root.
    */
-  public static HttpClient inbound(final DomId dstDomId,
+  static HttpClient inbound(final DomId dstDomId,
                                    final String srcDomain,
                                    final Context stampedCtx,
                                    final String contextPath,
@@ -138,23 +141,29 @@ public class HttpClient implements DomatarMsgClient
     return srcDomId;
   }
 
+  @Override
+  public String contextId()
+  {
+    return srcContext == null ? null : srcContext.contextId;
+  }
+
   /** Verdict-stamped inbound Context. Not on DomatarMsgClient. */
-  public Context inboundContext()
+  Context inboundContext()
   {
     return srcContext;
   }
 
-  public Provenance inboundProvenance()
+  Provenance inboundProvenance()
   {
     return prov;
   }
 
-  public String handlerContextPath()
+  String handlerContextPath()
   {
     return srcContextPath;
   }
 
-  public String handlerContextRealPath()
+  String handlerContextRealPath()
   {
     return srcContextRealPath;
   }
@@ -203,7 +212,7 @@ public class HttpClient implements DomatarMsgClient
    * {@code srcContext.actId} when verified, else a null actId, and
    * attaches Binding + Delegation when a fingerprint actId is asserted.
    */
-  public JsonMsg root(final DomId dst, final JsonMsg msg) throws DomatarException
+  JsonMsg root(final DomId dst, final JsonMsg msg) throws DomatarException
   {
     if (!rootCapable || !prov.isEmpty())
       throw new DomatarException("root on a non-empty chain");
@@ -218,7 +227,7 @@ public class HttpClient implements DomatarMsgClient
    * Mints a fresh hop 0 and ContextId under {@code actId} and attaches
    * that account's Binding and Delegation.
    */
-  public JsonMsg rootAs(final String actId, final DomId dst, final JsonMsg msg)
+  JsonMsg rootAs(final String actId, final DomId dst, final JsonMsg msg)
       throws DomatarException
   {
     return dispatchRoot(dst, msg, actId);
@@ -230,7 +239,7 @@ public class HttpClient implements DomatarMsgClient
    * so the install chain can send as a new lineage, not a hand-built
    * Context with an empty path.
    */
-  public HttpClient rootAs(final String actId,
+  HttpClient rootAs(final String actId,
                            final String usrId,
                            final String usrName,
                            final String usrIp,
@@ -598,7 +607,7 @@ public class HttpClient implements DomatarMsgClient
    * (the child context after a hop, or the Verdict stamp on HTTP
    * inbound). This method does not rebuild it from {@code chain}.
    */
-  public static String deliverLocal(final DomId dstDomId, final JsonMsg jsonMsg,
+  static String deliverLocal(final DomId dstDomId, final JsonMsg jsonMsg,
                                     final Context stamped, final String srcDomain,
                                     final String contextPath, final String contextRealPath,
                                     final Provenance chain) throws DomatarException
@@ -629,6 +638,7 @@ public class HttpClient implements DomatarMsgClient
     final Provenance held = chain != null ? chain : Provenance.empty();
     final HttpClient msgClient = inbound(dstDomId, srcDomain, stamped,
                                          contextPath, contextRealPath, held);
+    final HandlerClient handler = new HandlerClient(msgClient);
 
     jsonMsg.setContext(stamped);
 
@@ -640,23 +650,22 @@ public class HttpClient implements DomatarMsgClient
           jsonMsg.getOperation());
       if ("Compensate".equals(jsonMsg.getOperation()))
       {
-        if (!Compensate.admitInbound(jsonMsg, msgClient, held,
-            stamped != null ? stamped.actId : null))
+        if (!Compensate.admitInbound(jsonMsg, handler))
           return impl.notAuthorized(jsonMsg);
-        OpLog.admitIfNeeded(msgClient, jsonMsg, obj, held);
+        OpLog.admitIfNeeded(handler, jsonMsg, obj, held);
         return msgHandler.handleMsg(jsonMsg.toString(), obj, contextPath,
-            contextRealPath, msgClient);
+            contextRealPath, handler);
       }
-      if (!impl.hasRights(jsonMsg, obj, msgClient))
+      if (!impl.hasRights(jsonMsg, obj, handler))
         return impl.notAuthorized(jsonMsg);
-      OpLog.admitIfNeeded(msgClient, jsonMsg, obj, held);
+      OpLog.admitIfNeeded(handler, jsonMsg, obj, held);
     }
 
     final String ret = msgHandler.handleMsg(jsonMsg.toString(), obj,
-        contextPath, contextRealPath, msgClient);
+        contextPath, contextRealPath, handler);
     if (msgHandler instanceof ObjImpl
         && !"Compensate".equals(jsonMsg.getOperation()))
-      Compensate.autoAttachIfNeeded(msgClient, jsonMsg, obj, ret);
+      Compensate.autoAttachIfNeeded(handler, jsonMsg, obj, ret);
     return ret;
   }
 
@@ -1001,6 +1010,190 @@ public class HttpClient implements DomatarMsgClient
           StandardCharsets.UTF_8);
 
     return Json.toJson(json);
+  }
+
+  /**
+   * Cross-provider entry. Verifies {@code inboundProv}, stamps trust from
+   * that verdict, then {@link #deliverLocal}. A caller-supplied context
+   * on {@code jsonMsg} is replaced.
+   */
+  public static String receive(final JsonMsg jsonMsg, final Provenance inboundProv,
+                               final String srcDomain, final String contextPath,
+                               final String contextRealPath) throws DomatarException
+  {
+    if (jsonMsg == null || inboundProv == null)
+      return errorMsg("Unknown", "No Message");
+
+    final DomId dstDomId = jsonMsg.getDstId();
+    final boolean directory = isDirectoryDispatch(jsonMsg);
+
+    if (!directory && inboundProv.isUnsignedHttp())
+      return errorMsg(jsonMsg.getOperation(), "Unsigned message");
+
+    final Verdict verdict = verifyInbound(inboundProv, jsonMsg);
+    final Context dispatchContext = stampFromVerdict(jsonMsg, verdict);
+    jsonMsg.setContext(dispatchContext);
+
+    String clsAppId = jsonMsg.getClsAppId();
+    String clsId    = jsonMsg.getClsId();
+    Obj    obj      = null;
+
+    if (clsAppId == null || clsId == null)
+    {
+      obj = ObjDb.getObj(dstDomId);
+
+      if (obj != null)
+      {
+        clsAppId = obj.clsAppId;
+        clsId    = obj.clsId;
+      }
+    }
+
+    if (obj == null && (clsAppId == null || clsId == null))
+    {
+      final String prvHstId = DomatarConfig.getHstId();
+      final Hst hst = dstDomId == null ? null : HstDb.getHst(dstDomId.hstId);
+
+      if (hst == null || hst.prvId == null || !hst.prvId.equals(prvHstId))
+        return errorMsg(jsonMsg.getOperation(), "Hst not found");
+
+      return errorMsg(jsonMsg.getOperation(), "Obj not found");
+    }
+
+    final DomatarInterface msgHandler = ImplMap.get(clsAppId, clsId);
+
+    if (msgHandler == null)
+      return errorMsg(jsonMsg.getOperation(), "Handler not found");
+
+    if (msgHandler instanceof ObjImpl
+        && ((ObjImpl) msgHandler).requiresPath()
+        && verdict.trust != Trust.ACCOUNT)
+    {
+      System.out.println("WARN: requiresPath: " + verdict.reason);
+      return errorMsg(jsonMsg.getOperation(), "Not authorized");
+    }
+
+    return deliverLocal(dstDomId, jsonMsg, dispatchContext, srcDomain,
+                        contextPath, contextRealPath, inboundProv);
+  }
+
+  /**
+   * Browser entry. Resolves the session inside core, then returns a
+   * client whose {@code send} can mint hop 0 as that account. Null when
+   * the token does not match. Anonymous mode stamps {@code act@act}.
+   */
+  public static BrowserSession openBrowserSession(final boolean anonymous,
+                                                  final String usrId,
+                                                  final String token,
+                                                  final String usrIp,
+                                                  final JsonMap httpHeaders,
+                                                  final String srcDomain,
+                                                  final String contextPath,
+                                                  final String contextRealPath,
+                                                  final String prvHstId) throws DomatarException
+  {
+    final Act act;
+
+    if (anonymous)
+      act = new Act("act@act", "act@act", "Act", null);
+    else
+    {
+      final Context loginContext = new Context(null, usrId, null, usrIp, token,
+                                               Trust.NONE, null, httpHeaders);
+      final DomId loginDomId = new DomId(prvHstId, "act", "login@act", "loginObj");
+      final HttpClient loginClient = new HttpClient(loginDomId, srcDomain, loginContext,
+                                                    contextPath, contextRealPath);
+      act = LoginRemote.verifyLogin(usrId, null, token, usrIp, loginClient);
+
+      if (act == null)
+        return null;
+    }
+
+    final DomId srcDomId = new DomId(prvHstId, "ui", act.actId, "uiObj");
+    final Context context = new Context(act.actId, usrId, act.usrName, usrIp, token,
+                                        Trust.ACCOUNT, null, httpHeaders);
+    final HttpClient rootClient = new HttpClient(srcDomId, srcDomain, context,
+                                                 contextPath, contextRealPath);
+    return new BrowserSession(rootClient, new HandlerClient(rootClient), act, context);
+  }
+
+  /**
+   * Mints a new lineage for an account {@link com.domatar.db.ActDb#addAct}
+   * just inserted. Refuses a missing permit or any other actId.
+   */
+  public static DomatarMsgClient lineageForNewAccount(final com.domatar.db.LineagePermit permit,
+                                                      final String actId,
+                                                      final String usrId,
+                                                      final String usrName,
+                                                      final String usrIp,
+                                                      final String token,
+                                                      final DomatarMsgClient parent)
+      throws DomatarException
+  {
+    if (!(parent instanceof HandlerClient) || permit == null || !permit.consume(actId))
+      throw new DomatarException("lineage permit refused");
+
+    final HttpClient parentInner = ((HandlerClient) parent).inner();
+    final Context stamped = new Context(actId, usrId, usrName, usrIp, token,
+                                        Trust.ACCOUNT, null, null);
+    final HttpClient rooted = new HttpClient(parentInner.srcDomId, parentInner.srcDomain,
+                                             stamped, parentInner.srcContextPath,
+                                             parentInner.srcContextRealPath,
+                                             Provenance.empty(), true);
+    return new HandlerClient(rooted);
+  }
+
+  /** Local operator tasks (Setup). Not a caller-chosen trust for app code. */
+  static DomatarMsgClient operatorClient(final DomId src, final String domain,
+                                         final String contextPath, final String contextRealPath,
+                                         final String actId)
+  {
+    final Context stamped = new Context(actId, null, null, "127.0.0.1", null,
+                                        Trust.ACCOUNT, null, null);
+    return new HandlerClient(new HttpClient(src, domain, stamped, contextPath,
+                                            contextRealPath, Provenance.empty(), true));
+  }
+
+  private static boolean isDirectoryDispatch(final JsonMsg jsonMsg) throws DomatarException
+  {
+    return "hst".equals(jsonMsg.getClsAppId()) && "hsts".equals(jsonMsg.getClsId());
+  }
+
+  private static Verdict verifyInbound(final Provenance prov, final JsonMsg jsonMsg)
+      throws DomatarException
+  {
+    if (isDirectoryDispatch(jsonMsg))
+      return Verdict.none("directory carve-out");
+
+    int fpVersion = 1;
+    Long localBindingVersion = null;
+    final String hopActId = prov.hop0ActId();
+
+    if (hopActId != null)
+    {
+      fpVersion = ActDb.getFpVersion(hopActId);
+      final ActDb.BindingRow local = ActDb.getBindingRow(hopActId);
+      if (local != null)
+        localBindingVersion = Long.valueOf(local.version);
+    }
+
+    return prov.verify(jsonMsg.getBodyMap(), DirectoryKeyResolver.INSTANCE,
+                       fpVersion, localBindingVersion);
+  }
+
+  private static Context stampFromVerdict(final JsonMsg jsonMsg, final Verdict verdict)
+      throws DomatarException
+  {
+    final Context wireCtx = jsonMsg.getContext();
+
+    return new Context(verdict.actId,
+                       wireCtx == null ? null : wireCtx.usrId,
+                       wireCtx == null ? null : wireCtx.usrName,
+                       wireCtx == null ? null : wireCtx.usrIp,
+                       wireCtx == null ? null : wireCtx.token,
+                       verdict.trust,
+                       verdict.contextId,
+                       wireCtx == null ? null : wireCtx.httpHeaders);
   }
 
   private static Object parseAttachment(final String body) throws DomatarException

@@ -20,6 +20,21 @@ import java.util.Random;
 
 public class ActDb
 {
+  /**
+   * Token plus the one-shot lineage permit for the actId just inserted.
+   */
+  public static final class NewAct
+  {
+    public final String token;
+    public final LineagePermit permit;
+
+    private NewAct(final String token, final LineagePermit permit)
+    {
+      this.token = token;
+      this.permit = permit;
+    }
+  }
+
   private static final Random random = new Random();
 
   /**
@@ -31,10 +46,10 @@ public class ActDb
    * those rows still load correctly. The genesis private key is never stored
    * here (Spec-OwnIds.txt PART 7).
    */
-  public static String addAct(String hostId, String domain, String prvId,
-                               String actId, String usrId, String usrName,
-                               String pwd, String ip,
-                               String ownPrvKeySealed) throws DomatarException
+  public static NewAct addAct(String hostId, String domain, String prvId,
+                              String actId, String usrId, String usrName,
+                              String pwd, String ip,
+                              String ownPrvKeySealed) throws DomatarException
   {
     DbConnection conn = null;
     PreparedStatement pstmt = null;
@@ -90,11 +105,11 @@ public class ActDb
       }
     }
 
-    return token;
+    return new NewAct(token, new LineagePermit(actId));
   }
 
   /** Back-compat overload: creates an act row without a sealed ownership key (OwnPrvKey = NULL). */
-  public static String addAct(String hostId, String domain, String prvId,
+  public static NewAct addAct(String hostId, String domain, String prvId,
                                String actId, String usrId, String usrName,
                                String pwd, String ip) throws DomatarException
   {

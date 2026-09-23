@@ -19,8 +19,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.domatar.core.Context;
-import com.domatar.core.HttpClient;
-import com.domatar.core.Trust;
+import com.domatar.core.HandlerClient;
+import com.domatar.core.TestClients;
 import com.domatar.crypto.CanonicalJson;
 import com.domatar.crypto.Path;
 import com.domatar.crypto.Provenance;
@@ -54,7 +54,7 @@ public class CompensateRunTest
   private String caller;
   private Context ctx;
   private Provenance prov;
-  private HttpClient client;
+  private HandlerClient client;
   private Obj obj;
   private SagaProbeImpl probe;
   private final List<String> sentNames = new ArrayList<>();
@@ -105,8 +105,7 @@ public class CompensateRunTest
     caller = hst + ".probe.actA.parent";
     final Path path = Path.root(ui, dst, bodyBytes("Ping"), "actA", "testprv");
     prov = Provenance.of(path, null, null);
-    ctx = new Context("actA", "u", "n", "127.0.0.1", "tok", Trust.ACCOUNT,
-        path.contextId(), null);
+    ctx = TestClients.account("actA", "u", "n", "127.0.0.1", "tok", path.contextId());
     client = inbound();
     obj = new Obj(dst, "probe", "probe", "Probe", "Probe", new ObjAttrs());
     probe = new SagaProbeImpl();
@@ -389,9 +388,9 @@ public class CompensateRunTest
         client.attachment(ctx.contextId, "Ping", SagaSlot.SLOT)));
   }
 
-  private HttpClient inbound()
+  private HandlerClient inbound()
   {
-    return HttpClient.inbound(dst, "localhost", ctx, "/domatar", "", prov);
+    return TestClients.inbound(dst, "localhost", ctx, "/domatar", "", prov);
   }
 
   private static byte[] bodyBytes(final String op) throws DomatarException

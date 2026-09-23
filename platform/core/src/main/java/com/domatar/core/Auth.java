@@ -4,8 +4,8 @@
 
 package com.domatar.core;
 
-import com.domatar.util.JsonMsg;
 import com.domatar.util.DomatarException;
+import com.domatar.util.DomatarMsgClient;
 
 /**
  * Authorization helpers for use by ObjImpl subclasses' hasRights() overrides.
@@ -21,12 +21,13 @@ import com.domatar.util.DomatarException;
  * expressed in each ObjImpl subclass's hasRights(). Callers that only
  * need the simplest "must be a verified caller" rule express it as
  *
- *     return Auth.isVerified(inMsg);
+ *     return Auth.isVerified(msgClient);
  *
- * which collapses to a Trust read via Context.isVerified() - no DB hit,
- * no recursion. Richer policies (owner-match, follower-status,
- * ban-checking, ...) belong in the handler itself or in additional
- * helpers here.
+ * which is true only for a platform {@link HandlerClient} stamped
+ * Trust.ACCOUNT. A hand-built DomatarMsgClient or a Verified flag on
+ * the message does not count. Richer policies (owner-match,
+ * follower-status, ban-checking, ...) belong in the handler itself
+ * or in additional helpers here.
  *
  * NOTE on cross-prv: a prv only verifies tokens that exist in its OWN
  * act table. A user logged into prv1 has no act row on prv2 and so
@@ -40,13 +41,73 @@ public final class Auth
   private Auth() {}
 
   /**
-   * Returns true iff some upstream trust boundary already verified this
-   * caller against THIS prv's act table on this request.
+   * True when the dispatcher handed this handler a platform client
+   * stamped Trust.ACCOUNT.
    */
-  public static boolean isVerified(final JsonMsg inMsg) throws DomatarException
+  public static boolean isVerified(final DomatarMsgClient client)
   {
-    final Context ctx = inMsg.getContext();
+    return client instanceof HandlerClient && ((HandlerClient) client).holdsAccount();
+  }
 
-    return ctx != null && ctx.isVerified();
+  /**
+   * ActId of a platform client stamped Trust.ACCOUNT. Null for any
+   * other client, including an app's own implementation of the interface.
+   */
+  public static String actId(final DomatarMsgClient client)
+  {
+    if (!(client instanceof HandlerClient))
+      return null;
+
+    return ((HandlerClient) client).accountActId();
+  }
+
+  /**
+   * True when dispatch built this client. Unverified platform clients
+   * are included. An app implementation of {@link DomatarMsgClient} is not.
+   */
+  public static boolean isPlatformClient(final DomatarMsgClient client)
+  {
+    return client instanceof HandlerClient;
+  }
+
+  /**
+   * Caller DomId stamped on a platform client. Null for any other client.
+   */
+  public static String callerDomId(final DomatarMsgClient client)
+      throws DomatarException
+  {
+    if (!(client instanceof HandlerClient))
+      return null;
+
+    return ((HandlerClient) client).callerDomId();
+  }
+
+  /**
+   * Context stamped on a platform client. Null for any other client.
+   */
+  public static Context stampedContext(final DomatarMsgClient client)
+  {
+    if (!(client instanceof HandlerClient))
+      return null;
+
+    return ((HandlerClient) client).stampedContext();
+  }
+
+  /** Servlet context path of a platform client, or null. */
+  public static String contextPath(final DomatarMsgClient client)
+  {
+    if (!(client instanceof HandlerClient))
+      return null;
+
+    return ((HandlerClient) client).contextPath();
+  }
+
+  /** Exploded-WAR path of a platform client, or null. */
+  public static String contextRealPath(final DomatarMsgClient client)
+  {
+    if (!(client instanceof HandlerClient))
+      return null;
+
+    return ((HandlerClient) client).contextRealPath();
   }
 }

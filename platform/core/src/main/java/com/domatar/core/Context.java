@@ -30,14 +30,14 @@ public class Context
   public final String contextId;
   public final JsonMap httpHeaders;
 
-  public Context(String actId,
-                 String usrId,
-                 String usrName,
-                 String usrIp,
-                 String token,
-                 Trust trust,
-                 String contextId,
-                 JsonMap httpHeaders)
+  Context(String actId,
+          String usrId,
+          String usrName,
+          String usrIp,
+          String token,
+          Trust trust,
+          String contextId,
+          JsonMap httpHeaders)
   {
     this.actId = actId;
     this.usrId = usrId;

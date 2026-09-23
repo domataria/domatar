@@ -71,7 +71,7 @@ public class ForSaleImpl extends ObjImpl
   public boolean hasRights(final JsonMsg inMsg, final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return Auth.isVerified(inMsg);
+    return Auth.isVerified(msgClient);
   }
 
   // ---------------------------------------------------------------------------

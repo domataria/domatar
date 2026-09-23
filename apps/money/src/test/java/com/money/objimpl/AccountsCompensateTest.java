@@ -17,8 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.domatar.core.Context;
-import com.domatar.core.HttpClient;
-import com.domatar.core.Trust;
+import com.domatar.core.HandlerClient;
+import com.domatar.core.TestClients;
 import com.domatar.crypto.CanonicalJson;
 import com.domatar.crypto.Path;
 import com.domatar.crypto.Provenance;
@@ -57,7 +57,7 @@ public class AccountsCompensateTest
   private Obj accounts;
   private Context ctx;
   private Provenance prov;
-  private HttpClient client;
+  private HandlerClient client;
   private AccountsImpl impl;
 
   @BeforeAll
@@ -118,9 +118,8 @@ public class AccountsCompensateTest
     final Path path = Path.root(ui, accountsId, bodyBytes("Debit"), bankAct,
         "testprv");
     prov = Provenance.of(path, null, null);
-    ctx = new Context(bankAct, "u", "n", "127.0.0.1", "tok", Trust.ACCOUNT,
-        path.contextId(), null);
-    client = HttpClient.inbound(accountsId, "localhost", ctx, "/domatar", "",
+    ctx = TestClients.account(bankAct, "u", "n", "127.0.0.1", "tok", path.contextId());
+    client = TestClients.inbound(accountsId, "localhost", ctx, "/domatar", "",
         prov);
     impl = new AccountsImpl();
   }

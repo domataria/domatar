@@ -4,7 +4,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.domatar.core.HttpClient;
 import com.domatar.log.OpLog;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
@@ -45,19 +44,14 @@ public class SagaProbeImpl extends ObjImpl
 
     if ("Ping".equals(opr))
     {
-      if (msgClient instanceof HttpClient)
+      final String ctx = msgClient == null ? null : msgClient.contextId();
+      if (ctx != null)
       {
-        final HttpClient client = (HttpClient) msgClient;
-        final String ctx = client.inboundContext() != null
-            ? client.inboundContext().contextId : null;
-        if (ctx != null)
-        {
-          final JsonHashMap effect = new JsonHashMap();
-          effect.put("OrigContextId", ctx);
-          client.attach(ctx, "Ping", SagaSlot.SLOT,
-              SagaSlot.applied("UndoPing", effect),
-              OpLog.nowMs() + OpLog.sagaTtlMs());
-        }
+        final JsonHashMap effect = new JsonHashMap();
+        effect.put("OrigContextId", ctx);
+        msgClient.attach(ctx, "Ping", SagaSlot.SLOT,
+            SagaSlot.applied("UndoPing", effect),
+            OpLog.nowMs() + OpLog.sagaTtlMs());
       }
       outMsg.addResponseBody(opr, new ObjAttrs());
       return outMsg.toString();

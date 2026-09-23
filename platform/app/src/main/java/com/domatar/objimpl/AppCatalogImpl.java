@@ -82,17 +82,17 @@ public class AppCatalogImpl extends ObjImpl
     else if ("HasCatalogEntry".equals(opr))
       hasCatalogEntry(opr, inMsg, outMsg);
     else if ("GetDefaultAppsConfig".equals(opr))
-      getDefaultAppsConfig(opr, inMsg, outMsg, obj);
+      getDefaultAppsConfig(opr, inMsg, outMsg, obj, msgClient);
     else if ("SetDefaultApps".equals(opr))
-      setDefaultApps(opr, inMsg, outMsg, obj);
+      setDefaultApps(opr, inMsg, outMsg, obj, msgClient);
     else if ("ResetDefaultApps".equals(opr))
-      resetDefaultApps(opr, inMsg, outMsg, obj);
+      resetDefaultApps(opr, inMsg, outMsg, obj, msgClient);
     else if ("GetDefaultShells".equals(opr))
-      getDefaultShells(opr, inMsg, outMsg, obj);
+      getDefaultShells(opr, inMsg, outMsg, obj, msgClient);
     else if ("SetDefaultShells".equals(opr))
-      setDefaultShells(opr, inMsg, outMsg, obj);
+      setDefaultShells(opr, inMsg, outMsg, obj, msgClient);
     else if ("ResetDefaultShells".equals(opr))
-      resetDefaultShells(opr, inMsg, outMsg, obj);
+      resetDefaultShells(opr, inMsg, outMsg, obj, msgClient);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -118,7 +118,7 @@ public class AppCatalogImpl extends ObjImpl
         || "GetDefaultShells".equals(op)
         || "SetDefaultShells".equals(op)
         || "ResetDefaultShells".equals(op))
-      return Auth.isVerified(inMsg);
+      return Auth.isVerified(msgClient);
 
     return super.hasRights(inMsg, obj, msgClient);
   }
@@ -240,17 +240,19 @@ public class AppCatalogImpl extends ObjImpl
   // -------------------------------------------------------------------------
 
   private void getDefaultAppsConfig(final String opr, final JsonMsg inMsg,
-                                    final JsonMsg outMsg, final Obj obj)
+                                    final JsonMsg outMsg, final Obj obj,
+                                    final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    writeConfigBody(opr, inMsg, outMsg, obj);
+    writeConfigBody(opr, inMsg, outMsg, obj, msgClient);
   }
 
   private void setDefaultApps(final String opr, final JsonMsg inMsg,
-                              final JsonMsg outMsg, final Obj obj)
+                              final JsonMsg outMsg, final Obj obj,
+                              final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isProvider(inMsg))
+    if (!isProvider(msgClient))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -282,14 +284,15 @@ public class AppCatalogImpl extends ObjImpl
     }
 
     ProviderDefaults.writeProviderConfigApps(prvActId, parsed);
-    writeConfigBody(opr, inMsg, outMsg, obj);
+    writeConfigBody(opr, inMsg, outMsg, obj, msgClient);
   }
 
   private void resetDefaultApps(final String opr, final JsonMsg inMsg,
-                                final JsonMsg outMsg, final Obj obj)
+                                final JsonMsg outMsg, final Obj obj,
+                                final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isProvider(inMsg))
+    if (!isProvider(msgClient))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -305,7 +308,7 @@ public class AppCatalogImpl extends ObjImpl
 
     final DomId catalogId = catalogDomId(inMsg, obj);
     ProviderDefaults.clearDefaultApps(catalogId.actId);
-    writeConfigBody(opr, inMsg, outMsg, obj);
+    writeConfigBody(opr, inMsg, outMsg, obj, msgClient);
   }
 
   // -------------------------------------------------------------------------
@@ -313,17 +316,19 @@ public class AppCatalogImpl extends ObjImpl
   // -------------------------------------------------------------------------
 
   private void getDefaultShells(final String opr, final JsonMsg inMsg,
-                                final JsonMsg outMsg, final Obj obj)
+                                final JsonMsg outMsg, final Obj obj,
+                                final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    writeShellsBody(opr, inMsg, outMsg, obj);
+    writeShellsBody(opr, inMsg, outMsg, obj, msgClient);
   }
 
   private void setDefaultShells(final String opr, final JsonMsg inMsg,
-                                final JsonMsg outMsg, final Obj obj)
+                                final JsonMsg outMsg, final Obj obj,
+                                final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isProvider(inMsg))
+    if (!isProvider(msgClient))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -367,14 +372,15 @@ public class AppCatalogImpl extends ObjImpl
     }
 
     ProviderDefaults.setDefaultShellAppIds(catalogId.actId, chosen);
-    writeShellsBody(opr, inMsg, outMsg, obj);
+    writeShellsBody(opr, inMsg, outMsg, obj, msgClient);
   }
 
   private void resetDefaultShells(final String opr, final JsonMsg inMsg,
-                                  final JsonMsg outMsg, final Obj obj)
+                                  final JsonMsg outMsg, final Obj obj,
+                                  final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isProvider(inMsg))
+    if (!isProvider(msgClient))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -382,16 +388,17 @@ public class AppCatalogImpl extends ObjImpl
 
     final DomId catalogId = catalogDomId(inMsg, obj);
     ProviderDefaults.clearDefaultShells(catalogId.actId);
-    writeShellsBody(opr, inMsg, outMsg, obj);
+    writeShellsBody(opr, inMsg, outMsg, obj, msgClient);
   }
 
   private void writeShellsBody(final String opr, final JsonMsg inMsg,
-                               final JsonMsg outMsg, final Obj obj)
+                               final JsonMsg outMsg, final Obj obj,
+                               final DomatarMsgClient msgClient)
       throws DomatarException
   {
     final ObjAttrs outAttrs = new ObjAttrs();
 
-    if (!isProvider(inMsg))
+    if (!isProvider(msgClient))
     {
       outAttrs.addAttr("IsProvider", "False");
       outMsg.addResponseBody(opr, outAttrs);
@@ -449,12 +456,13 @@ public class AppCatalogImpl extends ObjImpl
    * only (no Apps leak).
    */
   private void writeConfigBody(final String opr, final JsonMsg inMsg,
-                               final JsonMsg outMsg, final Obj obj)
+                               final JsonMsg outMsg, final Obj obj,
+                               final DomatarMsgClient msgClient)
       throws DomatarException
   {
     final ObjAttrs outAttrs = new ObjAttrs();
 
-    if (!isProvider(inMsg))
+    if (!isProvider(msgClient))
     {
       outAttrs.addAttr("IsProvider", "False");
       outMsg.addResponseBody(opr, outAttrs);
@@ -541,12 +549,11 @@ public class AppCatalogImpl extends ObjImpl
     return catalogName != null ? catalogName : appId;
   }
 
-  private static boolean isProvider(final JsonMsg inMsg) throws DomatarException
+  private static boolean isProvider(final DomatarMsgClient msgClient)
   {
-    final Context ctx = inMsg.getContext();
-    final String  prv = DomatarConfig.getPrvActId();
-    return ctx != null && ctx.actId != null && prv != null
-           && ctx.actId.equals(prv);
+    final String actId = Auth.actId(msgClient);
+    final String prv = DomatarConfig.getPrvActId();
+    return actId != null && prv != null && actId.equals(prv);
   }
 
   private static Set<String> catalogAppIds(final DomId catalogId)

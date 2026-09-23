@@ -80,7 +80,7 @@ public class AccountImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
     if (obj == null)
       return false;

@@ -78,6 +78,6 @@ public class ActCacheImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return Auth.isVerified(inMsg);
+    return Auth.isVerified(msgClient);
   }
 }

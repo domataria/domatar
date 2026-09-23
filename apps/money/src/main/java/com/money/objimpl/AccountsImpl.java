@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import com.domatar.core.Auth;
-import com.domatar.core.HttpClient;
 import com.domatar.db.ActDb;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
@@ -61,7 +60,7 @@ public class AccountsImpl extends ObjImpl
     if ("Credit".equals(opr))
     {
       // Credit is open to any authenticated user (cross-bank call).
-      if (!Auth.isVerified(inMsg))
+      if (!Auth.isVerified(msgClient))
         return notAuthorized(inMsg);
       credit(opr, inMsg, outMsg, accountsDomId, msgClient);
     }
@@ -89,7 +88,7 @@ public class AccountsImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
     if (obj == null)
       return false;
@@ -431,13 +430,7 @@ public class AccountsImpl extends ObjImpl
       final DomatarMsgClient msgClient, final String amount,
       final String customerActId) throws DomatarException
   {
-    if (!(msgClient instanceof HttpClient))
-      return;
-
-    final HttpClient client = (HttpClient) msgClient;
-    final String ctx = client.inboundContext() != null
-        ? client.inboundContext().contextId
-        : (inMsg.getContext() != null ? inMsg.getContext().contextId : null);
+    final String ctx = msgClient == null ? null : msgClient.contextId();
     if (ctx == null)
       return;
 
@@ -445,7 +438,7 @@ public class AccountsImpl extends ObjImpl
     effect.put("Amount", amount);
     effect.put("CustomerActId", customerActId);
     effect.put("OrigContextId", ctx);
-    client.attach(SagaSlot.SLOT, SagaSlot.applied("Credit", effect),
+    msgClient.attach(SagaSlot.SLOT, SagaSlot.applied("Credit", effect),
         OpLog.nowMs() + OpLog.sagaTtlMs());
   }
 

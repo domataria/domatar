@@ -33,11 +33,12 @@ public class MsgImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
 
-    final Context ctx = inMsg.getContext();
+    final String actId = Auth.actId(msgClient);
 
-    return ctx != null && ctx.actId != null && ctx.actId.equals(obj.domId.actId);
+    return actId != null && obj != null && obj.domId != null
+        && actId.equals(obj.domId.actId);
   }
 }

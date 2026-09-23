@@ -70,13 +70,12 @@ public class ConvImpl extends ObjImpl
 
     final JsonMsg outMsg = new JsonMsg();
 
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return notAuthorized(inMsg);
 
-    final Context ctx = inMsg.getContext();
+    final String actId = Auth.actId(msgClient);
 
-    if (ctx == null || ctx.actId == null ||
-        !ctx.actId.equals(inMsg.getDstId().actId))
+    if (actId == null || !actId.equals(inMsg.getDstId().actId))
       return notAuthorized(inMsg);
 
     final DomId convDomId = inMsg.getDstId();
@@ -116,13 +115,13 @@ public class ConvImpl extends ObjImpl
   public boolean hasRights(final JsonMsg inMsg, final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
 
-    final Context ctx        = inMsg.getContext();
-    final String  ownerActId = (obj != null) ? obj.domId.actId
+    final String actId = Auth.actId(msgClient);
+    final String ownerActId = (obj != null && obj.domId != null) ? obj.domId.actId
                                              : inMsg.getDstId().actId;
-    return ctx != null && ctx.actId != null && ctx.actId.equals(ownerActId);
+    return actId != null && actId.equals(ownerActId);
   }
 
   // ── operations ───────────────────────────────────────────────────────────

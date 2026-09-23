@@ -87,7 +87,7 @@ public class ContractImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!CantonAuth.isVerifiedOwner(inMsg, obj))
+    if (!CantonAuth.isVerifiedOwner(inMsg, obj, msgClient))
       return false;
 
     final String opr = inMsg.getOperation();

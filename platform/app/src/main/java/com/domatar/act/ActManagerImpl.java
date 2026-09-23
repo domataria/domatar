@@ -125,7 +125,7 @@ public class ActManagerImpl extends ObjImpl
     if ("VerifyLogin".equals(op))
       return true;
 
-    return Auth.isVerified(inMsg);
+    return Auth.isVerified(msgClient);
   }
 
   /**
@@ -134,12 +134,11 @@ public class ActManagerImpl extends ObjImpl
    * Each of those ops calls this AFTER the framework hasRights gate
    * already confirmed Auth.isVerified.
    */
-  private static boolean callerOwnsAct(final JsonMsg inMsg, final String targetActId)
-      throws DomatarException
+  private static boolean callerOwnsAct(final DomatarMsgClient msgClient, final String targetActId)
   {
-    final Context ctx = inMsg.getContext();
+    final String actId = Auth.actId(msgClient);
 
-    return ctx != null && ctx.actId != null && ctx.actId.equals(targetActId);
+    return actId != null && actId.equals(targetActId);
   }
 
   /**
@@ -208,7 +207,7 @@ public class ActManagerImpl extends ObjImpl
     {
       // Linking a new login on this app to an existing fingerprint actId.
       // The caller must be verified AS the supplied actId.
-      if (!Auth.isVerified(inMsg) || !callerOwnsAct(inMsg, actHandle))
+      if (!Auth.isVerified(msgClient) || !callerOwnsAct(msgClient, actHandle))
       {
         outMsg.addError(opr, "Not authorized: you must be logged in as the account you are linking.");
         return;
@@ -250,9 +249,12 @@ public class ActManagerImpl extends ObjImpl
       throw new DomatarException("Missing ip");
 
     final String newToken;
+    final com.domatar.db.LineagePermit permit;
     try
     {
-      newToken = ActDb.addAct(hstId, domain, prvId, actId, usrId, usrName, pwd, ip, sealedRootKey);
+      final ActDb.NewAct created = ActDb.addAct(hstId, domain, prvId, actId, usrId, usrName, pwd, ip, sealedRootKey);
+      newToken = created.token;
+      permit = created.permit;
     }
     catch (DomatarException e)
     {
@@ -314,9 +316,9 @@ public class ActManagerImpl extends ObjImpl
     // needs sideClient to call Register on the quippin central host.
     DomatarMsgClient sideClient = msgClient;
 
-    if (isRoot && msgClient instanceof HttpClient)
+    if (isRoot)
     {
-      sideClient = ((HttpClient) msgClient).rootAs(actId, usrId, usrName, ip, newToken);
+      sideClient = HttpClient.lineageForNewAccount(permit, actId, usrId, usrName, ip, newToken, msgClient);
     }
 
     JsonList defaultAppInstallFailures = null;
@@ -614,7 +616,7 @@ public class ActManagerImpl extends ObjImpl
     if (actId == null || currentUsrId == null)
       throw new DomatarException("Missing ActId / UsrId");
 
-    if (!callerOwnsAct(inMsg, actId))
+    if (!callerOwnsAct(msgClient, actId))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -707,7 +709,7 @@ public class ActManagerImpl extends ObjImpl
     if (oldPwd == null || newPwd == null)
       throw new DomatarException("Missing OldPwd / NewPwd");
 
-    if (!callerOwnsAct(inMsg, actId))
+    if (!callerOwnsAct(msgClient, actId))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -741,7 +743,7 @@ public class ActManagerImpl extends ObjImpl
     if (actId == null || usrId == null)
       throw new DomatarException("Missing ActId / UsrId");
 
-    if (!callerOwnsAct(inMsg, actId))
+    if (!callerOwnsAct(msgClient, actId))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -820,7 +822,7 @@ public class ActManagerImpl extends ObjImpl
       return;
     }
 
-    if (!callerOwnsAct(inMsg, actId))
+    if (!callerOwnsAct(msgClient, actId))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -869,7 +871,7 @@ public class ActManagerImpl extends ObjImpl
       return;
     }
 
-    if (!Auth.isVerified(inMsg) || !callerOwnsAct(inMsg, actId))
+    if (!Auth.isVerified(msgClient) || !callerOwnsAct(msgClient, actId))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -1096,7 +1098,7 @@ public class ActManagerImpl extends ObjImpl
       return;
     }
 
-    if (!Auth.isVerified(inMsg) || !callerOwnsAct(inMsg, actId))
+    if (!Auth.isVerified(msgClient) || !callerOwnsAct(msgClient, actId))
     {
       outMsg.addError(opr, "Not authorized");
       return;

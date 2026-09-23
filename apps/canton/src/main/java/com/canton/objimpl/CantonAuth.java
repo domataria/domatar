@@ -5,12 +5,12 @@
 package com.canton.objimpl;
 
 import com.domatar.core.Auth;
-import com.domatar.core.Context;
 import com.domatar.db.ObjDb;
 import com.domatar.util.DomId;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
 import com.domatar.util.DomatarException;
+import com.domatar.util.DomatarMsgClient;
 
 /**
  * Shared owner check for Canton handlers.
@@ -24,16 +24,17 @@ final class CantonAuth
 {
   private CantonAuth() {}
 
-  static boolean isVerifiedOwner(final JsonMsg inMsg, final Obj obj)
+  static boolean isVerifiedOwner(final JsonMsg inMsg, final Obj obj,
+                                 final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
-    final Context ctx = inMsg.getContext();
-    if (ctx == null || ctx.actId == null)
+    final String actId = Auth.actId(msgClient);
+    if (actId == null)
       return false;
     final String destActId = destActId(inMsg, obj);
-    return destActId != null && ctx.actId.equals(destActId);
+    return destActId != null && actId.equals(destActId);
   }
 
   static String destActId(final JsonMsg inMsg, final Obj obj)

@@ -79,7 +79,7 @@ public class ContractsImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return CantonAuth.isVerifiedOwner(inMsg, obj);
+    return CantonAuth.isVerifiedOwner(inMsg, obj, msgClient);
   }
 
   private static void sync(final String opr, final Obj obj, final JsonMsg outMsg)

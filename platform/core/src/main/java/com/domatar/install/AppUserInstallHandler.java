@@ -45,7 +45,7 @@ public class AppUserInstallHandler extends ObjImpl
     String op = inMsg.getOperation();
 
     if ("InstallUser".equals(op))
-      return Auth.isVerified(inMsg);
+      return Auth.isVerified(msgClient);
 
     return super.hasRights(inMsg, obj, msgClient);
   }
@@ -92,15 +92,15 @@ public class AppUserInstallHandler extends ObjImpl
       return outMsg.toString();
     }
 
-    Context ctx = inMsg.getContext();
-
-    if (ctx == null || ctx.actId == null || !ctx.actId.equals(actId))
+    if (!actId.equals(Auth.actId(msgClient)))
     {
       outMsg.addError(opr, "Not authorized for this account");
       return outMsg.toString();
     }
 
-    if (ctx.usrId != null && !ctx.usrId.equals(usrId))
+    final Context ctx = inMsg.getContext();
+
+    if (ctx != null && ctx.usrId != null && !ctx.usrId.equals(usrId))
     {
       outMsg.addError(opr, "UsrId does not match session");
       return outMsg.toString();

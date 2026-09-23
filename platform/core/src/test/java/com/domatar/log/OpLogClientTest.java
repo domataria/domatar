@@ -19,8 +19,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.domatar.core.Context;
-import com.domatar.core.HttpClient;
-import com.domatar.core.Trust;
+import com.domatar.core.HandlerClient;
+import com.domatar.core.TestClients;
 import com.domatar.crypto.CanonicalJson;
 import com.domatar.crypto.Path;
 import com.domatar.crypto.Provenance;
@@ -50,7 +50,7 @@ public class OpLogClientTest
   private DomId dst;
   private Context ctx;
   private Provenance prov;
-  private HttpClient client;
+  private HandlerClient client;
   private JsonMsg ping;
 
   @BeforeAll
@@ -90,8 +90,7 @@ public class OpLogClientTest
     dst = new DomId(hst, "app", "act", "objA");
     final Path path = Path.root(ui, dst, bodyBytes("Ping"), "actA", "testprv");
     prov = Provenance.of(path, null, null);
-    ctx = new Context("actA", "u", "n", "127.0.0.1", "tok", Trust.ACCOUNT,
-        path.contextId(), null);
+    ctx = TestClients.account("actA", "u", "n", "127.0.0.1", "tok", path.contextId());
     client = inbound();
     ping = msg("Ping");
   }
@@ -123,7 +122,7 @@ public class OpLogClientTest
     assertEquals(1, OpLogDb.priorVisitCount(hst, ctx.contextId, dst.toString(),
         "Ping"));
 
-    final HttpClient second = inbound();
+    final HandlerClient second = inbound();
     second.snapshotPriors(ctx.contextId, dst.toString(), "Ping");
     assertTrue(second.alreadyEntered());
     assertEquals(1, second.priorVisitCount());
@@ -143,7 +142,7 @@ public class OpLogClientTest
     client.snapshotPriors(ctx.contextId, dst.toString(), "Ping");
     OpLog.admitIfNeeded(client, ping, null, prov);
 
-    final HttpClient compensate = inbound();
+    final HandlerClient compensate = inbound();
     compensate.snapshotPriors(ctx.contextId, dst.toString(), "Compensate");
 
     final JsonMap saga = new JsonHashMap();
@@ -206,9 +205,9 @@ public class OpLogClientTest
     assertEquals("Pong", edges.get(1).outMsgName);
   }
 
-  private HttpClient inbound()
+  private HandlerClient inbound()
   {
-    return HttpClient.inbound(dst, "localhost", ctx, "/domatar", "", prov);
+    return TestClients.inbound(dst, "localhost", ctx, "/domatar", "", prov);
   }
 
   private JsonMsg msg(final String op) throws DomatarException

@@ -40,7 +40,7 @@ public class DesktopAppImpl extends ObjImpl
 
     final JsonMsg outMsg = new JsonMsg();
 
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return notAuthorized(inMsg);
 
     final DomId appDomId = inMsg.getDstId();

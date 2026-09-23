@@ -3,14 +3,9 @@ package com.domatar.util;
 import java.util.List;
 
 import com.domatar.core.DomatarConfig;
-import com.domatar.core.HttpClient;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
-import com.domatar.db.OpLogDb;
-import com.domatar.log.OpDst;
 import com.domatar.saga.Compensate;
-import com.domatar.saga.CompensateResult;
-import com.domatar.saga.SagaSlot;
 
 public class ObjImpl implements DomatarInterface
 {
@@ -76,7 +71,7 @@ public class ObjImpl implements DomatarInterface
    * The base implementation returns true (public). Subclasses override
    * to declare a stricter policy. For now there are two patterns:
    *   - public:   return true;
-   *   - verified: return Auth.isVerified(inMsg);
+   *   - verified: return Auth.isVerified(msgClient);
    *
    * Auth.isVerified is a Trust read via Context.isVerified() - the trust
    * boundary (DomatarServlet for browser entry, Msg.doAction for
@@ -94,46 +89,14 @@ public class ObjImpl implements DomatarInterface
       throws DomatarException
   {
     if (inMsg != null && "Compensate".equals(inMsg.getOperation()))
-      return admitCompensate(inMsg, msgClient);
+      return Compensate.admitInbound(inMsg, msgClient);
     return true;
   }
 
   public String compensate(final JsonMsg inMsg, final Obj obj,
       final DomatarMsgClient msgClient) throws DomatarException
   {
-    if (!(msgClient instanceof HttpClient))
-    {
-      final JsonMsg out = new JsonMsg();
-      out.addResponseBody("Compensate", new ObjAttrs(
-          CompensateResult.failed(
-              inMsg != null ? inMsg.getAttr("OrigContextId") : null,
-              inMsg != null && inMsg.getDstId() != null
-                  ? inMsg.getDstId().toString() : null,
-              inMsg != null ? inMsg.getAttr("OrigMsgName") : null,
-              "client").toMap()));
-      return out.toString();
-    }
-    return Compensate.run(this, inMsg, obj, (HttpClient) msgClient);
-  }
-
-  private static boolean admitCompensate(final JsonMsg inMsg,
-      final DomatarMsgClient msgClient) throws DomatarException
-  {
-    if (!(msgClient instanceof HttpClient))
-      return false;
-
-    final HttpClient client = (HttpClient) msgClient;
-    final String origMsgName = inMsg.getAttr("OrigMsgName");
-    final String origContextId = inMsg.getAttr("OrigContextId");
-    final DomId dst = inMsg.getDstId();
-    final OpDst visit = dst == null ? null
-        : OpLogDb.getVisit(dst.hstId, origContextId, dst.toString(), origMsgName);
-    final JsonMap slot = SagaSlot.parse(
-        client.attachment(origContextId, origMsgName, SagaSlot.SLOT));
-    final String actId = client.inboundContext() != null
-        ? client.inboundContext().actId : null;
-    return Compensate.admit(origMsgName, visit, slot, actId,
-        Compensate.inboundSrcDomId(client, client.inboundProvenance()));
+    return Compensate.run(this, inMsg, obj, msgClient);
   }
 
   /**

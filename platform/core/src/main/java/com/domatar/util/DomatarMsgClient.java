@@ -17,6 +17,12 @@ public interface DomatarMsgClient
   public DomId getSrcId();
 
   /**
+   * Lineage id stamped for this delivery. Null when this client
+   * holds no platform context.
+   */
+  public String contextId();
+
+  /**
    * Same chain and identity; only the session token changes.
    */
   public DomatarMsgClient withToken(String token) throws DomatarException;

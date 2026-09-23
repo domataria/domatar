@@ -88,7 +88,7 @@ public class CantonAppImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return CantonAuth.isVerifiedOwner(inMsg, obj);
+    return CantonAuth.isVerifiedOwner(inMsg, obj, msgClient);
   }
 
   private static DomId handleOf(final JsonMsg inMsg, final String actId)

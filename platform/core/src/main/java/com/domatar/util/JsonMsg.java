@@ -1,7 +1,6 @@
 package com.domatar.util;
 
 import com.domatar.core.Context;
-import com.domatar.core.Trust;
 
 /**
  * Head + Body only. JsonMsg has no security surface: provenance travels
@@ -46,27 +45,18 @@ public class JsonMsg
   }
 
   /**
-   * Replace this message's Context. Used by trust boundaries after they
-   * produce a Verdict, so downstream handlers that re-parse the raw string
-   * still see the stamped informational fields. Trust itself is not a
-   * wire field; {@link #getContext()} reads {@code Trust.NONE} from JSON
-   * and the local stamp restores ACCOUNT via {@code Verified} only for
-   * this in-process re-parse (Auth.isVerified).
+   * Replace this message's informational Context fields. Trust is not
+   * written. {@link com.domatar.core.Auth#isVerified} reads the platform
+   * client, not this JSON.
    */
   public void setContext(Context context) throws DomatarException
   {
     JsonMap head = getHead();
 
-    head.put("Context", contextToJson(context, true));
+    head.put("Context", contextToJson(context));
   }
 
   private JsonMap contextToJson(Context context) throws DomatarException
-  {
-    return contextToJson(context, false);
-  }
-
-  private JsonMap contextToJson(Context context, final boolean stamped)
-      throws DomatarException
   {
     JsonMap jContext = new JsonHashMap();
 
@@ -75,8 +65,6 @@ public class JsonMsg
     jContext.put("UsrName", context.usrName);
     jContext.put("UsrIp", context.usrIp);
     jContext.put("Token", context.token);
-    if (stamped)
-      jContext.put("Verified", context.isVerified() ? "true" : "false");
     jContext.put("HttpHeaders", context.httpHeaders);
 
     return jContext;
@@ -220,18 +208,12 @@ public class JsonMsg
     if (context == null)
       return null;
 
-    // Wire Head.Context has no Verified (Phase 5). A locally stamped
-    // re-serialization still carries it so Auth.isVerified keeps working.
-    final String verifiedStr = context.getString("Verified");
-    final Trust trust = "true".equals(verifiedStr) ? Trust.ACCOUNT : Trust.NONE;
-
+    // Informational fields only. A Verified flag in this JSON is not trust.
     return new Context(context.getString("ActId"),
                        context.getString("UsrId"),
                        context.getString("UsrName"),
                        context.getString("UsrIp"),
                        context.getString("Token"),
-                       trust,
-                       null,
                        context.getMap("HttpHeaders"));
   }
 

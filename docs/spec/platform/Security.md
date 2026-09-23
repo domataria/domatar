@@ -1204,20 +1204,24 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
 
 11.2  The trust boundaries ([Domatar](../Domatar.md) PART 6.1)
 
-  * DomatarServlet (browser entry): after cookie verification, `root`
-    the operation (PART 8.7): mint hop 0 from the synthetic UI source
-    to the addressed object with `ContextId` minted and `ActId` set
-    when asserting an account, sign it, attach Binding / Delegation,
-    and stamp `Context` with `Trust.ACCOUNT`.
+  * DomatarServlet (browser entry): `HttpClient.openBrowserSession`
+    checks the cookie inside core, then `BrowserSession.root` mints
+    hop 0 (PART 8.7) from the synthetic UI source to the addressed
+    object, with `ContextId` minted and `ActId` set when asserting an
+    account, signs it, attaches Binding / Delegation, and stamps
+    `Trust.ACCOUNT` on the platform client. The client handed to
+    `getMsg` cannot root as a different account.
 
-  * Msg.doAction (HTTP inbound): parse `Sec=`, always verify the path
-    (PART 8.9), and take the resulting `Verdict`. Stamp `Context` from
-    that verdict only — `actId` and `trust` from Q1, `contextId` from
-    the verified Path. Never trust a wire `Verified` flag, `ActId`,
+  * Msg.doAction (HTTP inbound): parse `Sec=`, then
+    `HttpClient.receive` verifies the path (PART 8.9) and takes the
+    resulting `Verdict`. Trust lives on the platform client, not on
+    the message. Never trust a wire `Verified` flag, `ActId`,
     `contextId`, or object list. A prv only believes its own checks.
-    The addressed object is then delivered with `HttpClient.deliverLocal`
-    (the same in-process path as `sendLocal`). That call does not
-    append a hop and does not write `op_msg`.
+    Delivery does not append a hop and does not write `op_msg`.
+
+  * A new account lineage is `HttpClient.lineageForNewAccount`. It
+    consumes the one-shot permit `ActDb.addAct` returns for the actId
+    it just inserted, and refuses every other actId.
 
   * MsgHandler (in-process entry): the class was dead code (its whole
     body commented out, no caller) and was DELETED (KD7). The lesson
@@ -1242,10 +1246,14 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
 
 11.3  Handler-facing surface
 
-  A handler receives a `DomatarMsgClient` that can `send` and cannot
-  `root`, plus a `Context` that carries `trust`, `actId`, `contextId`
-  and the informational fields — and no crypto. The path projection is
-  readable via the client as `domIdPath()`. `ObjImpl.hasRights` is unchanged in role
+  A handler receives a final platform client that implements
+  `DomatarMsgClient`. It can `send` and cannot `root` or `rootAs`.
+  `Auth.isVerified` and `Auth.actId` accept that class only. An app
+  implementation of the interface, and a `Verified` flag on the
+  message, are not trust. Handlers see `DomatarMsgClient` only,
+  including `contextId()` for the lineage of this delivery. The path
+  projection is readable via the client as `domIdPath()`.
+  `ObjImpl.hasRights` is unchanged in role
   ([Domatar](../Domatar.md) PART 6.3). `ObjImpl.requiresPath()` no
   longer gates verification; it only says whether a `Trust.NONE` /
   `Trust.PATH` verdict is fatal for this class.
@@ -1634,8 +1642,7 @@ public class JsonMsg
     `sendDirectory` is the named PART 10.3 carve-out; never reads
     provenance from `JsonMsg`.
   * `com.domatar.util.DomatarMsgClient` — `send`, `getSrcId`,
-    `withToken`, `domIdPath`. No `root`, no `forward` (PART 8.7). `HttpClient` is
-    its only implementer, so the interface change is cheap.
+    `contextId`, `withToken`, `domIdPath`. No `root`, no `forward` (PART 8.7).
   * `com.domatar.servlet.DomatarServlet` — cookie verify, mint UI
     SrcDomId, `root`.
   * `com.domatar.servlet.Msg` — parse `Sec=`, always verify the path,

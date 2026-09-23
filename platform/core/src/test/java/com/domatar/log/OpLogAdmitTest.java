@@ -17,8 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.domatar.core.Context;
-import com.domatar.core.HttpClient;
-import com.domatar.core.Trust;
+import com.domatar.core.HandlerClient;
+import com.domatar.core.TestClients;
 import com.domatar.crypto.CanonicalJson;
 import com.domatar.crypto.Path;
 import com.domatar.crypto.Provenance;
@@ -49,7 +49,7 @@ public class OpLogAdmitTest
   private DomId dst;
   private Context ctx;
   private Provenance prov;
-  private HttpClient client;
+  private HandlerClient client;
   private JsonMsg ping;
 
   @BeforeAll
@@ -90,9 +90,8 @@ public class OpLogAdmitTest
     final byte[] body = bodyBytes("Ping");
     final Path path = Path.root(ui, dst, body, "actA", "testprv");
     prov = Provenance.of(path, null, null);
-    ctx = new Context("actA", "u", "n", "127.0.0.1", "tok", Trust.ACCOUNT,
-        path.contextId(), null);
-    client = HttpClient.inbound(dst, "localhost", ctx, "/domatar", "", prov);
+    ctx = TestClients.account("actA", "u", "n", "127.0.0.1", "tok", path.contextId());
+    client = TestClients.inbound(dst, "localhost", ctx, "/domatar", "", prov);
     ping = msg("desktop", "desktop", "Ping", dst);
   }
 
@@ -205,8 +204,8 @@ public class OpLogAdmitTest
       final String op, final DomId dstId) throws DomatarException
   {
     final JsonMsg m = new JsonMsg();
-    m.addRequestHead(dstId, dstId, new Context("actA", "u", "n", "127.0.0.1",
-        "tok", Trust.ACCOUNT, "ctx", null));
+    m.addRequestHead(dstId, dstId, TestClients.account("actA", "u", "n", "127.0.0.1",
+        "tok", "ctx"));
     m.addClsId(clsAppId, clsId);
     m.addRequestBody(op, new ObjAttrs());
     return m;

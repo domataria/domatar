@@ -493,13 +493,16 @@ Direction (Option C):
         contextId, or object list. Unsigned HTTP is rejected except
         the directory carve-out (hst/hsts): provider-key lookups must
         be reachable before any credential chain can be verified.
-        `requiresPath()` and the "Hst not found" versus "Obj not
-        found" distinction stay at this boundary. Delivery of the
-        addressed object is `HttpClient.deliverLocal`: the same
-        in-process path as `sendLocal` (class lookup, hasRights or
-        Compensate.admit, the op_dst visit, handleMsg, saga
-        auto-attach). It does not append a hop and does not write
-        op_msg. The sending provider already did both before the POST.
+        Delivery is `HttpClient.receive`: it verifies the chain,
+        stamps trust from the verdict, applies `requiresPath()`,
+        distinguishes "Hst not found" from "Obj not found", then
+        uses the same in-process path as `sendLocal` (class lookup,
+        hasRights or Compensate.admit, the op_dst visit, handleMsg,
+        saga auto-attach). It does not append a hop and does not
+        write op_msg. The sending provider already did both before
+        the POST. The handler is given a final platform client.
+        `Auth.isVerified` is true only for that client when it holds
+        Trust.ACCOUNT. A `Verified` flag on the message is not trust.
 
   In-process local handler chains (`HttpClient.sendLocal`) inherit
   the stamped Context: the JsonMsg is rebuilt from the same
@@ -555,15 +558,15 @@ Direction (Option C):
   declare stricter policies. Today the standard policies are:
 
     - public:    return true;                  (no check)
-    - verified:  return Auth.isVerified(inMsg); (caller verified by
-                                                 an upstream trust
-                                                 boundary on this prv)
+    - verified:  return Auth.isVerified(msgClient); (the platform
+                                                 client holds
+                                                 Trust.ACCOUNT)
     - mixed:     switch on inMsg.getOperation() and return one of the
                  above per-op (e.g. ActManagerImpl: Login / AddAct /
                  VerifyLogin are public, GetAct / Logout are verified).
 
-  `Auth.isVerified` is a flag read on Context.verified — no DB hit,
-  no recursion. The framework's LoginRemote.verifyLogin is invoked
+  `Auth.isVerified` reads the platform client, not the message.
+  No DB hit, no recursion. The framework's LoginRemote.verifyLogin is invoked
   exactly twice per request lifecycle (once at the entry trust
   boundary; never again as the message bounces through local
   handlers).
@@ -574,8 +577,9 @@ Direction (Option C):
   are not visits. Nested `send()` records an intent edge on
   `op_msg` even if the callee denies; `root()` writes no edge.
   Handlers query that store on the same `DomatarMsgClient` they
-  receive for `hasRights`: `alreadyEntered`, `priorVisitCount`,
-  `priorVisitCountAny`, `outMsgs`, `attach`, `attachment`. They
+  receive for `hasRights`: `contextId`, `alreadyEntered`,
+  `priorVisitCount`, `priorVisitCountAny`, `outMsgs`, `attach`,
+  `attachment`. They
   do not INSERT. Current-request `alreadyEntered` /
   `priorVisitCount` are a snapshot taken before this admit.
 

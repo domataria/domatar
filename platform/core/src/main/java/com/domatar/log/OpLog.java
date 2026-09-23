@@ -2,7 +2,7 @@ package com.domatar.log;
 
 import com.domatar.core.Context;
 import com.domatar.core.DomatarConfig;
-import com.domatar.core.HttpClient;
+import com.domatar.core.HandlerClient;
 import com.domatar.core.Trust;
 import com.domatar.crypto.Provenance;
 import com.domatar.db.OpLogDb;
@@ -84,7 +84,7 @@ public final class OpLog
    * After hasRights admits: snapshot (no-op if already taken) then upsert.
    * Returns thisAdmitIsFirst (false if skipped).
    */
-  public static boolean admitIfNeeded(final HttpClient client, final JsonMsg inMsg,
+  public static boolean admitIfNeeded(final HandlerClient client, final JsonMsg inMsg,
       final Obj obj, final Provenance prov) throws DomatarException
   {
     if (client == null)
@@ -93,14 +93,14 @@ public final class OpLog
     if (isSkipVisit() || isDirectory(inMsg)
         || prov == null || prov.isUnsignedHttp())
     {
-      client.thisAdmitIsFirst = false;
+      client.setAdmitFirst(false);
       return false;
     }
 
-    final Context ctx = client.inboundContext();
+    final Context ctx = client.stampedContext();
     if (ctx == null || ctx.contextId == null)
     {
-      client.thisAdmitIsFirst = false;
+      client.setAdmitFirst(false);
       return false;
     }
 
@@ -113,13 +113,13 @@ public final class OpLog
     final String trust = ctx.trust.name();
     final String hstId = inMsg.getDstId().hstId;
 
-    client.thisAdmitIsFirst = OpLogDb.upsertVisit(
+    client.setAdmitFirst(OpLogDb.upsertVisit(
         hstId, ctx.contextId, dstDomId, msgName,
-        actId, callerDomId, trust, nowMs(), visitTtlMs());
-    return client.thisAdmitIsFirst;
+        actId, callerDomId, trust, nowMs(), visitTtlMs()));
+    return client.admitWasFirst();
   }
 
-  private static String callerDomId(final HttpClient client, final Provenance prov)
+  private static String callerDomId(final HandlerClient client, final Provenance prov)
       throws DomatarException
   {
     if (prov.isEmpty())

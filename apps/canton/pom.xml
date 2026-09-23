@@ -21,6 +21,13 @@
             <artifactId>domatar-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.domatar</groupId>
+            <artifactId>domatar-core</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
             <scope>provided</scope>

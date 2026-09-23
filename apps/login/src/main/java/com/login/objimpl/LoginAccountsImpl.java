@@ -66,12 +66,12 @@ public class LoginAccountsImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
 
-    final Context ctx = inMsg.getContext();
-    return ctx != null && ctx.actId != null
-        && obj != null && ctx.actId.equals(obj.domId.actId);
+    final String actId = Auth.actId(msgClient);
+    return actId != null && obj != null && obj.domId != null
+        && actId.equals(obj.domId.actId);
   }
 
   /**

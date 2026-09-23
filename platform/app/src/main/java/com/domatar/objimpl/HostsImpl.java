@@ -62,11 +62,11 @@ public class HostsImpl extends ObjImpl
     if ("GetLnks".equals(opr))
       open(opr, inMsg, outMsg, obj);
     else if ("ListHsts".equals(opr))
-      listHsts(opr, inMsg, outMsg, obj);
+      listHsts(opr, inMsg, outMsg, obj, msgClient);
     else if ("RegisterHst".equals(opr))
-      registerHst(opr, inMsg, outMsg, obj);
+      registerHst(opr, inMsg, outMsg, obj, msgClient);
     else if ("DeregisterHst".equals(opr))
-      deregisterHst(opr, inMsg, outMsg, obj);
+      deregisterHst(opr, inMsg, outMsg, obj, msgClient);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -78,14 +78,14 @@ public class HostsImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return Auth.isVerified(inMsg);
+    return Auth.isVerified(msgClient);
   }
 
-  private boolean isOwner(final JsonMsg inMsg, final Obj obj) throws DomatarException
+  private boolean isOwner(final DomatarMsgClient msgClient, final Obj obj)
   {
-    final Context ctx = inMsg.getContext();
-    return ctx != null && ctx.actId != null
-        && obj != null && ctx.actId.equals(obj.domId.actId);
+    final String actId = Auth.actId(msgClient);
+    return actId != null && obj != null && obj.domId != null
+        && actId.equals(obj.domId.actId);
   }
 
   /**
@@ -136,10 +136,10 @@ public class HostsImpl extends ObjImpl
 
   /** ListHsts: full hst table, owner only. */
   private void listHsts(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
-                        final Obj obj)
+                        final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isOwner(inMsg, obj))
+    if (!isOwner(msgClient, obj))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -168,10 +168,10 @@ public class HostsImpl extends ObjImpl
    * and link hosts → host-&lt;hstId&gt;.
    */
   private void registerHst(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
-                            final Obj obj)
+                            final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isOwner(inMsg, obj))
+    if (!isOwner(msgClient, obj))
     {
       outMsg.addError(opr, "Not authorized");
       return;
@@ -219,10 +219,10 @@ public class HostsImpl extends ObjImpl
    * Refuses to remove the provider's own host or "domatar".
    */
   private void deregisterHst(final String opr, final JsonMsg inMsg, final JsonMsg outMsg,
-                              final Obj obj)
+                              final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    if (!isOwner(inMsg, obj))
+    if (!isOwner(msgClient, obj))
     {
       outMsg.addError(opr, "Not authorized");
       return;

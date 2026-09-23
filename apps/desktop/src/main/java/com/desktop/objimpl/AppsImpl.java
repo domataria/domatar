@@ -108,14 +108,13 @@ public class AppsImpl extends ObjImpl
   public boolean hasRights(final JsonMsg inMsg, final Obj obj,
                            final DomatarMsgClient msgClient) throws DomatarException
   {
-    if (!Auth.isVerified(inMsg))
+    if (!Auth.isVerified(msgClient))
       return false;
 
-    final Context ctx = inMsg.getContext();
+    final String actId = Auth.actId(msgClient);
     final DomId   dst = inMsg.getDstId();
 
-    return ctx != null && ctx.actId != null && dst != null
-        && ctx.actId.equals(dst.actId);
+    return actId != null && dst != null && actId.equals(dst.actId);
   }
 
   /**

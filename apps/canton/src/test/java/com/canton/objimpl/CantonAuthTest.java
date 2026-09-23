@@ -11,8 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import com.domatar.core.Context;
+import com.domatar.core.TestClients;
 import com.domatar.core.Trust;
+import com.domatar.crypto.Provenance;
 import com.domatar.util.DomId;
+import com.domatar.util.DomatarMsgClient;
 import com.domatar.util.JsonMsg;
 
 public class CantonAuthTest
@@ -22,39 +25,50 @@ public class CantonAuthTest
   @Test
   public void verifiedCallerMatchesDestWhenObjIsNull() throws Exception
   {
-    final JsonMsg msg = request(ACT, ACT, Trust.ACCOUNT);
+    final JsonMsg msg = request(ACT, ACT);
+    final DomatarMsgClient client = client(ACT, Trust.ACCOUNT);
 
-    assertTrue(CantonAuth.isVerifiedOwner(msg, null));
+    assertTrue(CantonAuth.isVerifiedOwner(msg, null, client));
     assertEquals(ACT, CantonAuth.destActId(msg, null));
   }
 
   @Test
   public void rejectsDifferentAct() throws Exception
   {
-    final JsonMsg msg = request(ACT, "otherActId______________________",
-        Trust.ACCOUNT);
+    final JsonMsg msg = request(ACT, "otherActId______________________");
+    final DomatarMsgClient client = client(ACT, Trust.ACCOUNT);
 
-    assertFalse(CantonAuth.isVerifiedOwner(msg, null));
+    assertFalse(CantonAuth.isVerifiedOwner(msg, null, client));
   }
 
   @Test
   public void rejectsUnverified() throws Exception
   {
-    final JsonMsg msg = request(ACT, ACT, Trust.NONE);
+    final JsonMsg msg = request(ACT, ACT);
+    final DomatarMsgClient client = client(ACT, Trust.NONE);
 
-    assertFalse(CantonAuth.isVerifiedOwner(msg, null));
+    assertFalse(CantonAuth.isVerifiedOwner(msg, null, client));
   }
 
-  private static JsonMsg request(final String callerAct, final String destAct,
-                                 final Trust trust) throws Exception
+  private static JsonMsg request(final String callerAct, final String destAct)
+      throws Exception
   {
     final Context ctx = new Context(callerAct, "davidb@quippin", "David",
-        "127.0.0.1", "tok", trust, "ctx1", null);
+        "127.0.0.1", "tok", null);
     final DomId src = new DomId("h1", "aiagent", callerAct, "agent-loop");
     final DomId dst = new DomId("canton-" + destAct, "canton", destAct, "app-canton");
     final JsonMsg msg = new JsonMsg();
     msg.addRequestHead(src, dst, ctx);
-    msg.setContext(ctx);
     return msg;
+  }
+
+  private static DomatarMsgClient client(final String callerAct, final Trust trust)
+      throws Exception
+  {
+    final Context ctx = trust == Trust.ACCOUNT
+        ? TestClients.account(callerAct, "davidb@quippin", "David", "127.0.0.1", "tok", "ctx1")
+        : new Context(callerAct, "davidb@quippin", "David", "127.0.0.1", "tok", null);
+    final DomId src = new DomId("h1", "aiagent", callerAct, "agent-loop");
+    return TestClients.inbound(src, "localhost", ctx, "/domatar", "", Provenance.empty());
   }
 }
