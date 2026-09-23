@@ -563,19 +563,45 @@ public class HttpClient implements DomatarMsgClient
   }
 
   /**
-   * Local dispatch. Class identification matches Msg.doAction: the envelope
-   * wins; the obj row is loaded only as a fallback when the envelope carries
-   * no class. Container services (quips, news, follows, ...) work without an
-   * obj row by relying on the envelope class.
-   *
-   * WHY the callee's client is built from {@code extended}, not
-   * {@code srcContext}: the shipped sendLocal constructed a fresh public
-   * HttpClient and dropped every in-process hop (Spec PART 11.2). The
-   * handler must receive the extended provenance so its send() appends
-   * rather than restarting the chain.
+   * Same-JVM hop. Builds the child context from the extended chain
+   * (context id is hop 0's, identity and trust are the caller's) and
+   * delivers through {@link #deliverLocal}. The handler's client
+   * carries {@code extended} so its {@code send()} appends rather
+   * than restarting the chain.
    */
   private String sendLocal(final DomId dstDomId, final JsonMsg jsonMsg,
                            final Provenance extended) throws DomatarException
+  {
+    final Context childCtx = new Context(srcContext.actId, srcContext.usrId,
+                                         srcContext.usrName, srcContext.usrIp,
+                                         srcContext.token, srcContext.trust,
+                                         extended.contextId(),
+                                         srcContext.httpHeaders);
+
+    return deliverLocal(dstDomId, jsonMsg, childCtx, srcDomain,
+                        srcContextPath, srcContextRealPath, extended);
+  }
+
+  /**
+   * In-process delivery to an object already on this JVM.
+   * {@code sendLocal} calls this after it has appended a hop.
+   * {@code Msg.doAction} calls this for the object the HTTP request
+   * addressed, passing the provenance that arrived on the request:
+   * the hop and the {@code op_msg} edge already exist on the sender,
+   * so this method writes neither.
+   *
+   * Class identification: the envelope wins; the obj row is loaded
+   * only when the envelope carries no class. Container services work
+   * without an obj row by relying on the envelope class.
+   *
+   * {@code stamped} is the context the caller already decided
+   * (the child context after a hop, or the Verdict stamp on HTTP
+   * inbound). This method does not rebuild it from {@code chain}.
+   */
+  public static String deliverLocal(final DomId dstDomId, final JsonMsg jsonMsg,
+                                    final Context stamped, final String srcDomain,
+                                    final String contextPath, final String contextRealPath,
+                                    final Provenance chain) throws DomatarException
   {
     String clsAppId = jsonMsg.getClsAppId();
     String clsId    = jsonMsg.getClsId();
@@ -600,39 +626,34 @@ public class HttpClient implements DomatarMsgClient
     if (msgHandler == null)
       return errorMsg(jsonMsg.getOperation(), "Handler not found");
 
-    final Context childCtx = new Context(srcContext.actId, srcContext.usrId,
-                                         srcContext.usrName, srcContext.usrIp,
-                                         srcContext.token, srcContext.trust,
-                                         extended.contextId(),
-                                         srcContext.httpHeaders);
+    final Provenance held = chain != null ? chain : Provenance.empty();
+    final HttpClient msgClient = inbound(dstDomId, srcDomain, stamped,
+                                         contextPath, contextRealPath, held);
 
-    final HttpClient msgClient = inbound(dstDomId, srcDomain, childCtx,
-                                         srcContextPath, srcContextRealPath,
-                                         extended);
-
-    jsonMsg.setContext(childCtx);
+    jsonMsg.setContext(stamped);
 
     if (msgHandler instanceof ObjImpl)
     {
       final ObjImpl impl = (ObjImpl) msgHandler;
-      msgClient.snapshotPriors(childCtx.contextId, jsonMsg.getDstId().toString(),
+      final String contextId = stamped != null ? stamped.contextId : null;
+      msgClient.snapshotPriors(contextId, jsonMsg.getDstId().toString(),
           jsonMsg.getOperation());
       if ("Compensate".equals(jsonMsg.getOperation()))
       {
-        if (!Compensate.admitInbound(jsonMsg, msgClient, extended,
-            childCtx.actId))
+        if (!Compensate.admitInbound(jsonMsg, msgClient, held,
+            stamped != null ? stamped.actId : null))
           return impl.notAuthorized(jsonMsg);
-        OpLog.admitIfNeeded(msgClient, jsonMsg, obj, extended);
-        return msgHandler.handleMsg(jsonMsg.toString(), obj, srcContextPath,
-            srcContextRealPath, msgClient);
+        OpLog.admitIfNeeded(msgClient, jsonMsg, obj, held);
+        return msgHandler.handleMsg(jsonMsg.toString(), obj, contextPath,
+            contextRealPath, msgClient);
       }
       if (!impl.hasRights(jsonMsg, obj, msgClient))
         return impl.notAuthorized(jsonMsg);
-      OpLog.admitIfNeeded(msgClient, jsonMsg, obj, extended);
+      OpLog.admitIfNeeded(msgClient, jsonMsg, obj, held);
     }
 
     final String ret = msgHandler.handleMsg(jsonMsg.toString(), obj,
-        srcContextPath, srcContextRealPath, msgClient);
+        contextPath, contextRealPath, msgClient);
     if (msgHandler instanceof ObjImpl
         && !"Compensate".equals(jsonMsg.getOperation()))
       Compensate.autoAttachIfNeeded(msgClient, jsonMsg, obj, ret);

@@ -493,6 +493,13 @@ Direction (Option C):
         contextId, or object list. Unsigned HTTP is rejected except
         the directory carve-out (hst/hsts): provider-key lookups must
         be reachable before any credential chain can be verified.
+        `requiresPath()` and the "Hst not found" versus "Obj not
+        found" distinction stay at this boundary. Delivery of the
+        addressed object is `HttpClient.deliverLocal`: the same
+        in-process path as `sendLocal` (class lookup, hasRights or
+        Compensate.admit, the op_dst visit, handleMsg, saga
+        auto-attach). It does not append a hop and does not write
+        op_msg. The sending provider already did both before the POST.
 
   In-process local handler chains (`HttpClient.sendLocal`) inherit
   the stamped Context: the JsonMsg is rebuilt from the same

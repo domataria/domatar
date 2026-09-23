@@ -26,8 +26,6 @@ import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
 import com.domatar.install.DirectoryKeyResolver;
 import com.domatar.install.OfferedHostsInstall;
-import com.domatar.log.OpLog;
-import com.domatar.saga.Compensate;
 import com.domatar.util.Hst;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -97,9 +95,11 @@ public class Msg extends HttpServlet
    *    Verdict; informational fields come from the wire Context. We never
    *    trust the wire's ActId, Verified, contextId, or DomIdPath.
    *
-   *  - AUTHORIZATION: {@link ObjImpl#hasRights}. Handlers that require a
-   *    verified caller call Auth.isVerified (Trust.ACCOUNT). {@code
-   *    requiresPath()} is policy only: a non-ACCOUNT verdict is fatal for
+   *  - AUTHORIZATION and the visit: {@link HttpClient#deliverLocal}, the
+   *    same in-process path as a same-JVM send. It runs hasRights (or
+   *    Compensate.admit), writes op_dst, and calls handleMsg. It does
+   *    not append a hop and does not write op_msg. {@code
+   *    requiresPath()} stays here: a non-ACCOUNT verdict is fatal for
    *    that class (KD14).
    *
    * Unsigned HTTP messages (no {@code Sec=} parameter, empty path, or
@@ -168,7 +168,6 @@ public class Msg extends HttpServlet
 
             final Context dispatchContext = stampFromVerdict(jsonMsg, verdict);
             jsonMsg.setContext(dispatchContext);
-            msg = jsonMsg.toString();
 
             String clsAppId = jsonMsg.getClsAppId();
             String clsId    = jsonMsg.getClsId();
@@ -208,44 +207,8 @@ public class Msg extends HttpServlet
                   retMsg = errorMsg(jsonMsg.getOperation(), "Not authorized");
                 }
                 else
-                {
-                  final HttpClient client = HttpClient.inbound(dstDomId, srcDomain,
-                      dispatchContext, contextPath, contextRealPath, inboundProv);
-
-                  if (msgHandler instanceof ObjImpl)
-                  {
-                    final ObjImpl impl = (ObjImpl) msgHandler;
-                    client.snapshotPriors(dispatchContext.contextId,
-                        jsonMsg.getDstId().toString(), jsonMsg.getOperation());
-                    if ("Compensate".equals(jsonMsg.getOperation()))
-                    {
-                      if (!Compensate.admitInbound(jsonMsg, client, inboundProv,
-                          dispatchContext.actId))
-                        retMsg = impl.notAuthorized(jsonMsg);
-                      else
-                      {
-                        OpLog.admitIfNeeded(client, jsonMsg, obj, inboundProv);
-                        retMsg = msgHandler.handleMsg(msg, obj, contextPath,
-                            contextRealPath, client);
-                      }
-                    }
-                    else if (!impl.hasRights(jsonMsg, obj, client))
-                      retMsg = impl.notAuthorized(jsonMsg);
-                    else
-                    {
-                      OpLog.admitIfNeeded(client, jsonMsg, obj, inboundProv);
-                      retMsg = msgHandler.handleMsg(msg, obj, contextPath,
-                          contextRealPath, client);
-                      Compensate.autoAttachIfNeeded(client, jsonMsg, obj,
-                          retMsg);
-                    }
-                  }
-                  else
-                  {
-                    retMsg = msgHandler.handleMsg(msg, obj, contextPath, contextRealPath,
-                        client);
-                  }
-                }
+                  retMsg = HttpClient.deliverLocal(dstDomId, jsonMsg, dispatchContext,
+                      srcDomain, contextPath, contextRealPath, inboundProv);
               }
               else
                 retMsg = errorMsg(jsonMsg.getOperation(), "Handler not found");

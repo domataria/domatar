@@ -1215,6 +1215,9 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
     that verdict only — `actId` and `trust` from Q1, `contextId` from
     the verified Path. Never trust a wire `Verified` flag, `ActId`,
     `contextId`, or object list. A prv only believes its own checks.
+    The addressed object is then delivered with `HttpClient.deliverLocal`
+    (the same in-process path as `sendLocal`). That call does not
+    append a hop and does not write `op_msg`.
 
   * MsgHandler (in-process entry): the class was dead code (its whole
     body commented out, no caller) and was DELETED (KD7). The lesson
