@@ -1,0 +1,11 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+*.sql # ignore all sql files
+**/*.sql  # ignore all sql files
+*.pdf # ignore all pdf files
+**/*.pdf # ignore all pdf files
+*.docx # ignore all docx files
+**/*.docx # ignore all docx files
+*.doc # ignore all doc files
+**/*.doc # ignore all doc files
+*.xls # ignore all xls files
+**/*.xls # ignore all xls files

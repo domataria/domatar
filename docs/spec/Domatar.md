@@ -571,7 +571,18 @@ Direction (Option C):
   boundary; never again as the message bounces through local
   handlers).
 
-  After `hasRights` admits, dispatch writes a visit on `op_dst`
+  Dispatch calls `ObjImpl.rights()`, which returns DENY, ADMIT, or
+  PRICED, and then `OpLog.admit`. Boolean `hasRights()` overrides
+  still map to admit or deny. A priced class overrides `rights()`.
+  PRICED draws the list-price Cost ([Class](platform/Class.md) PART 3)
+  from `pay_bal` on the first admit of the `op_dst` row, in the same
+  local transaction as the visit upsert. A failed draw is a deny and
+  not a visit. GetCls and Compensate are never drawn. Slot `payment`
+  is platform-written; handlers must not `attach("payment")`. The
+  visit meter is the operation log. The draw, the saga slot, and a
+  rebate when a visit is compensated are `OpLogListener`s.
+  `HttpClient` does not name those features. After `rights()`
+  admits, dispatch writes a visit on `op_dst`
   (PART 7) before `handleMsg`. A deny is not a visit. Directory
   class `(hst, hsts)`, unsigned bootstrap, and `OpLog.skipVisit`
   are not visits. Nested `send()` records an intent edge on
@@ -591,9 +602,11 @@ Direction (Option C):
   `Seq`, sending `Compensate` to each child and waiting for the
   ack, then invokes the class-descriptor `Compensates` Msg
   in-process under `OpLog.skipVisit` (not a visit, and not
-  `send()`). Dispatch admits `Compensate` with `Compensate.admit`
-  before `handleMsg`; it does not call the subclass `hasRights`
-  for that operation ([Class](platform/Class.md) PART 3).
+  `send()`). The saga listener admits `Compensate` with
+  `Compensate.admitInbound` before `handleMsg` and does not call
+  `rights()` or the subclass `hasRights` for that operation
+  ([Class](platform/Class.md) PART 3). When the visit is marked
+  compensated it notifies the log; payment's listener rebates.
 
   Direction: richer dynamic policies (owner-match, follower-status,
   ban-list consultation, ...) are each just another branch inside a

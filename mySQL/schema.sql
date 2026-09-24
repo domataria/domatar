@@ -108,6 +108,16 @@ CREATE TABLE `op_msg` (
   KEY `op_msg_ctx` (`HstId`,`ContextId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
+CREATE TABLE `pay_bal` (
+  `HstId`      varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `PayeeActId` varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `PayerActId` varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `Remaining`  bigint NOT NULL,
+  `UpdatedAt`  bigint NOT NULL,
+  PRIMARY KEY (`HstId`,`PayeeActId`,`PayerActId`),
+  CONSTRAINT `pay_bal_remaining_nonneg` CHECK (`Remaining` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
 DROP TABLE IF EXISTS `obj`;
 CREATE TABLE `obj` (
   `HstId` varchar(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

@@ -171,12 +171,12 @@ public class DbConnection
 
   void commit() throws SQLException
   {
-//    conn.c.commit(); // autocommit is true
+    conn.c.commit();
   }
 
   void rollback() throws SQLException
   {
-//    conn.c.rollback(); // autocommit is true
+    conn.c.rollback();
   }
 
   boolean isClosed() throws SQLException

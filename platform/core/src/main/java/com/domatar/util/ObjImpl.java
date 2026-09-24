@@ -93,6 +93,20 @@ public class ObjImpl implements DomatarInterface
     return true;
   }
 
+  /**
+   * Three-way door. OpLog.admit calls this unless a listener already
+   * authorized the operation (Compensate).
+   * WHY: boolean hasRights stays the override point for admit/deny;
+   * priced classes override rights(). Cycle deny (inOwnPath) lands
+   * on the line below, not in an OpLog listener.
+   */
+  public Rights rights(final JsonMsg inMsg, final Obj obj, final DomatarMsgClient msgClient)
+      throws DomatarException
+  {
+    // Spec-Reentry: if (msgClient.inOwnPath()) return Rights.DENY;
+    return hasRights(inMsg, obj, msgClient) ? Rights.ADMIT : Rights.DENY;
+  }
+
   public String compensate(final JsonMsg inMsg, final Obj obj,
       final DomatarMsgClient msgClient) throws DomatarException
   {

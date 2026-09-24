@@ -11,6 +11,7 @@ import com.domatar.db.DbConnection;
 import com.domatar.install.AppInstall;
 import com.domatar.install.AppUserInstallHandler;
 import com.domatar.install.OpLogInstall;
+import com.domatar.install.PaymentInstall;
 import com.domatar.log.OpLogJanitor;
 import com.domatar.servlet.AppAssetServlet;
 import com.domatar.util.DomatarException;
@@ -67,6 +68,15 @@ public class AppLoader implements ServletContextListener
     catch (final Exception e)
     {
       LOG.log(Level.WARNING, "OpLogInstall.ensureTables failed", e);
+    }
+
+    try
+    {
+      PaymentInstall.ensureTable();
+    }
+    catch (final Exception e)
+    {
+      LOG.log(Level.WARNING, "PaymentInstall.ensureTable failed", e);
     }
 
     try

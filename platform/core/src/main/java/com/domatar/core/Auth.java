@@ -61,6 +61,15 @@ public final class Auth
     return ((HandlerClient) client).accountActId();
   }
 
+  /** Dotted destination on a platform client. Null for any other client. */
+  public static String destinationDomId(final DomatarMsgClient client)
+  {
+    if (!(client instanceof HandlerClient))
+      return null;
+
+    return ((HandlerClient) client).destinationDomId();
+  }
+
   /**
    * True when dispatch built this client. Unverified platform clients
    * are included. An app implementation of {@link DomatarMsgClient} is not.

@@ -1568,6 +1568,12 @@ Each dynamic tool's LlmTool entry is built by MsgsSchemaBuilder:
 
   name          The Msg's Name field.
   description   The Msg's Description field (fallback: Name).
+                A Msg Cost is copied onto the description as
+                "Cost: N credit." and onto ToolEntry.costAmount.
+                That is a hint, not a hard stop, and it does not
+                replace SideEffect until publisher-signed
+                descriptors exist ([Security](../platform/Security.md)
+                PART 15).
   parameters    A JSON Schema object with one string property per
                 Msg Parm; required[] lists non-optional parms. See
                 PART 16.7 for the schema template.
@@ -1624,6 +1630,10 @@ specified in [Class](../platform/Class.md) and summarised here.
                              typed tool's description.
     SideEffect     [NEW]     "Read" | "Write" | "Destructive".
     Auth           [NEW]     "Public" | "Verified" | "Owner" | ...
+    Cost                     { Amount, Unit: "credit" }. Absent
+                             means free. The agent displays it and
+                             does not enforce it. SideEffect remains
+                             the consent gate.
 
   Per Parm
   --------
@@ -1673,7 +1683,7 @@ MsgsSchemaBuilder):
 
   {
     "name"        : "<MsgName>",
-    "description" : "<Msg Description, or Name if absent>",
+    "description" : "<Msg Description, or Name if absent>< Cost: N credit. when Cost is a positive credit amount>",
     "parameters"  : {
       "type"       : "object",
       "properties" : {
@@ -1929,8 +1939,10 @@ behaviour is described, and what the prerequisite work is.
 18.4 Class descriptor enrichment
 
   Add Description (per-class, per-Msg, per-Parm), Conventions,
-  SideEffect, and Auth fields to [Class](../platform/Class.md) PART 3, and
-  populate them in every app's install routine. Without these
+  SideEffect, Auth, and Cost fields to [Class](../platform/Class.md) PART 3, and
+  populate them in every app's install routine. Cost sits beside
+  SideEffect / Auth / Compensates as a field the agent displays
+  and does not enforce. Without these
   fields, agent tool selection is materially less reliable;
   with them it is mechanical.
 

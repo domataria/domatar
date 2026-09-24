@@ -4,6 +4,7 @@
 
 package com.aiagent.agent;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +25,8 @@ import com.aiagent.llm.LlmTool;
  *                 Name (required), Description, SideEffect, Srv
  *                 (Srv = "srvAppId.srvId" from the resolved descriptor),
  *                 Compensates (optional MsgName; metadata only),
+ *                 Cost (optional {Amount, Unit}; credit list price,
+ *                 appended to the tool description, not a consent gate),
  *                 Parms (JsonList of {Name, Type, Description}).
  *               Optional parms have a Type ending with "?".
  *
@@ -49,6 +52,9 @@ public final class MsgsSchemaBuilder
    *           Null for plain-text descriptors.
    * compensates  Optional undo MsgName from GetCls. Metadata only —
    *           not a consent signal (SideEffect stays the v1 gate).
+   * costAmount  List price in credits, or null when Cost is absent,
+   *           zero, or not credit. A hint on the tool description.
+   *           SideEffectClassifier does not read it.
    */
   public static class ToolEntry
   {
@@ -56,6 +62,7 @@ public final class MsgsSchemaBuilder
     public final String  srvAppId;
     public final String  srvId;
     public final String  compensates;
+    public final Long    costAmount;
 
     public ToolEntry(final LlmTool tool, final String srvAppId, final String srvId)
     {
@@ -65,10 +72,18 @@ public final class MsgsSchemaBuilder
     public ToolEntry(final LlmTool tool, final String srvAppId, final String srvId,
                      final String compensates)
     {
+      this(tool, srvAppId, srvId, compensates, null);
+    }
+
+    public ToolEntry(final LlmTool tool, final String srvAppId, final String srvId,
+                     final String compensates, final Long costAmount)
+    {
       this.tool        = tool;
       this.srvAppId    = srvAppId;
       this.srvId       = srvId;
       this.compensates = compensates;
+      this.costAmount  = costAmount == null || costAmount.longValue() <= 0L
+          ? null : costAmount;
     }
   }
 
@@ -157,10 +172,15 @@ public final class MsgsSchemaBuilder
         if (compensates != null && compensates.isEmpty())
           compensates = null;
 
+        // WHY: Cost is a list-price hint. SideEffect stays the consent gate.
+        final Long costAmount = creditCost(msg);
+        if (costAmount != null)
+          description = description + " Cost: " + costAmount + " credit.";
+
         result.add(new ToolEntry(
             new LlmTool(name, description,
                 buildSchema(parmNames, parmDescs, required), sideEffect),
-            srvAppId, srvId, compensates));
+            srvAppId, srvId, compensates, costAmount));
       }
       return result;
     }
@@ -207,6 +227,64 @@ public final class MsgsSchemaBuilder
     }
 
     return result;
+  }
+
+  /**
+   * Positive integral credit amount, or null. Same rule as
+   * ClsResolver: omitted Unit is credit; zero, negative, non-integral,
+   * and any other Unit are absent.
+   */
+  private static Long creditCost(final JsonMap msg)
+  {
+    if (msg == null)
+      return null;
+
+    final Object raw = msg.get("Cost");
+    if (!(raw instanceof JsonMap))
+      return null;
+
+    final JsonMap cost = (JsonMap) raw;
+    final Object unit = cost.get("Unit");
+    if (unit != null && !"credit".equals(unit))
+      return null;
+
+    return integralCredit(cost.get("Amount"));
+  }
+
+  private static Long integralCredit(final Object raw)
+  {
+    if (!(raw instanceof Number))
+      return null;
+
+    final long amount;
+    if (raw instanceof BigDecimal)
+    {
+      try
+      {
+        amount = ((BigDecimal) raw).longValueExact();
+      }
+      catch (final ArithmeticException e)
+      {
+        return null;
+      }
+    }
+    else if (raw instanceof Double || raw instanceof Float)
+    {
+      final double d = ((Number) raw).doubleValue();
+      if (Double.isNaN(d) || Double.isInfinite(d) || d != Math.rint(d))
+        return null;
+      if (d <= 0d || d > Long.MAX_VALUE)
+        return null;
+      amount = (long) d;
+    }
+    else
+    {
+      amount = ((Number) raw).longValue();
+    }
+
+    if (amount <= 0L)
+      return null;
+    return Long.valueOf(amount);
   }
 
   // -------------------------------------------------------------------------

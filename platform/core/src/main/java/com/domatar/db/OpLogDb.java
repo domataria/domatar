@@ -1,5 +1,6 @@
 package com.domatar.db;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -8,6 +9,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
@@ -146,6 +148,56 @@ public final class OpLogDb
     finally
     {
       close(rset, pstmt, stmt, conn);
+    }
+  }
+
+  /**
+   * Same upsert as {@link #upsertVisit} on a connection the caller owns.
+   * Does not commit or close {@code conn}.
+   */
+  public static boolean upsertVisitOn(
+      final DbConnection conn,
+      final String hstId, final String contextId, final String dstDomId,
+      final String msgName, final String actId, final String callerDomId,
+      final String trust, final long nowMs, final long visitTtlMs)
+      throws DomatarException
+  {
+    Statement stmt = null;
+    PreparedStatement pstmt = null;
+    ResultSet rset = null;
+
+    try
+    {
+      stmt = conn.createStatement();
+      stmt.execute("SET @oplog_first = 1");
+
+      pstmt = conn.prepareStatement(UPSERT_VISIT);
+      pstmt.setString(1, hstId);
+      pstmt.setString(2, contextId);
+      pstmt.setString(3, dstDomId);
+      pstmt.setString(4, msgName);
+      if (actId == null)
+        pstmt.setNull(5, Types.VARCHAR);
+      else
+        pstmt.setString(5, actId);
+      pstmt.setString(6, callerDomId);
+      pstmt.setString(7, trust);
+      pstmt.setLong(8, nowMs);
+      pstmt.setLong(9, nowMs);
+      pstmt.setLong(10, nowMs + visitTtlMs);
+      pstmt.executeUpdate();
+
+      rset = stmt.executeQuery("SELECT @oplog_first");
+      rset.next();
+      return rset.getLong(1) == 1;
+    }
+    catch (final SQLException e)
+    {
+      throw new DomatarException(e);
+    }
+    finally
+    {
+      closeStatements(rset, pstmt, stmt);
     }
   }
 
@@ -424,6 +476,63 @@ public final class OpLogDb
     recomputeAttachExpiresAt(hstId, contextId, dstDomId, msgName);
   }
 
+  /**
+   * JSON_SET / JSON_REMOVE only. Does not check that the visit exists,
+   * recompute AttachExpiresAt, commit, or close {@code conn}.
+   */
+  public static void attachOn(
+      final DbConnection conn,
+      final String hstId, final String contextId, final String dstDomId,
+      final String msgName, final String slot, final String bodyJsonOrNull,
+      final long slotExpiresAt) throws DomatarException
+  {
+    if (slot == null || !SLOT.matcher(slot).matches())
+      throw new DomatarException("invalid attachment slot: " + slot);
+
+    final String path = "$." + slot;
+    PreparedStatement pstmt = null;
+
+    try
+    {
+      if (bodyJsonOrNull == null)
+      {
+        pstmt = conn.prepareStatement(
+            "UPDATE op_dst SET Attachment = JSON_REMOVE(Attachment, ?)"
+            + " WHERE HstId=? AND ContextId=? AND DstDomId=? AND MsgName=?");
+        pstmt.setString(1, path);
+        pstmt.setString(2, hstId);
+        pstmt.setString(3, contextId);
+        pstmt.setString(4, dstDomId);
+        pstmt.setString(5, msgName);
+        pstmt.executeUpdate();
+      }
+      else
+      {
+        pstmt = conn.prepareStatement(
+            "UPDATE op_dst SET Attachment = JSON_SET("
+            + "COALESCE(Attachment, CAST('{}' AS JSON)), ?,"
+            + "JSON_OBJECT('ExpiresAt', ?, 'Body', CAST(? AS JSON)))"
+            + " WHERE HstId=? AND ContextId=? AND DstDomId=? AND MsgName=?");
+        pstmt.setString(1, path);
+        pstmt.setLong(2, slotExpiresAt);
+        pstmt.setString(3, bodyJsonOrNull);
+        pstmt.setString(4, hstId);
+        pstmt.setString(5, contextId);
+        pstmt.setString(6, dstDomId);
+        pstmt.setString(7, msgName);
+        pstmt.executeUpdate();
+      }
+    }
+    catch (final SQLException e)
+    {
+      throw new DomatarException("attach JSON failed", e);
+    }
+    finally
+    {
+      closeStatements(null, pstmt, null);
+    }
+  }
+
   public static String attachmentBody(
       final String hstId, final String contextId, final String dstDomId,
       final String msgName, final String slot) throws DomatarException
@@ -514,13 +623,33 @@ public final class OpLogDb
       final String msgName) throws DomatarException
   {
     DbConnection conn = null;
+
+    try
+    {
+      conn = new DbConnection(OpLogDb.class, "recomputeAttachExpiresAt");
+      recomputeAttachExpiresAtOn(conn, hstId, contextId, dstDomId, msgName);
+    }
+    catch (final SQLException e)
+    {
+      throw new DomatarException(e);
+    }
+    finally
+    {
+      close(null, null, null, conn);
+    }
+  }
+
+  public static void recomputeAttachExpiresAtOn(
+      final DbConnection conn,
+      final String hstId, final String contextId, final String dstDomId,
+      final String msgName) throws DomatarException
+  {
     PreparedStatement sel = null;
     PreparedStatement upd = null;
     ResultSet rset = null;
 
     try
     {
-      conn = new DbConnection(OpLogDb.class, "recomputeAttachExpiresAt");
       sel = conn.prepareStatement(
           "SELECT CAST(Attachment AS CHAR CHARACTER SET utf8mb4) FROM op_dst"
           + " WHERE HstId=? AND ContextId=? AND DstDomId=? AND MsgName=?");
@@ -590,13 +719,97 @@ public final class OpLogDb
     }
     finally
     {
-      close(rset, upd, sel, conn);
+      closeStatements(rset, upd, sel);
+    }
+  }
+
+  /** Upsert, draw, and slot writes share this connection. Caller does not commit. */
+  public interface TxWork
+  {
+    void run(DbConnection conn) throws DomatarException;
+  }
+
+  /**
+   * One local transaction. A thrown {@code DomatarException} rolls back.
+   * The pooled connection is returned with autocommit on and
+   * READ_UNCOMMITTED.
+   */
+  public static void inTransaction(final TxWork work) throws DomatarException
+  {
+    DbConnection conn = null;
+    DomatarException pending = null;
+
+    try
+    {
+      conn = new DbConnection(OpLogDb.class, "inTransaction");
+      conn.setAutoCommit(false);
+      conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+      work.run(conn);
+      conn.commit();
+    }
+    catch (final SQLException e)
+    {
+      pending = new DomatarException(e);
+      rollbackQuiet(conn);
+      throw pending;
+    }
+    catch (final DomatarException e)
+    {
+      pending = e;
+      rollbackQuiet(conn);
+      throw e;
+    }
+    finally
+    {
+      if (conn != null)
+      {
+        try
+        {
+          conn.setAutoCommit(true);
+          conn.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+        }
+        catch (final SQLException e)
+        {
+          LOG.log(Level.WARNING, "op_dst connection reset failed", e);
+        }
+        try
+        {
+          close(null, null, null, conn);
+        }
+        catch (final DomatarException e)
+        {
+          LOG.log(Level.WARNING, "op_dst connection close failed", e);
+          if (pending == null)
+            throw e;
+        }
+      }
+    }
+  }
+
+  private static void rollbackQuiet(final DbConnection conn)
+  {
+    if (conn == null)
+      return;
+    try
+    {
+      conn.rollback();
+    }
+    catch (final SQLException e)
+    {
+      LOG.log(Level.WARNING, "op_dst rollback failed", e);
     }
   }
 
   private static boolean isPkCollision(final SQLException e)
   {
     return e.getErrorCode() == 1062 || "23000".equals(e.getSQLState());
+  }
+
+  private static void closeStatements(
+      final ResultSet rset, final Statement a, final Statement b)
+      throws DomatarException
+  {
+    close(rset, a, b, null);
   }
 
   private static void close(

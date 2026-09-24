@@ -12,7 +12,6 @@ import com.domatar.db.OpLogDb;
 import com.domatar.log.OpDst;
 import com.domatar.log.OpLog;
 import com.domatar.log.OpMsg;
-import com.domatar.pay.Payment;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
@@ -125,7 +124,7 @@ public final class Compensate
     if (SagaSlot.isDone(SagaSlot.status(slot)))
     {
       if (SagaSlot.STATUS_COMPENSATED.equals(SagaSlot.status(slot)))
-        Payment.rebateVisit(origContextId, origMsgName, client);
+        OpLog.compensated(origContextId, origMsgName, client);
       return reply(CompensateResult.noop(origContextId, dstDomId, origMsgName,
           "already"));
     }
@@ -212,7 +211,7 @@ public final class Compensate
 
     slot = SagaSlot.withStatus(slot, SagaSlot.STATUS_COMPENSATED);
     client.attach(origContextId, origMsgName, SagaSlot.SLOT, slot, exp);
-    Payment.rebateVisit(origContextId, origMsgName, client);
+    OpLog.compensated(origContextId, origMsgName, client);
     final CompensateResult ok = new CompensateResult(origContextId, dstDomId,
         origMsgName, CompensateResult.OUTCOME_COMPENSATED, "",
         new ArrayList<>(children));

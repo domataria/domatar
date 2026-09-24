@@ -1470,7 +1470,10 @@ directory (mTLS + directory-root signing, PART 9.3 / 10.1).
     - Publisher-signed class descriptors, digest registered in the App
       Store listing, so a provider serving a modified SideEffect /
       Cost / Compensates is detectable. Needed before those fields
-      drive consent or billing.
+      drive consent or billing. Until that exists, Cost and
+      pay_bal draws are provider-asserted (attributable, not
+      guaranteed). The mechanism may run; an agent must not treat
+      Cost as a signed quote.
     - Append-only log of hst records with gossiped signed heads
       (certificate-transparency shape): does not prevent a forged
       record; makes equivocation provable. Cheaper than threshold

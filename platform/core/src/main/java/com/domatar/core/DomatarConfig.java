@@ -586,6 +586,33 @@ public class DomatarConfig
   }
 
   /**
+   * Payment-slot TTL in milliseconds ({@code op_dst} attach window for slot
+   * {@code payment}). Default 86400000 (24h). Floor is
+   * {@link #getVisitTtlMs()}. Configurable via {@code DOMATAR_PAYMENT_TTL_MS}
+   * / {@code PaymentTtlMs}. Values below the floor are raised to the floor.
+   * WHY: slot "payment" must outlive a short visitTTL so a late Compensate
+   * can still rebate.
+   */
+  public static long getPaymentTtlMs()
+  {
+    final long floor = getVisitTtlMs();
+    final String v = resolve("DOMATAR_PAYMENT_TTL_MS", "PaymentTtlMs", null);
+    long n = 86_400_000L;
+    if (v != null && !v.isEmpty())
+    {
+      try
+      {
+        n = Long.parseLong(v);
+      }
+      catch (final NumberFormatException ignored)
+      {
+        n = 86_400_000L;
+      }
+    }
+    return n < floor ? floor : n;
+  }
+
+  /**
    * Inclusive minimum accepted {@code Sec=} envelope version (default 1).
    * Configurable via {@code DOMATAR_SEC_VER_MIN} / {@code SecVerMin}.
    */

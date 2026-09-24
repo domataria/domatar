@@ -102,6 +102,7 @@ Navigator, WUI builders, and the AI Agent see one schema per class.
         "Description" : "<sentence or short paragraph>",
         "SideEffect"  : "Read" | "Write" | "Destructive",
         "Compensates" : "<msgName>",
+        "Cost"        : { "Amount" : 0, "Unit" : "credit" },
         "Auth"        : "Public" | "Verified" | "Owner" | "Follower" | "<policy>",
         "Type"        : <type>,
         "Parms" : [
@@ -161,6 +162,21 @@ Fields:
                              and invokes that Msg in-process
                              ([Domatar](../Domatar.md) PART 6.3).
 
+                 Cost        (optional) List price for invoking this message.
+                             Object `{ "Amount" : <non-negative integer>,
+                             "Unit" : "credit" }`. Absent means list price 0.
+                             Zero, negative, non-integral, and any Unit other
+                             than "credit" are omitted (list price 0). An
+                             omitted Unit is stored as "credit". The object
+                             is provider-asserted, the same trust sentence as
+                             Compensates: not a signed quote until descriptors
+                             are publisher-signed ([Security](Security.md)
+                             PART 15). Declaring Cost does not by itself draw.
+                             The handler's `rights()` outcome does. The
+                             platform does not draw for GetCls or Compensate
+                             even when Cost is set and `rights()` returns
+                             priced ([Domatar](../Domatar.md) PART 6.3).
+
                  Auth        (optional) The minimum authorization level required:
                                "Public"    — no authentication needed.
                                "Verified"  — caller must be authenticated.
@@ -182,7 +198,7 @@ All Name values are strings. Types use the type language defined in PART 4.
 ## PART 3.1 — AGENT-FRIENDLY FIELDS
 
 The fields Description, Conventions, and per-Msg Description / SideEffect /
-Auth / per-Parm Description are optional extensions that benefit AI agents
+Auth / Cost / per-Parm Description are optional extensions that benefit AI agents
 and tooling (see [AI Agent](../apps/AIAgent.md) PART 16). Descriptors without them are
 still valid; the runtime and the Navigator ignore the extra fields. Agents
 apply conservative defaults when the fields are absent:
@@ -196,6 +212,9 @@ apply conservative defaults when the fields are absent:
                             dispatching it in Agent mode.
   Msg Auth                  "Verified" — agent assumes the caller must be
                             authenticated.
+  Msg Cost                  Absent — the agent treats the Msg as free.
+                            A present Cost is a hint, not a consent gate.
+                            SideEffect remains the gate.
   Attr / Parm Description   Agent uses the Name as the description.
 
 Conventions sub-fields guide the agent when it needs to construct a DomId
@@ -681,11 +700,12 @@ Attrs:
         "Description" : "String",
         "SideEffect"  : "String",
         "Compensates" : "String",
+        "Cost"        : { "Amount" : "Number", "Unit" : "String" },
         "Auth"        : "String",
         "Type"        : "String",
         "Parms"       : [{ "Name" : "String", "Type" : "String", "Description" : "String" }]
       }],
-      "Description" : "Array of message definitions; each entry has Name, Type, Parms, and optional Description/SideEffect/Compensates/Auth."
+      "Description" : "Array of message definitions; each entry has Name, Type, Parms, and optional Description/SideEffect/Compensates/Cost/Auth."
     }
   ],
   "Msgs" : [
@@ -705,6 +725,7 @@ Attrs:
           "Description?": "String",
           "SideEffect?" : "String",
           "Compensates?": "String",
+          "Cost?"       : { "Amount" : "Number", "Unit" : "String" },
           "Auth?"       : "String",
           "Type"        : "String",
           "Parms"       : [{ "Name" : "String", "Type" : "String", "Description?" : "String" }]
@@ -760,10 +781,11 @@ ClsMap.
 Implemented in this version:
 
   * Agent-friendly fields: Description, Conventions, per-Attr Description,
-    per-Msg Description / SideEffect / Compensates / Auth, per-Parm
+    per-Msg Description / SideEffect / Compensates / Cost / Auth, per-Parm
     Description (PART 3 / PART 3.1). Used by the AI Agent tool catalogue
     ([AI Agent](../apps/AIAgent.md) PART 16). Compensates is metadata
-    for Compensate ([Domatar](../Domatar.md) PART 6.3); consent stays
+    for Compensate ([Domatar](../Domatar.md) PART 6.3). Cost is the
+    list price the platform may draw; consent stays
     on SideEffect until publisher-signed descriptors
     ([Security](Security.md) PART 15).
 

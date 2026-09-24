@@ -34,7 +34,6 @@ import com.domatar.db.ObjDb;
 import com.domatar.db.OpLogDb;
 import com.domatar.log.OpLog;
 import com.domatar.log.OpMsg;
-import com.domatar.saga.Compensate;
 import com.domatar.util.Act;
 import com.domatar.util.Base64Encoder;
 import com.domatar.util.Hst;
@@ -415,6 +414,9 @@ public class HttpClient implements DomatarMsgClient
   public void attach(final String contextId, final String msgName, final String slot,
       final Object json, final long attachExpiresAt) throws DomatarException
   {
+    if (OpLog.isReservedSlot(slot))
+      return;
+
     if (contextId == null || msgName == null)
       return;
 
@@ -648,24 +650,14 @@ public class HttpClient implements DomatarMsgClient
       final String contextId = stamped != null ? stamped.contextId : null;
       msgClient.snapshotPriors(contextId, jsonMsg.getDstId().toString(),
           jsonMsg.getOperation());
-      if ("Compensate".equals(jsonMsg.getOperation()))
-      {
-        if (!Compensate.admitInbound(jsonMsg, handler))
-          return impl.notAuthorized(jsonMsg);
-        OpLog.admitIfNeeded(handler, jsonMsg, obj, held);
-        return msgHandler.handleMsg(jsonMsg.toString(), obj, contextPath,
-            contextRealPath, handler);
-      }
-      if (!impl.hasRights(jsonMsg, obj, handler))
+      if (!OpLog.admit(impl, handler, jsonMsg, obj, held))
         return impl.notAuthorized(jsonMsg);
-      OpLog.admitIfNeeded(handler, jsonMsg, obj, held);
     }
 
     final String ret = msgHandler.handleMsg(jsonMsg.toString(), obj,
         contextPath, contextRealPath, handler);
-    if (msgHandler instanceof ObjImpl
-        && !"Compensate".equals(jsonMsg.getOperation()))
-      Compensate.autoAttachIfNeeded(handler, jsonMsg, obj, ret);
+    if (msgHandler instanceof ObjImpl)
+      OpLog.handled(handler, jsonMsg, obj, ret);
     return ret;
   }
 
@@ -979,6 +971,11 @@ public class HttpClient implements DomatarMsgClient
   private String thisDomId()
   {
     return srcDomId.toString();
+  }
+
+  String destinationDomId()
+  {
+    return thisDomId();
   }
 
   private String thisHstId()

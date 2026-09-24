@@ -7,6 +7,9 @@ package com.domatar.install;
 import java.util.logging.Logger;
 
 import com.domatar.db.OpLogDb;
+import com.domatar.log.OpLog;
+import com.domatar.pay.PaymentListener;
+import com.domatar.saga.SagaListener;
 import com.domatar.util.DomatarException;
 
 /**
@@ -22,6 +25,8 @@ public final class OpLogInstall
   public static void ensureTables() throws DomatarException
   {
     OpLogDb.ensureTables();
+    OpLog.register(new SagaListener());
+    OpLog.register(new PaymentListener());
     LOG.info("OpLogInstall: op_dst / op_msg present");
   }
 }

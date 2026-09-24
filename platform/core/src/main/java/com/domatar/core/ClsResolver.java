@@ -4,6 +4,7 @@
 
 package com.domatar.core;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -203,6 +204,66 @@ public class ClsResolver
     return compensates(doc, msgName);
   }
 
+  /**
+   * List price in credits for {@code msgName} on a resolved GetCls document.
+   * Absent or invalid Cost is 0.
+   */
+  public static long cost(final JsonMap doc, final String msgName)
+  {
+    if (doc == null || msgName == null || msgName.isEmpty())
+      return 0L;
+
+    final Object msgsRaw = doc.get("Msgs");
+    if (!(msgsRaw instanceof JsonList))
+      return 0L;
+
+    for (final Object m : (JsonList) msgsRaw)
+    {
+      if (!(m instanceof JsonMap))
+        continue;
+      final JsonMap msg = (JsonMap) m;
+      if (!msgName.equals(msg.getString("Name")))
+        continue;
+      final JsonHashMap kept = normalizeCost(msg.get("Cost"));
+      if (kept == null)
+        return 0L;
+      return ((Number) kept.get("Amount")).longValue();
+    }
+    return 0L;
+  }
+
+  /**
+   * List price in credits for a class, via ClsMap then local resolve.
+   * Unknown class, invalid JSON, or missing Cost → 0.
+   */
+  public static long cost(final String clsAppId, final String clsId,
+      final String msgName, final DomId clsObjHint) throws DomatarException
+  {
+    if (msgName == null || msgName.isEmpty())
+      return 0L;
+
+    String json = null;
+    if (clsAppId != null && clsId != null)
+      json = ClsMap.get(clsAppId, clsId);
+
+    if (json == null && clsObjHint != null)
+      json = resolve(clsObjHint, clsAppId, clsId);
+
+    if (json == null)
+      return 0L;
+
+    final JsonMap doc;
+    try
+    {
+      doc = Json.parseMap(json);
+    }
+    catch (final Exception e)
+    {
+      return 0L;
+    }
+    return cost(doc, msgName);
+  }
+
   // ---------------------------------------------------------------------------
   // Service flattening (recursive; handles Extends diamond dedup)
   // ---------------------------------------------------------------------------
@@ -374,7 +435,8 @@ public class ClsResolver
    * matching {Srv, Name}. Class policy wins; otherwise keep the service's
    * declared value; otherwise default to "Write" / "Verified".
    * Compensates is copied the same way but has no default: absent or empty
-   * omits the key (irreversible).
+   * omits the key (irreversible). Cost is normalized to {Amount, Unit}
+   * or omitted; it has no default.
    */
   static void applyMsgPolicy(JsonList mergedMsgs, JsonMap clsDoc)
   {
@@ -406,7 +468,87 @@ public class ClsResolver
         msg.put("Compensates", picked);
       else
         msg.remove("Compensates");
+
+      applyCost(msg, entry);
     }
+  }
+
+  /**
+   * Class MsgPolicy Cost wins. Otherwise keep a valid Cost already on the
+   * service Msg. Anything else is omitted (list price 0).
+   */
+  private static void applyCost(final JsonHashMap msg, final JsonMap entry)
+  {
+    final Object raw = (entry != null && entry.containsKey("Cost"))
+        ? entry.get("Cost")
+        : msg.get("Cost");
+    final JsonHashMap kept = normalizeCost(raw);
+    if (kept == null)
+      msg.remove("Cost");
+    else
+      msg.put("Cost", kept);
+  }
+
+  /**
+   * A kept Cost is exactly {Amount: long >= 1, Unit: "credit"}.
+   * Omitted Unit is stored as "credit". Zero, negative, non-integral,
+   * and any other Unit are dropped.
+   */
+  private static JsonHashMap normalizeCost(final Object raw)
+  {
+    if (!(raw instanceof JsonMap))
+      return null;
+
+    final JsonMap cost = (JsonMap) raw;
+    final Object unit = cost.get("Unit");
+    if (unit != null && !"credit".equals(unit))
+      return null;
+
+    final Long amount = integralAmount(cost.get("Amount"));
+    if (amount == null)
+      return null;
+
+    final JsonHashMap kept = new JsonHashMap();
+    kept.put("Amount", amount);
+    kept.put("Unit", "credit");
+    return kept;
+  }
+
+  /** Positive integral amount, or null when the value is not a list price. */
+  private static Long integralAmount(final Object raw)
+  {
+    if (!(raw instanceof Number))
+      return null;
+
+    final long amount;
+    if (raw instanceof BigDecimal)
+    {
+      try
+      {
+        amount = ((BigDecimal) raw).longValueExact();
+      }
+      catch (final ArithmeticException e)
+      {
+        return null;
+      }
+    }
+    else if (raw instanceof Double || raw instanceof Float)
+    {
+      final double d = ((Number) raw).doubleValue();
+      if (Double.isNaN(d) || Double.isInfinite(d) || d != Math.rint(d))
+        return null;
+      if (d <= 0d || d > Long.MAX_VALUE)
+        return null;
+      amount = (long) d;
+    }
+    else
+    {
+      amount = ((Number) raw).longValue();
+    }
+
+    if (amount <= 0L)
+      return null;
+    return Long.valueOf(amount);
   }
 
   /**

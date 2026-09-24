@@ -33,6 +33,11 @@ public final class HandlerClient implements DomatarMsgClient
     return inner;
   }
 
+  public String destinationDomId()
+  {
+    return inner.destinationDomId();
+  }
+
   public boolean holdsAccount()
   {
     final Context ctx = inner.inboundContext();
