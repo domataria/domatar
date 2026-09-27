@@ -200,8 +200,8 @@ Types the author uses (`com.domatar.*`):
 
 - `util.JsonMsg`, `util.ObjAttrs` — the message
 - `util.DomatarMsgClient` — `send(DomId, JsonMsg)`, `withToken`, `domIdPath`,
-  `alreadyEntered`, `priorVisitCount`, `priorVisitCountAny`, `outMsgs`,
-  `attach`, `attachment`
+  `alreadyEntered`, `priorVisitCount`, `priorVisitCountAny`, `inOwnPath`,
+  `outMsgs`, `attach`, `attachment`
 - `util.ObjImpl`, `util.DomatarInterface` — handler base
 - `util.DomId`, `util.Obj`, `util.Lnk` — value types
 - `db.ObjDb`, `db.LnkDb`, `db.ActDb`, `db.HstDb` — persistence
@@ -219,7 +219,12 @@ receives a `DomatarMsgClient` that can `send` (and `withToken` /
 `domIdPath`) but cannot `root`, plus a `Context` carrying trust, actId
 and contextId. The same client answers `alreadyEntered` /
 `priorVisitCount` / `outMsgs` and `attach` / `attachment` for this
-object ([Domatar](../Domatar.md) PART 6.3, PART 7). Handlers query;
+object ([Domatar](../Domatar.md) PART 6.3, PART 7). `inOwnPath`
+asks whether this object is already on this request's path; the
+platform denies that by default in `rights()`; `alreadyEntered`
+is the separate question of a prior visit under this ContextId.
+AgentLoop's iteration cap does not cover a cycle inside one tool
+call ([Security](../platform/Security.md) PART 8.11). Handlers query;
 they do not INSERT. `Context.getContextId()` is the current lineage;
 `attach(contextId, msgName, slot, …)` names a past visit. A ContextId
 is not authorization.

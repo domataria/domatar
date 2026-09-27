@@ -1443,7 +1443,12 @@ For each user turn:
 
   - Hard iteration cap: ITERATIONS_PER_TURN (default 8). When
     reached, the agent stops the loop and asks the LLM for a
-    final summary using the partial history.
+    final summary using the partial history. Path depth
+    ([Security](../platform/Security.md) PART 8.11) and the
+    default cycle deny (`inOwnPath`) are a different axis. They
+    stop a runaway chain inside one tool call. Raising
+    ITERATIONS_PER_TURN does not raise the hop cap, and the hop
+    cap does not count LLM rounds.
   - Token / cost budget: per-conversation TokensInPerTurn,
     TokensOutPerTurn (PART 17.1). Enforced before each LLM call.
   - Wall-clock deadline: per-turn DEADLINE_MS_PER_TURN (default

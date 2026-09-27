@@ -326,6 +326,26 @@ public class HttpClient implements DomatarMsgClient
     return prov.domIdPath();
   }
 
+  /**
+   * Cycle detection must not depend on the visit row, which can be
+   * absent (denied) or raced (R2).
+   */
+  @Override
+  public boolean inOwnPath() throws DomatarException
+  {
+    final DomId[] path = domIdPath();
+    if (path == null || path.length < 3)
+      return false;
+
+    final int last = path.length - 1;
+    for (int i = 1; i < last; i++)
+    {
+      if (srcDomId.equals(path[i]))
+        return true;
+    }
+    return false;
+  }
+
   @Override
   public int priorVisitCount() throws DomatarException
   {

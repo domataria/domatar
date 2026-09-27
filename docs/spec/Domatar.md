@@ -583,14 +583,22 @@ Direction (Option C):
   rebate when a visit is compensated are `OpLogListener`s.
   `HttpClient` does not name those features. After `rights()`
   admits, dispatch writes a visit on `op_dst`
-  (PART 7) before `handleMsg`. A deny is not a visit. Directory
+  (PART 7) before `handleMsg`. A deny is not a visit. `rights()`
+  returns DENY when `inOwnPath()` is true, before `hasRights`,
+  except a directory envelope (`hst`, `hsts`). A class that must
+  recurse overrides `rights()` and calls `rightsIgnoringCycle`.
+  R2 (`alreadyEntered`) is not a platform deny. The hop cap stays
+  [Security](platform/Security.md) PART 8.11 and is not the agent
+  iteration budget. Directory
   class `(hst, hsts)`, unsigned bootstrap, and `OpLog.skipVisit`
   are not visits. Nested `send()` records an intent edge on
   `op_msg` even if the callee denies; `root()` writes no edge.
   Handlers query that store on the same `DomatarMsgClient` they
   receive for `hasRights`: `contextId`, `alreadyEntered`,
-  `priorVisitCount`, `priorVisitCountAny`, `outMsgs`, `attach`,
-  `attachment`. They
+  `priorVisitCount`, `priorVisitCountAny`, `inOwnPath`, `outMsgs`,
+  `attach`, `attachment`. `inOwnPath` is a path predicate (an
+  earlier hop's DstDomId on this request; the current hop does not
+  count; no MySQL), not a visit query. They
   do not INSERT. Current-request `alreadyEntered` /
   `priorVisitCount` are a snapshot taken before this admit.
 

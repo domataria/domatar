@@ -962,7 +962,11 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
   The platform enforces a hard maximum hop depth
   (provider-configurable). This is a safety cap, not an app budget;
   agent iteration caps (AIAgent.md) are a different axis and do not
-  cover a cycle inside a single tool call.
+  cover a cycle inside a single tool call. A cycle (this object
+  already a destination on the inbound path) is denied in
+  `ObjImpl.rights` via `inOwnPath`, and that deny is not a second
+  depth number. The cap remains `getMaxHopDepth`, enforced in
+  `Path` before `hasRights`.
 
   The honest total. Verifying an N-hop chain is N signature checks at
   each HTTP boundary it crosses, so an operation that crosses a
@@ -1019,6 +1023,8 @@ hash-chaining idea from blockchains, WITHOUT any consensus layer.
   persistence: they exist in the heap for one request and on the wire
   for one POST. Bindings, delegations, provider keys and nonce windows
   all have durable homes (PART 5.4, PART 10.1); the path does not.
+  `inOwnPath` reads that heap path for this request and does not
+  consult `op_dst`.
   The log is not the Path. The durable per-participant record keyed
   by `contextId` is `op_dst` / `op_msg` ([Domatar](../Domatar.md)
   PART 7): what this provider admitted, for whom, and whom it then

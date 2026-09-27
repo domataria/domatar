@@ -5,6 +5,7 @@ import java.util.List;
 import com.domatar.core.DomatarConfig;
 import com.domatar.db.HstDb;
 import com.domatar.db.ObjDb;
+import com.domatar.log.OpLog;
 import com.domatar.saga.Compensate;
 
 public class ObjImpl implements DomatarInterface
@@ -94,16 +95,23 @@ public class ObjImpl implements DomatarInterface
   }
 
   /**
-   * Three-way door. OpLog.admit calls this unless a listener already
-   * authorized the operation (Compensate).
-   * WHY: boolean hasRights stays the override point for admit/deny;
-   * priced classes override rights(). Cycle deny (inOwnPath) lands
-   * on the line below, not in an OpLog listener.
+   * Cycle deny is safety. Recurse by overriding and calling
+   * rightsIgnoringCycle, not super.rights(). Directory envelopes
+   * (OpLog.isDirectory) skip the deny; inOwnPath itself is unchanged.
+   * A priced override that replaces this method must call inOwnPath
+   * itself if it must not recurse.
    */
   public Rights rights(final JsonMsg inMsg, final Obj obj, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    // Spec-Reentry: if (msgClient.inOwnPath()) return Rights.DENY;
+    if (msgClient != null && msgClient.inOwnPath() && !OpLog.isDirectory(inMsg))
+      return Rights.DENY;
+    return rightsIgnoringCycle(inMsg, obj, msgClient);
+  }
+
+  protected Rights rightsIgnoringCycle(final JsonMsg inMsg, final Obj obj,
+      final DomatarMsgClient msgClient) throws DomatarException
+  {
     return hasRights(inMsg, obj, msgClient) ? Rights.ADMIT : Rights.DENY;
   }
 

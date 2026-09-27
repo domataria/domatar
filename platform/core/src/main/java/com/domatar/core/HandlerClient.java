@@ -130,6 +130,12 @@ public final class HandlerClient implements DomatarMsgClient
   }
 
   @Override
+  public boolean inOwnPath() throws DomatarException
+  {
+    return inner.inOwnPath();
+  }
+
+  @Override
   public int priorVisitCount() throws DomatarException
   {
     return inner.priorVisitCount();
