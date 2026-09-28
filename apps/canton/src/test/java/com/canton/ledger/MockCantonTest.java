@@ -172,6 +172,38 @@ public class MockCantonTest
   }
 
   @Test
+  public void adjustKeepsContractIdAndAddsDelta() throws DomatarException
+  {
+    final MockCanton mock = new MockCanton(null);
+    final Map<String, String> payload = new LinkedHashMap<>();
+
+    payload.put("Owner", DemoPortfolio.DAVID);
+    payload.put("Amount", "12840.2500000000");
+    payload.put("Symbol", "CC");
+    payload.put("InstrumentAdmin", DemoPortfolio.DSO);
+    final SubmitResult created = mock.submitCreate(
+        DemoPortfolio.DAVID, DemoPortfolio.AMULET, payload);
+    final String cid = created.created.get(0).contractId;
+    final SubmitResult adjusted = mock.submitExercise(DemoPortfolio.DAVID, cid, "Adjust",
+        Collections.singletonMap("Delta", "500"));
+
+    assertEquals(0, adjusted.archived.size());
+    assertEquals(0, adjusted.created.size());
+    assertEquals(cid, mock.getContract(cid).contractId);
+    assertEquals("13340.2500000000", mock.getContract(cid).payload.get("Amount"));
+
+    mock.submitExercise(DemoPortfolio.DAVID, cid, "Adjust",
+        Collections.singletonMap("Delta", "-500"));
+    assertEquals("12840.2500000000", mock.getContract(cid).payload.get("Amount"));
+    assertThrows(DomatarException.class,
+        () -> mock.submitExercise(DemoPortfolio.DSO, cid, "Adjust",
+            Collections.singletonMap("Delta", "1")));
+    assertThrows(DomatarException.class,
+        () -> mock.submitExercise(DemoPortfolio.DAVID, cid, "Adjust",
+            Collections.singletonMap("Delta", "0")));
+  }
+
+  @Test
   public void mockOrNullReturnsMockCanton()
   {
     assertTrue(CantonClients.mockOrNull() instanceof MockCanton);

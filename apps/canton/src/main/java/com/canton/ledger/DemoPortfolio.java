@@ -285,6 +285,8 @@ public final class DemoPortfolio
         Collections.singletonList("Owner"),
         Collections.singletonList("InstrumentAdmin"),
         Arrays.asList(
+            new ChoiceDesc("Adjust", Collections.singletonList("Owner"), false,
+                Collections.singletonList(new FieldDesc("Delta", "Decimal"))),
             new ChoiceDesc("Transfer", Collections.singletonList("Owner"), true,
                 Collections.singletonList(new FieldDesc("NewOwner", "Party"))),
             new ChoiceDesc("Archive", Collections.singletonList("Owner"), true,

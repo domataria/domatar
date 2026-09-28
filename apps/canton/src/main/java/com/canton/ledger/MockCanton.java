@@ -180,6 +180,22 @@ public final class MockCanton implements CantonClient
       created.add(successor);
     }
 
+    if ("Adjust".equals(choice))
+    {
+      if (ch.consuming)
+        throw new DomatarException("Adjust must keep the same ContractId");
+      if (!current.payload.containsKey("Amount"))
+        throw new DomatarException("Adjust requires Amount");
+
+      final Map<String, String> nextPayload = new LinkedHashMap<>(current.payload);
+
+      nextPayload.put("Amount", Amounts.add(current.payload.get("Amount"), args.get("Delta")));
+      final Contract updated = new Contract(current.contractId, current.templateId,
+          nextPayload, current.signatories, current.observers);
+
+      contracts.put(current.contractId, updated);
+    }
+
     save();
     return new SubmitResult(archived, created);
   }
