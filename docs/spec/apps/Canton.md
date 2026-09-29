@@ -831,9 +831,18 @@ the UX filter. It does not replace the ledger.
                     a handle. Same canton app (no new AppId).
 
   Assets: `canton.html` (launcher: bind, create Iou, list
-  Symbol/Name/Amount/Owner, plus an adjustment strip:
-  credits, price, amount, booking net, Adjust, Undo,
-  Apply twice, Echo, Refill) and `iou.html?ContractDomId=`
+  Symbol/Name/Amount/Owner). Amount drops trailing
+  fractional zeros and keeps one digit when a decimal
+  point is present (100 stays 100, 100.00 becomes 100.0).
+  The Amount column is right-aligned, only as wide as its
+  values, and the decimal points line up. Name takes the
+  remaining width.
+  The adjustment strip sits
+  immediately above that list: credits, price, amount,
+  booking net, Adjust, Undo, Apply twice, Echo, Refill.
+  Use on a row fills ContractId, names the holding,
+  and highlights that row.
+  `iou.html?ContractDomId=`
   (every payload Attr, Allocations rendered as a table,
   Transfer / Settle / Archive, plus Network which navigates
   to `mock-network.html?ContractDomId=`).

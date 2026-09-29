@@ -26,15 +26,32 @@
         .cn-form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
         .cn-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .cn-status      { font-size: 0.88em; color: var(--page-muted); margin-top: 8px; }
+        #adj-status     { color: inherit; font-weight: 600; min-height: 1.2em; }
+        .cn-row input.cn-filled { border-color: #2563eb; background: #f4f8ff; }
         .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
                           margin-bottom: 10px; min-height: 1.2em; }
-        table.cn-table  { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        table.cn-table  { width: 100%; border-collapse: collapse; table-layout: auto; }
         table.cn-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         table.cn-table th,
         table.cn-table td { text-align: left; padding: 6px 8px; }
+        table.cn-table th.cn-fit,
+        table.cn-table td.cn-fit,
+        table.cn-table th.cn-amt,
+        table.cn-table td.cn-amt { width: 1%; white-space: nowrap; }
+        table.cn-table th.cn-name,
+        table.cn-table td.cn-name { width: 99%; max-width: 1px; }
         table.cn-table th { font-size: 0.82em; font-weight: 600; color: var(--page-muted);
                             border-bottom: 1px solid var(--border); }
         table.cn-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        table.cn-table th.cn-amt,
+        table.cn-table td.cn-amt { text-align: right !important;
+                                   font-variant-numeric: tabular-nums; }
+        table.cn-table td.cn-amt { overflow: visible; text-overflow: clip; }
+        .cn-amt-box { display: flex; justify-content: flex-end; width: 100%; }
+        .cn-amt-int { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+        .cn-amt-rest { flex: 0 0 var(--amt-rest, 0ch); text-align: left; white-space: nowrap; }
+        table.cn-table tr.cn-selected td { background: #60a5fa !important; }
+        table.cn-table tr.cn-selected td:first-child { box-shadow: inset 3px 0 0 #1d4ed8; }
         .empty-msg      { color: var(--page-muted); font-style: italic; }
         @media (max-width: 640px) {
             .cn-form-grid { grid-template-columns: 1fr; }
@@ -230,11 +247,27 @@
             return;
         }
 
+        var shown = [];
+        var restCh = 0;
+        for (var i = 0; i < list.length; i++)
+        {
+            var raw = (list[i] && (list[i].Amount || list[i].Par)) || '';
+            var text = trimAmount(raw);
+            shown.push(text);
+            var dot = text.indexOf('.');
+            if (dot >= 0)
+                restCh = Math.max(restCh, text.length - dot);
+        }
+        $('#cn-contracts').css('--amt-rest', restCh + 'ch');
+
         var html = '';
         for (var i = 0; i < list.length; i++)
         {
             var c = list[i] || {};
             var cid = c.ContractId || '';
+            var symbol = c.Symbol || c.Currency || '';
+            var name = c.Name || c.TemplateId || '';
+            var amount = c.Amount || c.Par || '';
             var href = c.ContractDomId
                 ? ('iou.html?ContractDomId=' + encodeURIComponent(c.ContractDomId))
                 : '';
@@ -242,21 +275,27 @@
                 ? ('<a href="' + href + '">Open</a>')
                 : '';
             var use = cid
-                ? (' <a href="#" onclick="useContract(\'' + escapeAttr(cid) + '\'); return false;">Use</a>')
+                ? (' <a href="#" class="cn-use" data-cid="' + escapeHtml(cid)
+                    + '" data-symbol="' + escapeHtml(symbol)
+                    + '" data-amount="' + escapeHtml(amount) + '">Use</a>')
                 : '';
-            var symbol = c.Symbol || c.Currency || '';
-            var name = c.Name || c.TemplateId || '';
             html += '<tr>'
-                + '<td>' + escapeHtml(symbol) + '</td>'
-                + '<td>' + escapeHtml(name) + '</td>'
-                + '<td>' + escapeHtml(c.Amount || c.Par || '') + '</td>'
-                + '<td title="' + escapeHtml(c.Owner || c.Buyer || c.Receiver || '') + '">'
+                + '<td class="cn-fit">' + escapeHtml(symbol) + '</td>'
+                + '<td class="cn-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>'
+                + '<td class="cn-amt">' + amountHtml(shown[i], restCh) + '</td>'
+                + '<td class="cn-fit" title="' + escapeHtml(c.Owner || c.Buyer || c.Receiver || '') + '">'
                 + escapeHtml(shortParty(c.Owner || c.Buyer || c.Receiver || '')) + '</td>'
-                + '<td title="' + escapeHtml(cid) + '">' + escapeHtml(shortId(cid)) + '</td>'
-                + '<td>' + open + use + '</td>'
+                + '<td class="cn-fit" title="' + escapeHtml(cid) + '">' + escapeHtml(shortId(cid)) + '</td>'
+                + '<td class="cn-fit">' + open + use + '</td>'
                 + '</tr>';
         }
         $('#cn-body').html(html);
+        $('#cn-body').find('.cn-use').on('click', function(e)
+        {
+            e.preventDefault();
+            useContract($(this).attr('data-cid'), $(this).attr('data-symbol'),
+                $(this).attr('data-amount'), $(this).closest('tr'));
+        });
     }
 
     function shortParty(s)
@@ -267,6 +306,31 @@
         return s;
     }
 
+    function amountHtml(shown, restCh)
+    {
+        var dot = shown.indexOf('.');
+        var whole = dot < 0 ? shown : shown.substring(0, dot);
+        var rest = dot < 0 ? '' : shown.substring(dot);
+        var restSpan = restCh > 0
+            ? '<span class="cn-amt-rest">' + escapeHtml(rest) + '</span>'
+            : '';
+        return '<span class="cn-amt-box">'
+            + '<span class="cn-amt-int">' + escapeHtml(whole) + '</span>'
+            + restSpan + '</span>';
+    }
+
+    function trimAmount(s)
+    {
+        s = String(s);
+        var dot = s.indexOf('.');
+        if (dot < 0)
+            return s;
+        var frac = s.substring(dot + 1).replace(/0+$/, '');
+        if (!frac)
+            frac = '0';
+        return s.substring(0, dot) + '.' + frac;
+    }
+
     function shortId(s)
     {
         if (s.length > 14)
@@ -274,14 +338,15 @@
         return s;
     }
 
-    function escapeAttr(s)
+    function useContract(cid, symbol, amount, row)
     {
-        return String(s).replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
-    }
-
-    function useContract(cid)
-    {
-        $('#adj-contract').val(cid);
+        $('#adj-contract').val(cid).addClass('cn-filled');
+        $('#cn-body tr').removeClass('cn-selected');
+        if (row) row.addClass('cn-selected');
+        var delta = $.trim($('#adj-delta').val()) || '500';
+        var label = (symbol || 'holding') + (amount ? ' ' + amount : '');
+        $('#adj-status').text('Selected ' + label + ' (' + shortId(cid)
+            + '). ContractId filled. Press Adjust to add ' + delta + '.');
         quoteAdjust();
     }
 
@@ -342,6 +407,11 @@
             if (!attrs) return;
             $('#adj-amount').text(attrs.Amount != null ? attrs.Amount : '');
             if (attrs.Cost) $('#adj-cost').text(attrs.Cost);
+            var delta = $.trim($('#adj-delta').val()) || '500';
+            var price = attrs.Cost != null ? attrs.Cost : $('#adj-cost').text();
+            $('#adj-status').text('Selected ' + (attrs.Symbol || 'holding')
+                + ' ' + (attrs.Amount != null ? attrs.Amount : '')
+                + '. Press Adjust to add ' + delta + ' (' + price + ' credits).');
         });
     }
 
@@ -457,43 +527,6 @@
         <div id="page-error" class="cn-error"></div>
 
         <div class="cn-card">
-            <h3>Adjustment</h3>
-            <p class="cn-hint">
-                Adds a delta to a workshop holding without changing its ContractId,
-                so a spreadsheet citation of Amount keeps resolving. The desk draws
-                the price from credits you prepaid with it. Undo submits the opposite
-                delta, reverses the booking, and rebates those credits. Apply twice
-                posts the booking twice in one operation; the second post is refused.
-                Echo calls the desk again on the same path; the platform stops the loop.
-            </p>
-            <div class="cn-form-grid">
-                <div class="cn-row">
-                    <label for="adj-contract">ContractId</label>
-                    <input type="text" id="adj-contract" placeholder="Use a row below"/>
-                </div>
-                <div class="cn-row">
-                    <label for="adj-delta">Delta</label>
-                    <input type="text" id="adj-delta" value="500"/>
-                </div>
-            </div>
-            <div class="cn-btns">
-                <button type="button" id="btn-adjust" onclick="adjustHolding()">Adjust</button>
-                <button type="button" id="btn-undo" onclick="undoAdjust()">Undo</button>
-                <button type="button" onclick="applyTwice()">Apply twice</button>
-                <button type="button" onclick="echoDesk()">Echo</button>
-                <button type="button" onclick="refillDesk()">Refill</button>
-            </div>
-            <div class="cn-status">
-                Credits <span id="adj-credits">…</span>
-                · price <span id="adj-cost">25</span>
-                · amount <span id="adj-amount">—</span>
-                · booking <span id="adj-net">0</span>
-                · last <span id="adj-last">0</span>
-            </div>
-            <div id="adj-status" class="cn-status"></div>
-        </div>
-
-        <div class="cn-card">
             <h3>Party</h3>
             <p class="cn-hint">
                 Bind the Canton Party this account acts as. Party ids are ledger
@@ -535,21 +568,55 @@
             </div>
         </div>
 
+        <div class="cn-card" id="adj-card">
+            <h3>Adjustment</h3>
+            <p class="cn-hint">
+                Click Use on a holding below. That fills ContractId. Adjust adds
+                Delta on that same contract. The desk draws the price from your
+                credits. Undo reverses it and rebates the credits.
+            </p>
+            <div class="cn-form-grid">
+                <div class="cn-row">
+                    <label for="adj-contract">ContractId</label>
+                    <input type="text" id="adj-contract" placeholder="Click Use on a row below"/>
+                </div>
+                <div class="cn-row">
+                    <label for="adj-delta">Delta</label>
+                    <input type="text" id="adj-delta" value="500"/>
+                </div>
+            </div>
+            <div class="cn-btns">
+                <button type="button" id="btn-adjust" onclick="adjustHolding()">Adjust</button>
+                <button type="button" id="btn-undo" onclick="undoAdjust()">Undo</button>
+                <button type="button" onclick="applyTwice()">Apply twice</button>
+                <button type="button" onclick="echoDesk()">Echo</button>
+                <button type="button" onclick="refillDesk()">Refill</button>
+            </div>
+            <div class="cn-status">
+                Credits <span id="adj-credits">…</span>
+                · price <span id="adj-cost">25</span>
+                · amount <span id="adj-amount">—</span>
+                · booking <span id="adj-net">0</span>
+                · last <span id="adj-last">0</span>
+            </div>
+            <div id="adj-status" class="cn-status"></div>
+        </div>
+
         <div class="cn-card">
             <h3>Active contracts</h3>
             <div class="cn-btns" style="margin-bottom: 12px;">
                 <button type="button" onclick="syncContracts()">Sync</button>
                 <button type="button" onclick="loadContracts()">Refresh</button>
             </div>
-            <table class="cn-table">
+            <table class="cn-table" id="cn-contracts">
                 <thead>
                     <tr>
-                        <th>Symbol</th>
-                        <th>Name</th>
-                        <th>Amount</th>
-                        <th>Owner</th>
-                        <th>ContractId</th>
-                        <th></th>
+                        <th class="cn-fit">Symbol</th>
+                        <th class="cn-name">Name</th>
+                        <th class="cn-amt">Amount</th>
+                        <th class="cn-fit">Owner</th>
+                        <th class="cn-fit">ContractId</th>
+                        <th class="cn-fit"></th>
                     </tr>
                 </thead>
                 <tbody id="cn-body">
