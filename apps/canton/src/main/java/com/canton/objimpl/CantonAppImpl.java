@@ -4,9 +4,13 @@
 
 package com.canton.objimpl;
 
+import java.math.BigDecimal;
+import java.util.Collections;
+
+import com.canton.ledger.Amounts;
+import com.canton.ledger.CantonClients;
+import com.canton.ledger.Contract;
 import com.canton.ledger.IouTemplates;
-import com.domatar.db.ObjDb;
-import com.domatar.db.PayDb;
 import com.domatar.util.DomId;
 import com.domatar.util.JsonMsg;
 import com.domatar.util.Obj;
@@ -79,18 +83,8 @@ public class CantonAppImpl extends ObjImpl
         outMsg.addError(opr, e.getMessage());
       }
     }
-    else if ("Quote".equals(opr))
-      forwardDesk(opr, copyAttrs(inMsg, "ContractId"), msgClient, outMsg);
-    else if ("Credits".equals(opr) || "Refill".equals(opr) || "Echo".equals(opr))
-      forwardDesk(opr, null, msgClient, outMsg);
-    else if ("AdjustHolding".equals(opr))
-      adjust(actId, inMsg, msgClient, outMsg);
-    else if ("ApplyTwice".equals(opr))
-      forwardDesk(opr, copyAttrs(inMsg, "ContractId", "Delta"), msgClient, outMsg);
-    else if ("GetBooking".equals(opr))
-      booking(actId, msgClient, outMsg);
-    else if ("Undo".equals(opr))
-      undo(actId, msgClient, outMsg);
+    else if ("Adjust".equals(opr))
+      adjust(actId, inMsg, outMsg);
     else
       return super.handleMsg(msg, obj, contextPath, contextRealPath, msgClient);
 
@@ -133,91 +127,39 @@ public class CantonAppImpl extends ObjImpl
   }
 
   private static void adjust(final String actId, final JsonMsg inMsg,
-                            final DomatarMsgClient msgClient, final JsonMsg outMsg)
-      throws DomatarException
+                            final JsonMsg outMsg) throws DomatarException
   {
-    final DomId desk = CantonIds.desk();
+    final String contractId = inMsg.getAttr("ContractId");
+    final String delta = inMsg.getAttr("Delta");
 
-    if (desk == null)
-    {
-      outMsg.addError("AdjustHolding", "Canton desk is not installed");
-      return;
-    }
-
-    final Long remaining = PayDb.remaining(desk.hstId, desk.actId, actId);
-
-    if (remaining != null && remaining.longValue() < CantonIds.COST)
-    {
-      outMsg.addError("AdjustHolding",
-          "Not enough credits (" + remaining + " remaining, " + CantonIds.COST + " required)");
-      return;
-    }
-    forwardDesk("AdjustHolding", copyAttrs(inMsg, "ContractId", "Delta"), msgClient, outMsg);
-  }
-
-  private static void booking(final String actId, final DomatarMsgClient msgClient,
-                              final JsonMsg outMsg) throws DomatarException
-  {
-    BookingImpl.ensure(actId);
-    forward("GetBooking", "GetBooking", CantonIds.booking(actId), CantonIds.BOOKING,
-        null, msgClient, outMsg);
-  }
-
-  private static void undo(final String actId, final DomatarMsgClient msgClient,
-                           final JsonMsg outMsg) throws DomatarException
-  {
-    final DomId desk = CantonIds.desk();
-
-    if (desk == null)
-    {
-      outMsg.addError("Undo", "Canton desk is not installed");
-      return;
-    }
-
-    BookingImpl.ensure(actId);
-    final Obj booking = ObjDb.getObj(CantonIds.booking(actId));
-    final String ctx = booking != null && booking.attrs != null
-        ? booking.attrs.getAttr("LastContextId") : null;
-    final String name = booking != null && booking.attrs != null
-        ? booking.attrs.getAttr("LastMsgName") : null;
-
-    if (ctx == null || ctx.isEmpty() || name == null || name.isEmpty())
-    {
-      outMsg.addError("Undo", "Nothing to undo");
-      return;
-    }
-
-    final ObjAttrs attrs = new ObjAttrs();
-
-    attrs.addAttr("OrigContextId", ctx);
-    attrs.addAttr("OrigMsgName", name);
-
-    final JsonMsg req = new JsonMsg();
-
-    req.addClsId("canton", CantonIds.DESK);
-    req.addRequestBody("Compensate", attrs);
     try
     {
-      copyReply(outMsg, "Undo", msgClient.send(desk, req));
+      final BigDecimal change = Amounts.parse(delta, "Delta");
+
+      if (change.compareTo(BigDecimal.ZERO) == 0)
+      {
+        outMsg.addError("Adjust", "Delta must not be zero");
+        return;
+      }
+
+      final String party = HandleSync.boundParty(actId);
+
+      CantonClients.get().submitExercise(party, contractId, "Adjust",
+          Collections.singletonMap("Delta", delta));
+      HandleSync.sync(actId);
+
+      final Contract live = HandleSync.findLive(actId, contractId);
+      final ObjAttrs out = new ObjAttrs();
+
+      out.addAttr("ContractId", contractId);
+      out.addAttr("Amount", live != null && live.payload != null
+          ? live.payload.get("Amount") : "");
+      outMsg.addResponseBody("Adjust", out);
     }
     catch (final DomatarException e)
     {
-      outMsg.addError("Undo", e.getMessage());
+      outMsg.addError("Adjust", e.getMessage());
     }
-  }
-
-  private static void forwardDesk(final String opr, final ObjAttrs attrs,
-                                  final DomatarMsgClient msgClient, final JsonMsg outMsg)
-      throws DomatarException
-  {
-    final DomId desk = CantonIds.desk();
-
-    if (desk == null)
-    {
-      outMsg.addError(opr, "Canton desk is not installed");
-      return;
-    }
-    forward(opr, opr, desk, CantonIds.DESK, attrs, msgClient, outMsg);
   }
 
   private static DomId localHandle(final DomId dst, final String actId)

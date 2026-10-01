@@ -1,0 +1,8 @@
+AppId: hecto
+Version: 1.0
+InstallClass: com.hecto.install.HectoInstall
+AssetDirectory: hecto/assets
+Handler: hecto, app,     com.hecto.objimpl.HectoAppImpl
+Handler: hecto, desk,    com.hecto.objimpl.HectoDeskImpl
+Handler: hecto, booking, com.hecto.objimpl.HectoBookingImpl
+Wui:     SubscribeWui,   com.hecto.webui.SubscribeWui

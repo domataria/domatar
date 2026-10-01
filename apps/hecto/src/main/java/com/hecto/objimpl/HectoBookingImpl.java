@@ -2,11 +2,10 @@
  * Copyright (c) 2024 Domatar
  */
 
-package com.canton.objimpl;
+package com.hecto.objimpl;
 
 import java.math.BigDecimal;
 
-import com.canton.ledger.Amounts;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
 import com.domatar.log.OpLog;
@@ -23,17 +22,16 @@ import com.domatar.util.ObjImpl;
 import com.domatar.util.Rights;
 
 /**
- * Per-user record of desk adjustments. The spreadsheet cites
- * NetDelta. Post refuses a second delivery of the same message in
- * one operation.
+ * Per-user record of Hecto subscriptions. Post refuses a second
+ * delivery of the same message in one operation.
  */
-public class BookingImpl extends ObjImpl
+public class HectoBookingImpl extends ObjImpl
 {
   static final String UNPOST_KEY = "SagaUnpostKey";
 
   public static void ensure(final String actId) throws DomatarException
   {
-    final DomId id = CantonIds.booking(actId);
+    final DomId id = HectoIds.booking(actId);
     final Obj existing = ObjDb.getObj(id);
 
     if (existing == null)
@@ -42,8 +40,8 @@ public class BookingImpl extends ObjImpl
 
       attrs.addAttr("NetDelta", "0");
       attrs.addAttr("LastDelta", "0");
-      ObjDb.addObjIfMissing(id, "canton", CantonIds.BOOKING,
-          "Booking", "Record of holding adjustments", attrs);
+      ObjDb.addObjIfMissing(id, HectoIds.HOME, HectoIds.BOOKING,
+          "Booking", "Record of Hecto subscriptions", attrs);
     }
     else if (existing.attrs != null && existing.attrs.getAttr("NetDelta") == null)
     {
@@ -53,16 +51,16 @@ public class BookingImpl extends ObjImpl
       ObjDb.modifyObj(existing);
     }
 
-    final DomId app = HandleSync.subHost(actId, "app-canton");
+    final DomId app = HectoIds.subHost(actId, "app-hecto");
 
     if (ObjDb.getObj(app) != null
         && LnkDb.getLnk(app, id, "navigator", "container") == null)
     {
       LnkDb.addLnk(new Lnk(app, id,
-          "canton", CantonIds.BOOKING,
-          "Booking", "Record of holding adjustments",
+          HectoIds.HOME, HectoIds.BOOKING,
+          "Booking", "Record of Hecto subscriptions",
           "navigator", "container",
-          null, 3));
+          null, 1));
     }
   }
 
@@ -81,7 +79,7 @@ public class BookingImpl extends ObjImpl
       return notAuthorized(inMsg);
 
     final JsonMsg outMsg = new JsonMsg();
-    final Obj target = CantonAuth.requireObj(inMsg, obj);
+    final Obj target = HectoAuth.requireObj(inMsg, obj);
 
     if (target == null)
     {
@@ -106,7 +104,7 @@ public class BookingImpl extends ObjImpl
                            final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    return CantonAuth.isVerifiedOwner(inMsg, obj, msgClient);
+    return HectoAuth.isVerifiedOwner(inMsg, obj, msgClient);
   }
 
   @Override
@@ -129,8 +127,8 @@ public class BookingImpl extends ObjImpl
       throws DomatarException
   {
     final String delta = inMsg.getAttr("Delta");
-    final BigDecimal change = Amounts.parse(delta, "Delta");
-    final String net = Amounts.add(attr(booking, "NetDelta", "0"), delta);
+    final BigDecimal change = HectoAmounts.parse(delta, "Delta");
+    final String net = HectoAmounts.add(attr(booking, "NetDelta", "0"), delta);
 
     booking.attrs.addAttr("NetDelta", net);
     booking.attrs.addAttr("LastDelta", change.toPlainString());
@@ -142,7 +140,7 @@ public class BookingImpl extends ObjImpl
         booking.attrs.addAttr("LastContextId", ctx);
       final String undoMsg = inMsg.getAttr("UndoMsgName");
       booking.attrs.addAttr("LastMsgName",
-          undoMsg != null && !undoMsg.isEmpty() ? undoMsg : "AdjustHolding");
+          undoMsg != null && !undoMsg.isEmpty() ? undoMsg : "Subscribe");
     }
     ObjDb.modifyObj(booking);
     attachPost(msgClient, delta);
@@ -166,10 +164,10 @@ public class BookingImpl extends ObjImpl
       return;
     }
 
-    final String net = Amounts.add(attr(booking, "NetDelta", "0"), Amounts.negate(delta));
+    final String net = HectoAmounts.add(attr(booking, "NetDelta", "0"), HectoAmounts.negate(delta));
 
     booking.attrs.addAttr("NetDelta", net);
-    booking.attrs.addAttr("LastDelta", Amounts.negate(delta));
+    booking.attrs.addAttr("LastDelta", HectoAmounts.negate(delta));
     booking.attrs.addAttr(UNPOST_KEY, orig);
     ObjDb.modifyObj(booking);
     outMsg.addResponseBody("Unpost", snapshot(booking));

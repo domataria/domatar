@@ -2,15 +2,10 @@
  * Copyright (c) 2024 Domatar
  */
 
-package com.canton.objimpl;
+package com.hecto.objimpl;
 
-import java.util.Collections;
-import java.util.List;
-
-import com.canton.ledger.Amounts;
-import com.canton.ledger.CantonClients;
-import com.canton.ledger.Contract;
 import com.domatar.core.Auth;
+import com.domatar.core.ClsResolver;
 import com.domatar.db.ObjDb;
 import com.domatar.db.PayDb;
 import com.domatar.log.OpLog;
@@ -26,11 +21,11 @@ import com.domatar.util.ObjImpl;
 import com.domatar.util.Rights;
 
 /**
- * Priced adjustments of a holding the caller can see. The ledger
- * submit stays one command. Undo is a second command, plus the
- * booking this call posted.
+ * Priced subscriptions of a Hecto holding. The ledger submit stays
+ * one command. Undo is a second command, plus the booking this
+ * call posted.
  */
-public class DeskImpl extends ObjImpl
+public class HectoDeskImpl extends ObjImpl
 {
   static final String REVERSE_KEY = "SagaReverseKey";
 
@@ -60,13 +55,13 @@ public class DeskImpl extends ObjImpl
     try
     {
       if ("Quote".equals(opr))
-        quote(opr, payer, inMsg, outMsg);
+        quote(opr, payer, inMsg, msgClient, outMsg);
       else if ("Credits".equals(opr))
         credits(opr, payer, outMsg);
-      else if ("AdjustHolding".equals(opr))
-        adjust(payer, inMsg, msgClient, outMsg, true);
-      else if ("ReverseAdjust".equals(opr))
-        reverse(inMsg, outMsg);
+      else if ("Subscribe".equals(opr))
+        subscribe(payer, inMsg, msgClient, outMsg);
+      else if ("ReverseSubscribe".equals(opr))
+        reverse(inMsg, msgClient, outMsg);
       else if ("ApplyTwice".equals(opr))
         applyTwice(payer, inMsg, msgClient, outMsg);
       else if ("Echo".equals(opr))
@@ -103,10 +98,13 @@ public class DeskImpl extends ObjImpl
     if (inMsg != null && msgClient != null && "Echo".equals(inMsg.getOperation())
         && msgClient.alreadyEntered())
       return Rights.DENY;
-    if (inMsg != null && "AdjustHolding".equals(inMsg.getOperation())
+    if (inMsg != null && "Subscribe".equals(inMsg.getOperation())
         && !isOwner(inMsg, obj, msgClient))
     {
+      if (!hectoHolding(inMsg, msgClient))
+        return Rights.ADMIT;
       ensureSeed(Auth.actId(msgClient));
+      resolveDeskPrice();
       return Rights.PRICED;
     }
     return Rights.ADMIT;
@@ -117,30 +115,67 @@ public class DeskImpl extends ObjImpl
       throws DomatarException
   {
     final String caller = Auth.actId(msgClient);
-    final String dest = CantonAuth.destActId(inMsg, obj);
+    final String dest = HectoAuth.destActId(inMsg, obj);
     return caller != null && caller.equals(dest);
+  }
+
+  private static boolean hectoHolding(final JsonMsg inMsg,
+                                      final DomatarMsgClient msgClient)
+  {
+    try
+    {
+      final String contractId = inMsg != null ? inMsg.getAttr("ContractId") : null;
+      final String payer = Auth.actId(msgClient);
+
+      if (contractId == null || contractId.isEmpty() || payer == null)
+        return false;
+      syncHandles(payer, msgClient);
+      final ObjAttrs live = readHolding(payer, contractId, msgClient);
+      return HectoHoldings.isHectoHolding(live.toMap());
+    }
+    catch (final DomatarException e)
+    {
+      return false;
+    }
+  }
+
+  private static void resolveDeskPrice() throws DomatarException
+  {
+    final DomId desk = HectoIds.desk();
+
+    if (desk == null)
+      return;
+    ClsResolver.resolve(
+        new DomId(desk.hstId, HectoIds.HOME, desk.actId, HectoIds.DESK + "Cls"),
+        HectoIds.HOME, HectoIds.DESK);
   }
 
   private static void ensureSeed(final String payer) throws DomatarException
   {
-    final DomId desk = CantonIds.desk();
+    final DomId desk = HectoIds.desk();
 
     if (desk == null || payer == null)
       return;
     if (PayDb.remaining(desk.hstId, desk.actId, payer) == null)
-      PayDb.credit(desk.hstId, desk.actId, payer, CantonIds.SEED, OpLog.nowMs());
+      PayDb.credit(desk.hstId, desk.actId, payer, HectoIds.SEED, OpLog.nowMs());
   }
 
   private static void quote(final String opr, final String payer, final JsonMsg inMsg,
-                            final JsonMsg outMsg) throws DomatarException
+                            final DomatarMsgClient msgClient, final JsonMsg outMsg)
+      throws DomatarException
   {
-    final Contract live = live(payer, inMsg.getAttr("ContractId"));
+    syncHandles(payer, msgClient);
+    final ObjAttrs live = readHolding(payer, inMsg.getAttr("ContractId"), msgClient);
+
+    if (!HectoHoldings.isHectoHolding(live.toMap()))
+      throw new DomatarException("Not a Hecto holding");
+
     final ObjAttrs out = new ObjAttrs();
 
-    out.addAttr("ContractId", live.contractId);
-    out.addAttr("Amount", live.payload.get("Amount"));
-    out.addAttr("Symbol", value(live.payload.get("Symbol")));
-    out.addAttr("Cost", Long.toString(CantonIds.COST));
+    out.addAttr("ContractId", live.getAttr("ContractId"));
+    out.addAttr("Amount", live.getAttr("Amount"));
+    out.addAttr("Symbol", value(live.getAttr("Symbol")));
+    out.addAttr("Cost", Long.toString(HectoIds.COST));
     outMsg.addResponseBody(opr, out);
   }
 
@@ -151,7 +186,7 @@ public class DeskImpl extends ObjImpl
     final ObjAttrs out = new ObjAttrs();
 
     out.addAttr("Remaining", Long.toString(remaining(payer)));
-    out.addAttr("Cost", Long.toString(CantonIds.COST));
+    out.addAttr("Cost", Long.toString(HectoIds.COST));
     outMsg.addResponseBody(opr, out);
   }
 
@@ -161,8 +196,8 @@ public class DeskImpl extends ObjImpl
     final DomId desk = requireDesk();
     final long have = remaining(payer);
 
-    if (have < CantonIds.SEED)
-      PayDb.credit(desk.hstId, desk.actId, payer, CantonIds.SEED - have, OpLog.nowMs());
+    if (have < HectoIds.SEED)
+      PayDb.credit(desk.hstId, desk.actId, payer, HectoIds.SEED - have, OpLog.nowMs());
 
     final ObjAttrs out = new ObjAttrs();
 
@@ -170,45 +205,41 @@ public class DeskImpl extends ObjImpl
     outMsg.addResponseBody(opr, out);
   }
 
-  private void adjust(final String payer, final JsonMsg inMsg,
-                      final DomatarMsgClient msgClient, final JsonMsg outMsg,
-                      final boolean recordUndo) throws DomatarException
+  private void subscribe(final String payer, final JsonMsg inMsg,
+                         final DomatarMsgClient msgClient, final JsonMsg outMsg)
+      throws DomatarException
   {
     final String contractId = inMsg.getAttr("ContractId");
     final String delta = inMsg.getAttr("Delta");
 
-    Amounts.parse(delta, "Delta");
-    final String party = HandleSync.boundParty(payer);
-    final Contract before = live(payer, contractId);
+    HectoAmounts.parse(delta, "Delta");
+    syncHandles(payer, msgClient);
+    final ObjAttrs before = readHolding(payer, contractId, msgClient);
 
-    CantonClients.get().submitExercise(party, before.contractId, "Adjust",
-        Collections.singletonMap("Delta", delta));
+    if (!HectoHoldings.isHectoHolding(before.toMap()))
+      throw new DomatarException("Not a Hecto holding");
+
+    exerciseAdjust(payer, contractId, delta, msgClient);
     try
     {
-      final JsonMsg posted = sendPost(payer, delta, recordUndo, msgClient);
+      final JsonMsg posted = sendPost(payer, delta, true, msgClient);
 
       if (failed(posted))
       {
-        CantonClients.get().submitExercise(party, before.contractId, "Adjust",
-            Collections.singletonMap("Delta", Amounts.negate(delta)));
-        HandleSync.sync(payer);
-        outMsg.addError("AdjustHolding",
+        exerciseAdjust(payer, contractId, HectoAmounts.negate(delta), msgClient);
+        outMsg.addError("Subscribe",
             posted.getErrorMsg() != null ? posted.getErrorMsg() : "Booking was refused");
         return;
       }
     }
     catch (final DomatarException e)
     {
-      CantonClients.get().submitExercise(party, before.contractId, "Adjust",
-          Collections.singletonMap("Delta", Amounts.negate(delta)));
-      HandleSync.sync(payer);
+      exerciseAdjust(payer, contractId, HectoAmounts.negate(delta), msgClient);
       throw e;
     }
 
-    HandleSync.sync(payer);
-    if (recordUndo)
-      attachAdjust(msgClient, payer, before.contractId, delta);
-    replyHolding("AdjustHolding", payer, before.contractId, outMsg);
+    attachSubscribe(msgClient, payer, contractId, delta);
+    replyHolding("Subscribe", payer, contractId, msgClient, outMsg);
   }
 
   private void applyTwice(final String payer, final JsonMsg inMsg,
@@ -218,26 +249,26 @@ public class DeskImpl extends ObjImpl
     final String contractId = inMsg.getAttr("ContractId");
     final String delta = inMsg.getAttr("Delta");
 
-    Amounts.parse(delta, "Delta");
-    final String party = HandleSync.boundParty(payer);
-    final Contract before = live(payer, contractId);
+    HectoAmounts.parse(delta, "Delta");
+    syncHandles(payer, msgClient);
+    final ObjAttrs before = readHolding(payer, contractId, msgClient);
 
-    CantonClients.get().submitExercise(party, before.contractId, "Adjust",
-        Collections.singletonMap("Delta", delta));
-    HandleSync.sync(payer);
+    if (!HectoHoldings.isHectoHolding(before.toMap()))
+      throw new DomatarException("Not a Hecto holding");
+
+    exerciseAdjust(payer, contractId, delta, msgClient);
 
     final JsonMsg first = sendPost(payer, delta, false, msgClient);
     final JsonMsg second = sendPost(payer, delta, false, msgClient);
-    final ObjAttrs out = holdingAttrs(payer, before.contractId);
+    final ObjAttrs out = holdingAttrs(payer, contractId, msgClient);
 
-    out.addAttr("FirstPost", failed(first)
-        ? text(first, "refused") : "posted");
-    out.addAttr("SecondPost", failed(second)
-        ? text(second, "refused") : "posted");
+    out.addAttr("FirstPost", failed(first) ? text(first, "refused") : "posted");
+    out.addAttr("SecondPost", failed(second) ? text(second, "refused") : "posted");
     outMsg.addResponseBody("ApplyTwice", out);
   }
 
-  private void reverse(final JsonMsg inMsg, final JsonMsg outMsg) throws DomatarException
+  private void reverse(final JsonMsg inMsg, final DomatarMsgClient msgClient,
+                       final JsonMsg outMsg) throws DomatarException
   {
     final String actId = inMsg.getAttr("ActId");
     final String contractId = inMsg.getAttr("ContractId");
@@ -247,30 +278,27 @@ public class DeskImpl extends ObjImpl
     if (actId == null || contractId == null || delta == null || orig == null
         || actId.isEmpty() || contractId.isEmpty() || delta.isEmpty() || orig.isEmpty())
     {
-      outMsg.addError("ReverseAdjust", "Missing ActId, ContractId, Delta, or OrigContextId");
+      outMsg.addError("ReverseSubscribe",
+          "Missing ActId, ContractId, Delta, or OrigContextId");
       return;
     }
 
-    final Obj booking = ObjDb.getObj(CantonIds.booking(actId));
+    final Obj booking = ObjDb.getObj(HectoIds.booking(actId));
 
     if (booking != null && booking.attrs != null
         && orig.equals(booking.attrs.getAttr(REVERSE_KEY)))
     {
-      replyHolding("ReverseAdjust", actId, contractId, outMsg);
+      replyHolding("ReverseSubscribe", actId, contractId, msgClient, outMsg);
       return;
     }
 
-    final String party = HandleSync.boundParty(actId);
-
-    CantonClients.get().submitExercise(party, contractId, "Adjust",
-        Collections.singletonMap("Delta", Amounts.negate(delta)));
+    exerciseAdjust(actId, contractId, HectoAmounts.negate(delta), msgClient);
     if (booking != null && booking.attrs != null)
     {
       booking.attrs.addAttr(REVERSE_KEY, orig);
       ObjDb.modifyObj(booking);
     }
-    HandleSync.sync(actId);
-    replyHolding("ReverseAdjust", actId, contractId, outMsg);
+    replyHolding("ReverseSubscribe", actId, contractId, msgClient, outMsg);
   }
 
   private static void echo(final DomatarMsgClient msgClient, final JsonMsg outMsg)
@@ -279,7 +307,7 @@ public class DeskImpl extends ObjImpl
     final DomId desk = requireDesk();
     final JsonMsg again = new JsonMsg();
 
-    again.addClsId("canton", CantonIds.DESK);
+    again.addClsId(HectoIds.HOME, HectoIds.DESK);
     again.addRequestBody("Echo", new ObjAttrs());
 
     final JsonMsg resp = msgClient.send(desk, again);
@@ -294,7 +322,7 @@ public class DeskImpl extends ObjImpl
                                   final boolean recordUndo, final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    BookingImpl.ensure(payer);
+    HectoBookingImpl.ensure(payer);
 
     final JsonMsg post = new JsonMsg();
     final ObjAttrs attrs = new ObjAttrs();
@@ -303,15 +331,15 @@ public class DeskImpl extends ObjImpl
     if (recordUndo)
     {
       attrs.addAttr("RecordUndo", "true");
-      attrs.addAttr("UndoMsgName", "AdjustHolding");
+      attrs.addAttr("UndoMsgName", "Subscribe");
     }
-    post.addClsId("canton", CantonIds.BOOKING);
+    post.addClsId(HectoIds.HOME, HectoIds.BOOKING);
     post.addRequestBody("Post", attrs);
-    return msgClient.send(CantonIds.booking(payer), post);
+    return msgClient.send(HectoIds.booking(payer), post);
   }
 
-  private static void attachAdjust(final DomatarMsgClient msgClient, final String payer,
-                                   final String contractId, final String delta)
+  private static void attachSubscribe(final DomatarMsgClient msgClient, final String payer,
+                                      final String contractId, final String delta)
       throws DomatarException
   {
     if (msgClient == null || msgClient.contextId() == null)
@@ -323,26 +351,30 @@ public class DeskImpl extends ObjImpl
     effect.put("ContractId", contractId);
     effect.put("Delta", delta);
     effect.put("OrigContextId", msgClient.contextId());
-    msgClient.attach(SagaSlot.SLOT, SagaSlot.applied("ReverseAdjust", effect),
+    msgClient.attach(SagaSlot.SLOT, SagaSlot.applied("ReverseSubscribe", effect),
         OpLog.nowMs() + OpLog.sagaTtlMs());
   }
 
   private static void replyHolding(final String opr, final String payer,
-                                   final String contractId, final JsonMsg outMsg)
+                                   final String contractId,
+                                   final DomatarMsgClient msgClient,
+                                   final JsonMsg outMsg)
       throws DomatarException
   {
-    outMsg.addResponseBody(opr, holdingAttrs(payer, contractId));
+    outMsg.addResponseBody(opr, holdingAttrs(payer, contractId, msgClient));
   }
 
-  private static ObjAttrs holdingAttrs(final String payer, final String contractId)
+  private static ObjAttrs holdingAttrs(final String payer, final String contractId,
+                                       final DomatarMsgClient msgClient)
       throws DomatarException
   {
-    final Contract live = live(payer, contractId);
-    final Obj booking = ObjDb.getObj(CantonIds.booking(payer));
+    final ObjAttrs live = readHolding(payer, contractId, msgClient);
+    final Obj booking = ObjDb.getObj(HectoIds.booking(payer));
     final ObjAttrs out = new ObjAttrs();
 
-    out.addAttr("ContractId", live.contractId);
-    out.addAttr("Amount", live.payload.get("Amount"));
+    out.addAttr("ContractId", live.getAttr("ContractId"));
+    out.addAttr("Amount", live.getAttr("Amount"));
+    out.addAttr("Symbol", value(live.getAttr("Symbol")));
     out.addAttr("NetDelta", booking != null && booking.attrs != null
         && booking.attrs.getAttr("NetDelta") != null
         ? booking.attrs.getAttr("NetDelta") : "0");
@@ -350,21 +382,65 @@ public class DeskImpl extends ObjImpl
     return out;
   }
 
-  private static Contract live(final String payer, final String contractId)
+  private static ObjAttrs readHolding(final String payer, final String contractId,
+                                      final DomatarMsgClient msgClient)
       throws DomatarException
   {
     if (contractId == null || contractId.isEmpty())
       throw new DomatarException("Missing ContractId");
+    if (msgClient == null)
+      throw new DomatarException("Contract no longer visible");
 
-    final String party = HandleSync.boundParty(payer);
-    final List<Contract> acs = CantonClients.get().queryAcs(party);
+    final DomId handle = new DomId(DomId.subHstId("canton", payer),
+        "canton", payer, contractId);
+    final JsonMsg req = new JsonMsg();
 
-    for (final Contract c : acs)
-    {
-      if (contractId.equals(c.contractId))
-        return c;
-    }
-    throw new DomatarException("Contract no longer visible");
+    req.addClsId("canton", "contract");
+    req.addRequestBody("GetContract", new ObjAttrs());
+
+    final JsonMsg resp = msgClient.send(handle, req);
+
+    if (failed(resp) || resp.getAttrs() == null)
+      throw new DomatarException(text(resp, "Contract no longer visible"));
+    return resp.getAttrs();
+  }
+
+  private static void exerciseAdjust(final String payer, final String contractId,
+                                     final String delta, final DomatarMsgClient msgClient)
+      throws DomatarException
+  {
+    final DomId handle = new DomId(DomId.subHstId("canton", payer),
+        "canton", payer, contractId);
+    final JsonMsg req = new JsonMsg();
+    final ObjAttrs attrs = new ObjAttrs();
+
+    attrs.addAttr("Choice", "Adjust");
+    attrs.addAttr("Delta", delta);
+    req.addClsId("canton", "contract");
+    req.addRequestBody("Exercise", attrs);
+
+    final JsonMsg resp = msgClient.send(handle, req);
+
+    if (failed(resp))
+      throw new DomatarException(text(resp, "Adjust was refused"));
+  }
+
+  private static void syncHandles(final String actId, final DomatarMsgClient msgClient)
+      throws DomatarException
+  {
+    if (msgClient == null)
+      return;
+
+    final DomId active = new DomId(DomId.subHstId("canton", actId), "canton", actId, "active");
+    final JsonMsg req = new JsonMsg();
+
+    req.addClsId("canton", "contracts");
+    req.addRequestBody("Sync", new ObjAttrs());
+
+    final JsonMsg resp = msgClient.send(active, req);
+
+    if (failed(resp))
+      throw new DomatarException(text(resp, "Canton sync failed"));
   }
 
   private static long remaining(final String payer) throws DomatarException
@@ -376,10 +452,10 @@ public class DeskImpl extends ObjImpl
 
   private static DomId requireDesk() throws DomatarException
   {
-    final DomId desk = CantonIds.desk();
+    final DomId desk = HectoIds.desk();
 
     if (desk == null)
-      throw new DomatarException("Canton desk is not installed");
+      throw new DomatarException("Hecto desk is not installed");
     return desk;
   }
 

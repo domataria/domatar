@@ -1,0 +1,434 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hecto</title>
+
+    <link rel="stylesheet" href="../domatar.css"/>
+
+    <style>
+        .he-header      { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
+        .he-header h2   { margin: 0; }
+        .he-card        { border: 1px solid var(--border); border-radius: var(--radius);
+                          padding: 16px 20px; margin-bottom: 20px; max-width: 960px; }
+        .he-card h3     { margin: 0 0 10px; font-size: 1.05em; }
+        .he-hint        { color: var(--page-muted); font-size: 0.88em; margin: 0 0 14px; line-height: 1.45; }
+        .he-row         { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .he-row label   { font-size: 0.82em; font-weight: 600; color: var(--page-muted); }
+        .he-row input   { padding: 6px 9px; border: 1px solid var(--border);
+                          border-radius: var(--radius); font-size: 0.95em; width: 100%;
+                          box-sizing: border-box; }
+        .he-form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+        .he-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .he-status      { font-size: 0.88em; color: var(--page-muted); margin-top: 8px; }
+        #he-status      { color: inherit; font-weight: 600; min-height: 1.2em; }
+        .he-error       { color: var(--danger, #dc2626); font-size: 0.9em;
+                          margin-bottom: 10px; min-height: 1.2em; }
+        table.he-table  { width: 100%; border-collapse: collapse; table-layout: auto; }
+        table.he-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        table.he-table th,
+        table.he-table td { text-align: left; padding: 6px 8px; }
+        table.he-table th.he-fit,
+        table.he-table td.he-fit,
+        table.he-table th.he-amt,
+        table.he-table td.he-amt { width: 1%; white-space: nowrap; }
+        table.he-table th.he-name,
+        table.he-table td.he-name { width: 99%; max-width: 1px; }
+        table.he-table th { font-size: 0.82em; font-weight: 600; color: var(--page-muted);
+                            border-bottom: 1px solid var(--border); }
+        table.he-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+        table.he-table th.he-amt,
+        table.he-table td.he-amt { text-align: right !important;
+                                   font-variant-numeric: tabular-nums; }
+        table.he-table td.he-amt { overflow: visible; text-overflow: clip; }
+        .he-amt-box { display: flex; justify-content: flex-end; width: 100%; }
+        .he-amt-int { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+        .he-amt-rest { flex: 0 0 var(--amt-rest, 0ch); text-align: left; white-space: nowrap; }
+        table.he-table tr.he-selected td { background: #60a5fa !important; }
+        table.he-table tr.he-selected td:first-child { box-shadow: inset 3px 0 0 #1d4ed8; }
+        .empty-msg      { color: var(--page-muted); font-style: italic; }
+        @media (max-width: 640px) {
+            .he-form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript" src="../jquery-3.5.1.js"></script>
+<script type="text/javascript" src="../quip.js"></script>
+
+<script type="text/javascript">
+
+    var HECTO_REG = 'Hecto::12208c1a9f0e4d7b2a6c5e8f1d3b0a7c4e9f2d5b8a1c6e3f0d9b7a4c1e8f5d2b0a11';
+
+    function failed(ret)
+    {
+        return !ret || ret.Error === 'Failure';
+    }
+
+    function errText(ret, fallback)
+    {
+        return (ret && ret.ErrorMsg) ? ret.ErrorMsg : fallback;
+    }
+
+    function showError(msg)
+    {
+        $('#page-error').text(msg || '');
+    }
+
+    function loadFunds()
+    {
+        $('#he-body').html('<tr><td colspan="5" class="empty-msg">Loading\u2026</td></tr>');
+
+        $.ajax({
+            type: 'GET',
+            url: '../canton/Wui/ContractsWui',
+            data: 'Action=GetContracts',
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    $('#he-body').html('<tr><td colspan="5">' +
+                        escapeHtml(errText(ret, 'Failed to load contracts.')) + '</td></tr>');
+                    return;
+                }
+                var all = (ret.Attrs && ret.Attrs.Contracts) ? ret.Attrs.Contracts : [];
+                var funds = [];
+                for (var i = 0; i < all.length; i++)
+                {
+                    if (all[i] && all[i].InstrumentAdmin === HECTO_REG)
+                        funds.push(all[i]);
+                }
+                renderFunds(funds);
+            },
+            error: function(jqXHR, textStatus)
+            {
+                $('#he-body').html('<tr><td colspan="5">Network error: ' +
+                    escapeHtml(textStatus) + '</td></tr>');
+            }
+        });
+    }
+
+    function renderFunds(list)
+    {
+        if (!list || list.length === 0)
+        {
+            $('#he-body').html('<tr><td colspan="5" class="empty-msg">No Hecto funds.</td></tr>');
+            return;
+        }
+
+        var shown = [];
+        var restCh = 0;
+        for (var i = 0; i < list.length; i++)
+        {
+            var raw = (list[i] && list[i].Amount) || '';
+            var text = trimAmount(raw);
+            shown.push(text);
+            var dot = text.indexOf('.');
+            if (dot >= 0)
+                restCh = Math.max(restCh, text.length - dot);
+        }
+        $('#he-funds').css('--amt-rest', restCh + 'ch');
+
+        var html = '';
+        for (var i = 0; i < list.length; i++)
+        {
+            var c = list[i] || {};
+            var cid = c.ContractId || '';
+            var symbol = c.Symbol || '';
+            var name = c.Name || '';
+            var amount = c.Amount || '';
+            var use = cid
+                ? ('<a href="#" class="he-use" data-cid="' + escapeHtml(cid)
+                    + '" data-symbol="' + escapeHtml(symbol)
+                    + '" data-amount="' + escapeHtml(amount) + '">Use</a>')
+                : '';
+            if (cid && cid === $.trim($('#he-contract').val()))
+                $('#he-amount').text(shown[i]);
+            html += '<tr>'
+                + '<td class="he-fit">' + escapeHtml(symbol) + '</td>'
+                + '<td class="he-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>'
+                + '<td class="he-amt">' + amountHtml(shown[i], restCh) + '</td>'
+                + '<td class="he-fit" title="' + escapeHtml(cid) + '">' + escapeHtml(shortId(cid)) + '</td>'
+                + '<td class="he-fit">' + use + '</td>'
+                + '</tr>';
+        }
+        $('#he-body').html(html);
+        $('#he-body').find('.he-use').on('click', function(e)
+        {
+            e.preventDefault();
+            var row = $(this).closest('tr');
+            useHolding($(this).attr('data-cid'), $(this).attr('data-symbol'),
+                $(this).attr('data-amount'), row.find('.he-name').text(), row);
+        });
+    }
+
+    function amountHtml(shown, restCh)
+    {
+        var dot = shown.indexOf('.');
+        var whole = dot < 0 ? shown : shown.substring(0, dot);
+        var rest = dot < 0 ? '' : shown.substring(dot);
+        var restSpan = restCh > 0
+            ? '<span class="he-amt-rest">' + escapeHtml(rest) + '</span>'
+            : '';
+        return '<span class="he-amt-box">'
+            + '<span class="he-amt-int">' + escapeHtml(whole) + '</span>'
+            + restSpan + '</span>';
+    }
+
+    function trimAmount(s)
+    {
+        s = String(s);
+        var dot = s.indexOf('.');
+        if (dot < 0)
+            return s;
+        var frac = s.substring(dot + 1).replace(/0+$/, '');
+        if (!frac)
+            frac = '0';
+        return s.substring(0, dot) + '.' + frac;
+    }
+
+    function shortId(s)
+    {
+        if (s.length > 14)
+            return s.substring(0, 8) + '\u2026' + s.substring(s.length - 4);
+        return s;
+    }
+
+    function useHolding(cid, symbol, amount, name, row)
+    {
+        $('#he-contract').val(cid);
+        $('#he-body tr').removeClass('he-selected');
+        if (row) row.addClass('he-selected');
+        if (amount) $('#he-amount').text(trimAmount(amount));
+        var delta = $.trim($('#he-delta').val()) || '500';
+        var label = name || symbol || 'holding';
+        $('#he-status').text(label + ' (' + shortId(cid)
+            + '). Press Subscribe to add ' + delta + ' (25 credits).');
+    }
+
+    function deskCall(action, extra, done, quiet)
+    {
+        if (!quiet) showError('');
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/SubscribeWui',
+            data: 'Action=' + encodeURIComponent(action) + (extra || ''),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
+            {
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, action + ' failed.'));
+                    if (done) done(null);
+                    return;
+                }
+                if (done) done(ret.Attrs || {});
+            },
+            error: function(jqXHR, textStatus)
+            {
+                showError('Network error: ' + textStatus);
+                if (done) done(null);
+            }
+        });
+    }
+
+    function loadDesk()
+    {
+        deskCall('Credits', '', function(attrs)
+        {
+            if (!attrs) return;
+            $('#he-credits').text(attrs.Remaining != null ? attrs.Remaining : '?');
+            $('#he-cost').text(attrs.Cost != null ? attrs.Cost : '25');
+        }, true);
+        deskCall('GetBooking', '', function(attrs)
+        {
+            if (!attrs) return;
+            $('#he-net').text(attrs.NetDelta != null ? attrs.NetDelta : '0');
+            $('#he-last').text(attrs.LastDelta != null ? attrs.LastDelta : '0');
+        }, true);
+    }
+
+    function applyHolding(attrs)
+    {
+        if (!attrs) return;
+        if (attrs.Amount != null) $('#he-amount').text(trimAmount(String(attrs.Amount)));
+        if (attrs.NetDelta != null) $('#he-net').text(attrs.NetDelta);
+        if (attrs.Remaining != null) $('#he-credits').text(attrs.Remaining);
+    }
+
+    function subscribe()
+    {
+        var cid = $.trim($('#he-contract').val());
+        var delta = $.trim($('#he-delta').val());
+        if (!cid || !delta)
+        {
+            showError('ContractId and Delta are required.');
+            return;
+        }
+        $('#btn-subscribe').prop('disabled', true);
+        deskCall('Subscribe',
+            '&ContractId=' + encodeURIComponent(cid) + '&Delta=' + encodeURIComponent(delta),
+            function(attrs)
+            {
+                $('#btn-subscribe').prop('disabled', false);
+                if (!attrs) { loadDesk(); return; }
+                applyHolding(attrs);
+                $('#he-status').text('Subscribed ' + (attrs.Symbol || '')
+                    + ' ' + (attrs.Amount != null ? trimAmount(String(attrs.Amount)) : '')
+                    + '. Booking ' + (attrs.NetDelta != null ? attrs.NetDelta : '')
+                    + '. Credits ' + (attrs.Remaining != null ? attrs.Remaining : '') + '.');
+                loadFunds();
+                loadDesk();
+            });
+    }
+
+    function cancelSubscription()
+    {
+        $('#btn-cancel').prop('disabled', true);
+        deskCall('Undo', '', function(attrs)
+        {
+            $('#btn-cancel').prop('disabled', false);
+            if (!attrs) { loadDesk(); return; }
+            $('#he-status').text(attrs.Outcome
+                ? ('Cancel ' + attrs.Outcome)
+                : 'Cancel sent');
+            loadFunds();
+            loadDesk();
+        });
+    }
+
+    function duplicateOrder()
+    {
+        var cid = $.trim($('#he-contract').val());
+        var delta = $.trim($('#he-delta').val());
+        if (!cid || !delta)
+        {
+            showError('ContractId and Delta are required.');
+            return;
+        }
+        deskCall('ApplyTwice',
+            '&ContractId=' + encodeURIComponent(cid) + '&Delta=' + encodeURIComponent(delta),
+            function(attrs)
+            {
+                if (!attrs) { loadDesk(); return; }
+                applyHolding(attrs);
+                $('#he-status').text('Holding ' + (attrs.Amount != null
+                        ? trimAmount(String(attrs.Amount)) : '')
+                    + '. First booking ' + (attrs.FirstPost || '')
+                    + '. Second booking ' + (attrs.SecondPost || '') + '.');
+                loadFunds();
+                loadDesk();
+            });
+    }
+
+    function callbackDesk()
+    {
+        deskCall('Echo', '', function(attrs)
+        {
+            if (!attrs) return;
+            $('#he-status').text('Loop stopped'
+                + (attrs.Detail ? ': ' + attrs.Detail : ''));
+            loadDesk();
+        });
+    }
+
+    function refillDesk()
+    {
+        deskCall('Refill', '', function()
+        {
+            loadDesk();
+        });
+    }
+
+    function escapeHtml(s)
+    {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    $(document).ready(function()
+    {
+        loadFunds();
+        loadDesk();
+    });
+
+</script>
+
+<div class="page">
+    <div class="page-content">
+        <div class="he-header">
+            <h2>Hecto</h2>
+        </div>
+
+        <div id="page-error" class="he-error"></div>
+
+        <div class="he-card" id="he-card">
+            <h3>Subscribe</h3>
+            <p class="he-hint">
+                Click Use on a Hecto fund below. Subscribe adds Delta on that
+                contract and draws 25 credits. Cancel reverses it and returns
+                the credits.
+            </p>
+            <div class="he-form-grid">
+                <div class="he-row">
+                    <label for="he-contract">ContractId</label>
+                    <input type="text" id="he-contract" placeholder="Click Use on a row below"/>
+                </div>
+                <div class="he-row">
+                    <label for="he-delta">Delta</label>
+                    <input type="text" id="he-delta" value="500"/>
+                </div>
+            </div>
+            <div class="he-btns">
+                <button type="button" id="btn-subscribe" onclick="subscribe()">Subscribe</button>
+                <button type="button" id="btn-cancel" onclick="cancelSubscription()">Cancel</button>
+                <button type="button" onclick="duplicateOrder()">Duplicate order</button>
+                <button type="button" onclick="callbackDesk()">Callback</button>
+                <button type="button" onclick="refillDesk()">Refill</button>
+            </div>
+            <div class="he-status">
+                Credits <span id="he-credits">…</span>
+                · price <span id="he-cost">25</span>
+                · amount <span id="he-amount">—</span>
+                · booking <span id="he-net">0</span>
+                · last <span id="he-last">0</span>
+            </div>
+            <div id="he-status" class="he-status"></div>
+        </div>
+
+        <div class="he-card">
+            <h3>Hecto funds</h3>
+            <table class="he-table" id="he-funds">
+                <thead>
+                    <tr>
+                        <th class="he-fit">Symbol</th>
+                        <th class="he-name">Name</th>
+                        <th class="he-amt">Amount</th>
+                        <th class="he-fit">ContractId</th>
+                        <th class="he-fit"></th>
+                    </tr>
+                </thead>
+                <tbody id="he-body">
+                    <tr><td colspan="5" class="empty-msg">Loading&hellip;</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

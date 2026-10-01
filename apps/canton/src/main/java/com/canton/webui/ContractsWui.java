@@ -41,9 +41,23 @@ public class ContractsWui extends DomatarServlet
     }
 
     final String actId = srcAct.actId;
+    final ObjAttrs attrs = new ObjAttrs();
+
+    if ("Adjust".equals(opr))
+    {
+      final DomId app = new DomId(DomId.subHstId("canton", actId),
+          "canton", actId, "app-canton");
+
+      put(attrs, "ContractId", getParam(req, "ContractId"));
+      put(attrs, "Delta", getParam(req, "Delta"));
+      msg.addRequestHead(srcDomId, app, context);
+      msg.addClsId("canton", "app");
+      msg.addRequestBody(opr, attrs);
+      return msg;
+    }
+
     final DomId activeId = new DomId(DomId.subHstId("canton", actId),
                                       "canton", actId, "active");
-    final ObjAttrs attrs = new ObjAttrs();
 
     if ("Sync".equals(opr) || "GetContracts".equals(opr) || "GetLnks".equals(opr))
     {

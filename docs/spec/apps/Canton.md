@@ -2,6 +2,9 @@
 
 [IMPLEMENTED — Update-CantonApp.txt]
 
+Desk and booking removed. Facade Adjust is free.
+[IMPLEMENTED — Update-HectoApp.txt]
+
 A Domatar application that is a local face onto Canton. Each Daml
 contract this user can see becomes an ordinary object: payload and
 stakeholders are attributes, choices are messages. The user lists
@@ -28,6 +31,7 @@ Companion documents:
 - [Navigator](Navigator.md) — Open (v1 read-only: exercise is WUI + agent)
 - [Identifiers](../platform/Identifiers.md) — actId as object owner, not as a Party
 - [AI Agent](AIAgent.md) — facade tools from GetCls
+- [Hecto](Hecto.md) — fund subscription fees (this app's Adjust is free)
 
 The Java realisation is `apps/canton/` (Maven module, JAR under
 `WEB-INF/apps/`).
@@ -70,9 +74,10 @@ The Java realisation is `apps/canton/` (Maven module, JAR under
     Two Tomcats in the sim are two mock networks until a
     real participant exists.
   * Wrapping the ledger submit itself in Saga. The command is
-    already atomic. A desk message may submit, then post a
-    Domatar booking, and compensate with a second submit
-    (PART 6.5). That is not a rollback of the first command.
+    already atomic. Adjust on this app is one submit and a
+    Sync. It has no fee and no saga slot. Fund subscription
+    fees, their compensation, and the re-entry probes live
+    in [Hecto](Hecto.md).
   * Divulgence / disclosed-contract objects, multi-party
     submission, contract keys as addressing.
 
@@ -199,13 +204,11 @@ The Java realisation is `apps/canton/` (Maven module, JAR under
   Home host     hstId = canton
                 system account canton@canton (usrId). The actId
                 is the fingerprint minted for that home user.
-                Owns the desk (PART 6.5). The provider that
-                offers `canton` in `DOMATAR_OFFERED_HOSTS` is
-                the one that hosts it.
+                The provider that offers `canton` in
+                `DOMATAR_OFFERED_HOSTS` is the one that hosts it.
 
   Per-user      hstId = canton-\<actId\>
-                party binding, Active container, handles,
-                booking
+                party binding, Active container, handles
 
   `MockCanton` is not an object and not a host. It is a JVM
   singleton behind `CantonClients.get()` (PART 5).
@@ -309,7 +312,9 @@ links, idempotent install.
 4.1  Classes
 
   (canton, app)         facade on the app node. LLM-facing
-                        coarse ops (PART 9).
+                        coarse ops (PART 6.4). Adjust adds
+                        Delta on a ContractId. No Cost, no
+                        Compensates.
 
   (canton, party)       ObjId = party
                         Attrs: PartyId (String)
@@ -335,27 +340,11 @@ links, idempotent install.
                         (nested). Msgs: Exercise.
                         Same Java handler as (canton, iou).
 
-  (canton, booking)     ObjId = booking, on the user's
-                        sub-host. Attrs: NetDelta, LastDelta.
-                        Msgs: GetBooking, Post
-                        (Compensates: Unpost), Unpost.
-                        Post denies when alreadyEntered()
-                        (PART 6.6).
-
-  (canton, desk)        ObjId = desk, on the home host,
-                        owned by the Canton home user.
-                        Msgs: Quote, Credits, AdjustHolding
-                        (Cost 25 credits, Compensates:
-                        ReverseAdjust), ReverseAdjust,
-                        ApplyTwice, Echo, Refill.
-                        PART 6.5.
-
 4.2  Navigator skeleton
 
   root → app-canton                    (navigator, app)
   app-canton → party                   (navigator, container)
   app-canton → active                  (navigator, container)
-  app-canton → booking                 (navigator, container)
 
   active → each handle                 Tag = (canton, iou)
                                        Val = TemplateId
@@ -378,11 +367,11 @@ links, idempotent install.
   installUser
     `HstDb.addHstIfMissing("canton-" + actId, ...)`
     objs: app-canton, party (PartyId empty), active
-    links: root → app-canton → { party, active, booking }
-    On the provider that owns host canton, the desk
-    object and its class descriptors. /Setup refreshes
-    facade and booking descriptors for users who already
-    have the app.
+    links: root → app-canton → { party, active }
+    /Setup refreshes facade descriptors for users who
+    already have the app, including free Adjust, and
+    retires a leftover desk or booking from an earlier
+    install.
     ClsInstall / SrvInstall on the user sub-host
     (descriptors travel with the host).
 
@@ -661,113 +650,27 @@ Handlers extend `ObjImpl`. After hasRights, they call
   Facade ([Writing Apps](Writing-Apps.md) PART 9, [AI Agent](AIAgent.md) PART 16):
 
     BindParty, GetParty, ListContracts, Sync,
-    CreateIou, GetIou, Transfer, Settle,
-    Quote, Credits, GetBooking, AdjustHolding, Undo,
-    ApplyTwice, Echo, Refill
+    CreateIou, GetIou, Transfer, Settle, Adjust
 
   Coarse ops so the agent does not invent clsIds.
   BindParty through Settle forward to this user's own
-  objects. Quote, Credits, AdjustHolding, ApplyTwice,
-  Echo, and Refill forward to the desk (another actId,
-  the home user). GetBooking reads this user's booking.
-  Undo sends platform Compensate to the desk for the
-  booking's LastContextId / LastMsgName, from this same
-  facade, so the caller matches the adjustment.
+  objects. Adjust does not. It submits the holding
+  choice on Canton and Syncs this user's handles.
 
-  AdjustHolding on the facade declares Cost 25 so the
-  agent shows the list price. The facade admits without
-  drawing. The desk returns priced and is where the
-  draw happens. Open, GetIou, GetContract, and Sync stay
-  free: a sheet Parse must not spend credits.
-
-6.5  DeskImpl  (canton, desk)
-
-  Owned by the Canton home user on host canton. The
-  payer is the verified caller. The payee is the desk's
-  actId. The first time that pair has no pay_bal row,
-  the desk credits 100. Refill tops the caller back up
-  to 100. That refill is a workshop reset, not a wallet.
-
-  hasRights: verified caller. rights() returns priced
-  for AdjustHolding when the caller is not the desk
-  owner, after the cycle check. The desk owner is
-  admitted without a draw. Echo also denies when
-  alreadyEntered() is true, so a callback cannot recurse
-  if the cycle check were missed.
-
-  Quote
-    In:  ContractId
-    Out: { ContractId, Amount, Symbol, Cost }
-    Read. No draw.
-
-  Credits
-    Out: { Remaining, Cost }
-    Read. Seeds 100 when this payer has no row.
-
-  AdjustHolding
+  Adjust
     In:  ContractId, Delta
-    Out: { ContractId, Amount, NetDelta, Remaining }
+    Out: { ContractId, Amount }
     SideEffect: Write
-    Cost: 25 credits. Compensates: ReverseAdjust.
-    submitExercise Adjust as the caller's bound Party,
-    then Post the booking with RecordUndo. If Post
-    fails, submit the opposite delta and do not attach
-    a saga slot. On success, attach slot saga on this
-    visit with effect { ActId, ContractId, Delta,
-    OrigContextId }. Sync the caller's handles.
+    Auth: Owner
+    No Cost. No Compensates.
+    Submit Adjust as this user's bound Party, then Sync
+    that user's handles. Delta 0 is rejected. rights()
+    stays ADMIT. There is no pay_bal check and no saga
+    slot.
 
-  ReverseAdjust
-    In:  the saga effect (ActId, ContractId, Delta,
-         OrigContextId)
-    No Compensates. Idempotent when the booking's
-    SagaReverseKey equals OrigContextId. Otherwise
-    submit Adjust with the negated delta, record the
-    key, and Sync. A failed draw is not a visit, so
-    there is nothing to reverse.
-
-  ApplyTwice
-    In:  ContractId, Delta
-    Out: { Amount, FirstPost, SecondPost, ... }
-    No Cost. One Adjust, then Post twice with no
-    RecordUndo. The second Post is refused (PART 6.6).
-    The holding and the booking each move once.
-
-  Echo
-    Out: { Stopped: "cycle", Detail }
-    Sends Echo to this same desk. The second arrival
-    is denied (inOwnPath, and alreadyEntered). No
-    draw, no holding change.
-
-  Refill
-    Out: { Remaining }
-    Credits the shortfall up to 100.
-
-6.6  BookingImpl  (canton, booking)
-
-  hasRights: verified owner (this user's booking).
-
-  rights() denies Post when alreadyEntered() is true.
-  That is this class refusing a second delivery of the
-  same message in one operation. A later operation
-  (a new ContextId) may Post again. Unpost is a
-  different message and is not refused that way.
-
-  GetBooking
-    Out: { NetDelta, LastDelta, LastContextId, LastMsgName }
-
-  Post
-    In:  Delta, and when the desk is recording an undo:
-         RecordUndo, UndoMsgName
-    Adds Delta to NetDelta, sets LastDelta. When
-    RecordUndo is true, stores the current context id
-    and UndoMsgName. Attaches saga effect
-    { Delta, OrigContextId } with Compensates Unpost.
-
-  Unpost
-    In:  Delta, OrigContextId (from the saga effect)
-    No Compensates. If SagaUnpostKey is already that
-    OrigContextId, return the current NetDelta.
-    Otherwise subtract Delta and store the key.
+  Open, GetIou, GetContract, and Sync stay free: a sheet
+  Parse must not spend credits. Fund subscription fees
+  are [Hecto](Hecto.md).
 
 
 ## PART 7 — hasRights
@@ -798,15 +701,6 @@ the UX filter. It does not replace the ledger.
   controller check: an observer has a handle they can
   read and cannot exercise.
 
-  desk
-      verified caller. AdjustHolding is priced for
-      everyone except the desk owner. Echo and Post's
-      re-entry rules are PART 6.5 and 6.6. A cycle
-      (this desk already on the path) is denied.
-  booking
-      verified owner. Post is denied on re-entry of
-      that same message.
-
   GetCls Auth strings:
     reads            Owner
     Transfer         Controller   (app-specific policy name)
@@ -822,7 +716,7 @@ the UX filter. It does not replace the ledger.
   except `MockNetworkWui`.
 
     PartyWui        BindParty / GetParty
-    ContractsWui    Sync, Create, list
+    ContractsWui    Sync, Create, list, Adjust
     IouWui          GetIou, Transfer, Settle, Archive
     MockNetworkWui  Get, Patch
                     Plain `HttpServlet`, not a
@@ -830,6 +724,8 @@ the UX filter. It does not replace the ledger.
                     `MockCanton` via `mockOrNull()`, not to
                     a handle. Same canton app (no new AppId).
 
+  The launcher and the `(canton, app)` tile use the Canton
+  mark at `icons/app.svg` and `icons/cls/app.svg`.
   Assets: `canton.html` (launcher: bind, create Iou, list
   Symbol/Name/Amount/Owner). Amount drops trailing
   fractional zeros and keeps one digit when a decimal
@@ -837,11 +733,13 @@ the UX filter. It does not replace the ledger.
   The Amount column is right-aligned, only as wide as its
   values, and the decimal points line up. Name takes the
   remaining width.
-  The adjustment strip sits
-  immediately above that list: credits, price, amount,
-  booking net, Adjust, Undo, Apply twice, Echo, Refill.
-  Use on a row fills ContractId, names the holding,
-  and highlights that row.
+  Above that list, a free Adjust: ContractId, Delta
+  (default 500), and Adjust. Use on a row fills
+  ContractId, names the holding, and highlights that
+  row. Adjust adds Delta on that same ContractId.
+  The status line states the new amount and that no
+  credits were charged. `ContractsWui` Action=Adjust
+  sends Adjust to this user's (canton, app) facade.
   `iou.html?ContractDomId=`
   (every payload Attr, Allocations rendered as a table,
   Transfer / Settle / Archive, plus Network which navigates
@@ -867,23 +765,23 @@ the UX filter. It does not replace the ledger.
   useApp(canton) → facade tools from GetCls on (canton, app)
   plus GetCls on (canton, iou) when a handle is the target.
   Confirm Write/Destructive as usual ([AI Agent](AIAgent.md)).
-  AdjustHolding's description carries the list price
-  (Cost: 25 credit). Undo, ApplyTwice, and Echo are
-  facade tools. The agent does not call the desk or the
-  booking directly.
+  Adjust's description says it adds Delta on that
+  ContractId and charges no fee. It does not declare
+  Cost. Fund fees are [Hecto](Hecto.md).
 
 8.4  Spreadsheet
 
   A cell may cite Amount, Nav, Allocations, Allocations[n].Name,
   Allocations[n].Weight, or WeightOpenAI (etc.) of this user's
-  handle, and NetDelta or LastDelta of this user's booking,
-  ([Spreadsheet](Spreadsheet.md) PART 7.4). It cannot cite a
+  handle ([Spreadsheet](Spreadsheet.md) PART 7.4). NetDelta and
+  LastDelta of a fund subscription are attributes of the Hecto
+  booking (`hecto-<actId>.hecto.<actId>.booking`), not of a
+  Canton object. It cannot cite a
   counterparty's handle; that DomId is not theirs. Live fetch
   still runs hasRights as the spreadsheet owner. After a
   mock-network `patchPayload` or an Adjust, Parse (or reload
   GetSheet) on the sheet re-Opens the handle and picks up
-  the new Attrs. Undo restores both the holding amount and
-  the booking. Those Opens are not priced.
+  the new Attrs. Those Opens are not priced.
 
 
 ## PART 9 — MODULE LAYOUT
@@ -905,15 +803,11 @@ the UX filter. It does not replace the ledger.
       objimpl/ContractsImpl.java
       objimpl/ContractImpl.java     (canton, iou) and
                                     (canton, contract)
-      objimpl/DeskImpl.java         (canton, desk)
-      objimpl/BookingImpl.java      (canton, booking)
-      objimpl/CantonIds.java        desk and booking DomIds
       objimpl/HandleSync.java       ACS → handles
       webui/PartyWui.java
       webui/ContractsWui.java
       webui/IouWui.java
       webui/MockNetworkWui.java     mock ACS Get / Patch
-      webui/AdjustWui.java          facade Quote / Adjust / Undo
     src/main/resources/
       META-INF/domatar/app.manifest
       canton/assets/                canton.html, iou.html,
@@ -924,9 +818,9 @@ the UX filter. It does not replace the ledger.
   into WEB-INF/apps/ with the other apps.
 
   Manifest AppId=canton, InstallClass=CantonInstall,
-  Handler lines for app, party, contracts, iou, contract,
-  desk, and booking. Wui lines for PartyWui, ContractsWui,
-  IouWui, MockNetworkWui, and AdjustWui.
+  Handler lines for app, party, contracts, iou, and
+  contract. Wui lines for PartyWui, ContractsWui,
+  IouWui, and MockNetworkWui.
 
   How a handler obtains CantonClient: `CantonClients.get()`
   returning the JVM singleton mock (KD11). Later the accessor
@@ -1018,11 +912,11 @@ of field names: `IouTemplates`. Install must not drift.
     the successor; no Domatar object for Bank unless Bank
     installed and bound. Recreate Tomcat: remaining
     visible IOUs still Open. With canton offered, bind
-    the Owner party of a workshop holding, Adjust by
-    500: credits drop by 25, and Parse on a sheet that cites
-    Amount and booking NetDelta shows both. Undo
-    restores both and the credits. Apply twice refuses
-    the second booking. Echo refuses the loop.
+    the Owner party of a workshop holding and Adjust by
+    500 on the facade: the Amount rises by 500, the
+    ContractId stays, and no credits move. A sheet that
+    cites that Amount picks up the new value on Parse.
+    Fund fees are [Hecto](Hecto.md).
 
 
 ## PART 12 — KEY DECISIONS
@@ -1075,19 +969,17 @@ of field names: `IouTemplates`. Install must not drift.
 
   KD9  Do not wrap the ledger submit itself in Saga
        Compensate. Do not analogize RegisterAccount /
-       BankTransfer / Credit. The desk's AdjustHolding is
-       a Domatar message: one submit, then a booking.
-       Compensate runs ReverseAdjust, which is a second
-       submit, and Unpost on the booking. The payment
-       rebate is the platform's, on that compensated visit.
+       BankTransfer / Credit. Facade Adjust is one submit
+       and a Sync: no Cost, no saga slot. A fund
+       subscription that submits and then posts a booking
+       is [Hecto](Hecto.md).
 
-  KD12 The desk is owned by the Canton home user, not by
-       the caller. List price is 25 credits on
-       AdjustHolding. Reads and the sheet's Open stay
-       free. Post on the booking refuses re-entry of the
-       same message. Echo does not override the cycle
-       deny. A new ContextId may adjust again and is
-       charged again.
+  KD12 Facade Adjust is free. The caller owns this app, so
+       a price on it would pay that same caller. ContractId
+       and Delta go in; ContractId and Amount come out.
+       Reads and the sheet's Open stay free. Fund fees are
+       25 credits on Hecto Subscribe, paid to the Hecto
+       home user ([Hecto](Hecto.md)).
 
   KD10 Navigator shows; WUI and the agent exercise.
 

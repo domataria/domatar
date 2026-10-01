@@ -26,7 +26,7 @@
         .cn-form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
         .cn-btns        { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .cn-status      { font-size: 0.88em; color: var(--page-muted); margin-top: 8px; }
-        #adj-status     { color: inherit; font-weight: 600; min-height: 1.2em; }
+        #cn-status      { color: inherit; font-weight: 600; min-height: 1.2em; }
         .cn-row input.cn-filled { border-color: #2563eb; background: #f4f8ff; }
         .cn-error       { color: var(--danger, #dc2626); font-size: 0.9em;
                           margin-bottom: 10px; min-height: 1.2em; }
@@ -290,12 +290,21 @@
                 + '</tr>';
         }
         $('#cn-body').html(html);
+        var selected = $.trim($('#cn-contract').val());
         $('#cn-body').find('.cn-use').on('click', function(e)
         {
             e.preventDefault();
             useContract($(this).attr('data-cid'), $(this).attr('data-symbol'),
                 $(this).attr('data-amount'), $(this).closest('tr'));
         });
+        if (selected)
+        {
+            $('#cn-body').find('.cn-use').each(function()
+            {
+                if ($(this).attr('data-cid') === selected)
+                    $(this).closest('tr').addClass('cn-selected');
+            });
+        }
     }
 
     function shortParty(s)
@@ -340,158 +349,52 @@
 
     function useContract(cid, symbol, amount, row)
     {
-        $('#adj-contract').val(cid).addClass('cn-filled');
+        $('#cn-contract').val(cid).addClass('cn-filled');
         $('#cn-body tr').removeClass('cn-selected');
         if (row) row.addClass('cn-selected');
-        var delta = $.trim($('#adj-delta').val()) || '500';
-        var label = (symbol || 'holding') + (amount ? ' ' + amount : '');
-        $('#adj-status').text('Selected ' + label + ' (' + shortId(cid)
+        var delta = $.trim($('#cn-delta').val()) || '500';
+        var label = (symbol || 'holding') + (amount ? ' ' + trimAmount(amount) : '');
+        $('#cn-status').text('Selected ' + label + ' (' + shortId(cid)
             + '). ContractId filled. Press Adjust to add ' + delta + '.');
-        quoteAdjust();
     }
 
-    function deskCall(action, extra, done)
+    function adjustFree()
     {
-        showError('');
-        $.ajax({
-            type: 'POST',
-            url: 'Wui/AdjustWui',
-            data: 'Action=' + encodeURIComponent(action) + (extra || ''),
-            cache: false,
-            timeout: 30000,
-            success: function(json)
-            {
-                var ret = JSON.parse(json);
-                if (failed(ret))
-                {
-                    showError(errText(ret, action + ' failed.'));
-                    if (done) done(null);
-                    return;
-                }
-                if (done) done(ret.Attrs || {});
-            },
-            error: function(jqXHR, textStatus)
-            {
-                showError('Network error: ' + textStatus);
-                if (done) done(null);
-            }
-        });
-    }
-
-    function loadDesk()
-    {
-        deskCall('Credits', '', function(attrs)
-        {
-            if (!attrs) return;
-            $('#adj-credits').text(attrs.Remaining != null ? attrs.Remaining : '?');
-            $('#adj-cost').text(attrs.Cost != null ? attrs.Cost : '25');
-        });
-        deskCall('GetBooking', '', function(attrs)
-        {
-            if (!attrs) return;
-            $('#adj-net').text(attrs.NetDelta != null ? attrs.NetDelta : '0');
-            $('#adj-last').text(attrs.LastDelta != null ? attrs.LastDelta : '0');
-        });
-    }
-
-    function quoteAdjust()
-    {
-        var cid = $.trim($('#adj-contract').val());
-        if (!cid)
-        {
-            showError('Choose a contract first.');
-            return;
-        }
-        deskCall('Quote', '&ContractId=' + encodeURIComponent(cid), function(attrs)
-        {
-            if (!attrs) return;
-            $('#adj-amount').text(attrs.Amount != null ? attrs.Amount : '');
-            if (attrs.Cost) $('#adj-cost').text(attrs.Cost);
-            var delta = $.trim($('#adj-delta').val()) || '500';
-            var price = attrs.Cost != null ? attrs.Cost : $('#adj-cost').text();
-            $('#adj-status').text('Selected ' + (attrs.Symbol || 'holding')
-                + ' ' + (attrs.Amount != null ? attrs.Amount : '')
-                + '. Press Adjust to add ' + delta + ' (' + price + ' credits).');
-        });
-    }
-
-    function adjustHolding()
-    {
-        var cid = $.trim($('#adj-contract').val());
-        var delta = $.trim($('#adj-delta').val());
+        var cid = $.trim($('#cn-contract').val());
+        var delta = $.trim($('#cn-delta').val());
         if (!cid || !delta)
         {
             showError('ContractId and Delta are required.');
             return;
         }
         $('#btn-adjust').prop('disabled', true);
-        deskCall('AdjustHolding',
-            '&ContractId=' + encodeURIComponent(cid) + '&Delta=' + encodeURIComponent(delta),
-            function(attrs)
+        showError('');
+        $.ajax({
+            type: 'POST',
+            url: 'Wui/ContractsWui',
+            data: 'Action=Adjust&ContractId=' + encodeURIComponent(cid)
+                + '&Delta=' + encodeURIComponent(delta),
+            cache: false,
+            timeout: 30000,
+            success: function(json)
             {
                 $('#btn-adjust').prop('disabled', false);
-                if (!attrs) { loadDesk(); return; }
-                if (attrs.Amount != null) $('#adj-amount').text(attrs.Amount);
-                if (attrs.NetDelta != null) $('#adj-net').text(attrs.NetDelta);
-                if (attrs.Remaining != null) $('#adj-credits').text(attrs.Remaining);
+                var ret = JSON.parse(json);
+                if (failed(ret))
+                {
+                    showError(errText(ret, 'Adjust failed.'));
+                    return;
+                }
+                var amount = (ret.Attrs && ret.Attrs.Amount != null) ? ret.Attrs.Amount : '';
+                $('#cn-status').text('Amount is now ' + trimAmount(String(amount))
+                    + '. No credits were charged.');
                 loadContracts();
-                loadDesk();
-            });
-    }
-
-    function undoAdjust()
-    {
-        $('#btn-undo').prop('disabled', true);
-        deskCall('Undo', '', function(attrs)
-        {
-            $('#btn-undo').prop('disabled', false);
-            if (!attrs) { loadDesk(); return; }
-            $('#adj-status').text(attrs.Outcome
-                ? ('Undo ' + attrs.Outcome + (attrs.Reason ? ' (' + attrs.Reason + ')' : ''))
-                : 'Undo sent');
-            loadContracts();
-            loadDesk();
-            quoteAdjust();
-        });
-    }
-
-    function applyTwice()
-    {
-        var cid = $.trim($('#adj-contract').val());
-        var delta = $.trim($('#adj-delta').val());
-        if (!cid || !delta)
-        {
-            showError('ContractId and Delta are required.');
-            return;
-        }
-        deskCall('ApplyTwice',
-            '&ContractId=' + encodeURIComponent(cid) + '&Delta=' + encodeURIComponent(delta),
-            function(attrs)
+            },
+            error: function(jqXHR, textStatus)
             {
-                if (!attrs) { loadDesk(); return; }
-                $('#adj-status').text('Holding ' + (attrs.Amount || '')
-                    + '. First booking ' + (attrs.FirstPost || '')
-                    + '. Second booking ' + (attrs.SecondPost || ''));
-                loadContracts();
-                loadDesk();
-            });
-    }
-
-    function echoDesk()
-    {
-        deskCall('Echo', '', function(attrs)
-        {
-            if (!attrs) return;
-            $('#adj-status').text('Loop ' + (attrs.Stopped || 'stopped')
-                + (attrs.Detail ? ': ' + attrs.Detail : ''));
-        });
-    }
-
-    function refillDesk()
-    {
-        deskCall('Refill', '', function()
-        {
-            loadDesk();
+                $('#btn-adjust').prop('disabled', false);
+                showError('Network error: ' + textStatus);
+            }
         });
     }
 
@@ -508,7 +411,6 @@
     {
         loadParty();
         loadContracts();
-        loadDesk();
 
         $('#party-id').on('keydown', function(e)
         {
@@ -568,38 +470,26 @@
             </div>
         </div>
 
-        <div class="cn-card" id="adj-card">
-            <h3>Adjustment</h3>
+        <div class="cn-card" id="cn-card">
+            <h3>Adjust</h3>
             <p class="cn-hint">
                 Click Use on a holding below. That fills ContractId. Adjust adds
-                Delta on that same contract. The desk draws the price from your
-                credits. Undo reverses it and rebates the credits.
+                Delta on that same contract. No credits are charged.
             </p>
             <div class="cn-form-grid">
                 <div class="cn-row">
-                    <label for="adj-contract">ContractId</label>
-                    <input type="text" id="adj-contract" placeholder="Click Use on a row below"/>
+                    <label for="cn-contract">ContractId</label>
+                    <input type="text" id="cn-contract" placeholder="Click Use on a row below"/>
                 </div>
                 <div class="cn-row">
-                    <label for="adj-delta">Delta</label>
-                    <input type="text" id="adj-delta" value="500"/>
+                    <label for="cn-delta">Delta</label>
+                    <input type="text" id="cn-delta" value="500"/>
                 </div>
             </div>
             <div class="cn-btns">
-                <button type="button" id="btn-adjust" onclick="adjustHolding()">Adjust</button>
-                <button type="button" id="btn-undo" onclick="undoAdjust()">Undo</button>
-                <button type="button" onclick="applyTwice()">Apply twice</button>
-                <button type="button" onclick="echoDesk()">Echo</button>
-                <button type="button" onclick="refillDesk()">Refill</button>
+                <button type="button" id="btn-adjust" onclick="adjustFree()">Adjust</button>
             </div>
-            <div class="cn-status">
-                Credits <span id="adj-credits">…</span>
-                · price <span id="adj-cost">25</span>
-                · amount <span id="adj-amount">—</span>
-                · booking <span id="adj-net">0</span>
-                · last <span id="adj-last">0</span>
-            </div>
-            <div id="adj-status" class="cn-status"></div>
+            <div id="cn-status" class="cn-status"></div>
         </div>
 
         <div class="cn-card">

@@ -8,25 +8,24 @@ import com.canton.ledger.IouTemplates;
 import com.canton.ledger.TemplateDesc;
 import com.canton.ledger.TemplateDesc.ChoiceDesc;
 import com.canton.ledger.TemplateDesc.FieldDesc;
-import com.canton.objimpl.BookingImpl;
-import com.canton.objimpl.CantonIds;
 import com.domatar.db.HstDb;
 import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
-import com.domatar.util.Hst;
-import com.domatar.util.Obj;
 import com.domatar.install.AppInstall;
 import com.domatar.install.CatalogInstall;
 import com.domatar.install.ClsInstall;
+import com.domatar.install.HomeHostInstall;
 import com.domatar.install.SrvInstall;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
+import com.domatar.util.Hst;
 import com.domatar.util.Json;
 import com.domatar.util.JsonArrayList;
 import com.domatar.util.JsonHashMap;
 import com.domatar.util.JsonList;
 import com.domatar.util.Lnk;
+import com.domatar.util.Obj;
 import com.domatar.util.ObjAttrs;
 
 /**
@@ -39,7 +38,7 @@ public class CantonInstall implements AppInstall
       throws DomatarException
   {
     CatalogInstall.registerInCatalog(prvId, "canton");
-    ensureDesk(prvId);
+    retireDesk(prvId);
     refreshInstalledUsers();
   }
 
@@ -105,14 +104,7 @@ public class CantonInstall implements AppInstall
             msgPolicy("canton.app", "GetIou", "Read", "Owner"),
             msgPolicy("canton.app", "Transfer", "Destructive", "Controller"),
             msgPolicy("canton.app", "Settle", "Destructive", "Controller"),
-            msgPolicy("canton.app", "Quote", "Read", "Owner"),
-            msgPolicy("canton.app", "Credits", "Read", "Owner"),
-            msgPolicy("canton.app", "GetBooking", "Read", "Owner"),
-            msgPolicy("canton.app", "AdjustHolding", "Write", "Owner", null, Long.valueOf(CantonIds.COST)),
-            msgPolicy("canton.app", "Undo", "Write", "Owner"),
-            msgPolicy("canton.app", "ApplyTwice", "Write", "Owner"),
-            msgPolicy("canton.app", "Echo", "Read", "Owner"),
-            msgPolicy("canton.app", "Refill", "Write", "Owner")));
+            msgPolicy("canton.app", "Adjust", "Write", "Owner")));
 
     upsertPair(appCantonId, "party", "Bound Canton Party",
         partySrvJson(),
@@ -141,13 +133,7 @@ public class CantonInstall implements AppInstall
             msgPolicy("canton.contract", "GetContract", "Read", "Owner"),
             msgPolicy("canton.contract", "Exercise", "Write", "Owner")));
 
-    upsertPair(appCantonId, CantonIds.BOOKING, "Record of holding adjustments",
-        bookingSrvJson(),
-        clsJson(CantonIds.BOOKING, "canton.booking",
-            msgPolicy("canton.booking", "GetBooking", "Read", "Owner"),
-            msgPolicy("canton.booking", "Post", "Write", "Owner", "Unpost", null),
-            msgPolicy("canton.booking", "Unpost", "Write", "Owner")));
-    BookingImpl.ensure(actId);
+    retireBooking(actId);
   }
 
   private static void upsertPair(final DomId baseId, final String clsId,
@@ -174,28 +160,9 @@ public class CantonInstall implements AppInstall
     msgs.add(msg("Transfer", "Destructive",
         parms(parm("ContractId", "String"), parm("NewOwner", "String"))));
     msgs.add(msg("Settle", "Destructive", parms(parm("ContractId", "String"))));
-    msgs.add(described("Quote", "Read", parms(parm("ContractId", "String")),
-        "Read a holding amount and the desk list price. Does not draw credits."));
-    msgs.add(described("Credits", "Read", null,
-        "Credits you have prepaid with the Canton desk."));
-    msgs.add(described("GetBooking", "Read", null,
-        "NetDelta and LastDelta of your adjustment booking. A spreadsheet may cite these."));
-    msgs.add(described("AdjustHolding", "Write",
+    msgs.add(described("Adjust", "Write",
         parms(parm("ContractId", "String"), parm("Delta", "String")),
-        "Add Delta to a holding you can see. Same ContractId, so a spreadsheet citation of Amount stays valid. "
-            + "The Canton desk draws " + CantonIds.COST
-            + " credits. Undo reverses the adjustment and rebates those credits."));
-    msgs.add(described("Undo", "Write", null,
-        "Undo the last AdjustHolding. Restores the holding amount, reverses the booking, and rebates the credits."));
-    msgs.add(described("ApplyTwice", "Write",
-        parms(parm("ContractId", "String"), parm("Delta", "String")),
-        "Probe. Adjust the holding once and post the booking twice in this same operation. "
-            + "The second post is refused. Does not draw credits."));
-    msgs.add(described("Echo", "Read", null,
-        "Probe. Call the desk again from inside this call. The platform refuses the loop. "
-            + "Nothing is drawn and no holding changes."));
-    msgs.add(described("Refill", "Write", null,
-        "Workshop reset. Top prepaid credits with the desk back up to " + CantonIds.SEED + "."));
+        "Adds Delta on that ContractId. No fee."));
     root.put("Msgs", msgs);
     return Json.toJson(root);
   }
@@ -406,85 +373,57 @@ public class CantonInstall implements AppInstall
     return "String";
   }
 
-  private static String bookingSrvJson() throws DomatarException
+  /**
+   * Removes the priced desk when this provider owns host canton.
+   */
+  private static void retireDesk(final String prvId) throws DomatarException
   {
-    final JsonHashMap root = srvRoot(CantonIds.BOOKING);
-    final JsonList attrs = new JsonArrayList();
-    final JsonList msgs = new JsonArrayList();
-
-    attrs.add(attr("NetDelta", "String"));
-    attrs.add(attr("LastDelta", "String"));
-    msgs.add(msg("GetBooking", "Read", null));
-    msgs.add(msg("Post", "Write", parms(parm("Delta", "String"))));
-    msgs.add(msg("Unpost", "Write",
-        parms(parm("Delta", "String"), parm("OrigContextId", "String"))));
-    root.put("Attrs", attrs);
-    root.put("Msgs", msgs);
-    return Json.toJson(root);
-  }
-
-  private static void ensureDesk(final String prvId) throws DomatarException
-  {
-    final Hst home = HstDb.getHst(CantonIds.HOME);
+    final Hst home = HstDb.getHst("canton");
 
     if (home == null || prvId == null || !prvId.equals(home.prvId))
       return;
 
-    final DomId desk = CantonIds.desk();
+    final String actId = HomeHostInstall.actId("canton");
 
-    if (desk == null)
-    {
-      System.out.println("WARN: CantonInstall desk skipped — "
-          + "home user canton@canton not found");
+    if (actId == null || actId.isEmpty())
       return;
-    }
 
-    ObjDb.addObjIfMissing(desk, "canton", CantonIds.DESK,
-        "Desk", "Priced adjustments of visible holdings");
-    ClsInstall.ensureClssContainer(desk,
-        "Class descriptors for the Canton desk", "canton", 1);
-    SrvInstall.ensureSrvsContainer(desk,
-        "Service descriptors for the Canton desk", "canton", 2);
-    upsertPair(desk, CantonIds.DESK, "Priced adjustments of visible holdings",
-        deskSrvJson(),
-        clsJson(CantonIds.DESK, "canton.desk",
-            msgPolicy("canton.desk", "Quote", "Read", "Verified"),
-            msgPolicy("canton.desk", "Credits", "Read", "Verified"),
-            msgPolicy("canton.desk", "AdjustHolding", "Write", "Verified",
-                "ReverseAdjust", Long.valueOf(CantonIds.COST)),
-            msgPolicy("canton.desk", "ReverseAdjust", "Write", "Verified"),
-            msgPolicy("canton.desk", "ApplyTwice", "Write", "Verified"),
-            msgPolicy("canton.desk", "Echo", "Read", "Verified"),
-            msgPolicy("canton.desk", "Refill", "Write", "Verified")));
+    final DomId desk = new DomId("canton", "canton", actId, "desk");
+
+    LnkDb.deleteLnks(desk, null, null, null, null, null);
+    ObjDb.deleteObj(desk);
+    retireDescribed(desk, "desk");
   }
 
-  private static String deskSrvJson() throws DomatarException
+  private static void retireBooking(final String actId) throws DomatarException
   {
-    final JsonHashMap root = srvRoot(CantonIds.DESK);
-    final JsonList msgs = new JsonArrayList();
-    final JsonHashMap adjust = described("AdjustHolding", "Write",
-        parms(parm("ContractId", "String"), parm("Delta", "String")),
-        "Add Delta to a visible holding and post the caller's booking. Draws "
-            + CantonIds.COST + " credits unless the desk owner calls it.");
+    if (actId == null || actId.isEmpty())
+      return;
 
-    final JsonHashMap cost = new JsonHashMap();
+    final String hstId = DomId.subHstId("canton", actId);
+    final DomId app = new DomId(hstId, "canton", actId, "app-canton");
+    final DomId booking = new DomId(hstId, "canton", actId, "booking");
 
-    cost.put("Amount", Long.valueOf(CantonIds.COST));
-    cost.put("Unit", "credit");
-    adjust.put("Cost", cost);
-    adjust.put("Compensates", "ReverseAdjust");
-    msgs.add(described("Quote", "Read", parms(parm("ContractId", "String")),
-        "Read a holding amount and the list price."));
-    msgs.add(described("Credits", "Read", null, "Prepaid credits with this desk."));
-    msgs.add(adjust);
-    msgs.add(described("ReverseAdjust", "Write", null,
-        "Opposite adjustment. Idempotent on OrigContextId. Not itself reversible."));
-    msgs.add(msg("ApplyTwice", "Write",
-        parms(parm("ContractId", "String"), parm("Delta", "String"))));
-    msgs.add(msg("Echo", "Read", null));
-    msgs.add(msg("Refill", "Write", null));
-    root.put("Msgs", msgs);
-    return Json.toJson(root);
+    LnkDb.deleteLnks(app, booking, "navigator", "container", null, null);
+    LnkDb.deleteLnks(booking, null, null, null, null, null);
+    ObjDb.deleteObj(booking);
+    retireDescribed(booking, "booking");
+  }
+
+  private static void retireDescribed(final DomId host, final String clsId)
+      throws DomatarException
+  {
+    final DomId cls = new DomId(host.hstId, host.appId, host.actId, clsId + "Cls");
+    final DomId srv = new DomId(host.hstId, host.appId, host.actId, clsId + "Srv");
+    final DomId clss = new DomId(host.hstId, host.appId, host.actId, "clss");
+    final DomId srvs = new DomId(host.hstId, host.appId, host.actId, "srvs");
+
+    LnkDb.deleteLnks(clss, cls, null, null, null, null);
+    LnkDb.deleteLnks(srvs, srv, null, null, null, null);
+    LnkDb.deleteLnks(cls, null, null, null, null, null);
+    LnkDb.deleteLnks(srv, null, null, null, null, null);
+    ObjDb.deleteObj(cls);
+    ObjDb.deleteObj(srv);
   }
 
   private static void refreshInstalledUsers() throws DomatarException
@@ -508,22 +447,8 @@ public class CantonInstall implements AppInstall
               msgPolicy("canton.app", "GetIou", "Read", "Owner"),
               msgPolicy("canton.app", "Transfer", "Destructive", "Controller"),
               msgPolicy("canton.app", "Settle", "Destructive", "Controller"),
-              msgPolicy("canton.app", "Quote", "Read", "Owner"),
-              msgPolicy("canton.app", "Credits", "Read", "Owner"),
-              msgPolicy("canton.app", "GetBooking", "Read", "Owner"),
-              msgPolicy("canton.app", "AdjustHolding", "Write", "Owner",
-                  null, Long.valueOf(CantonIds.COST)),
-              msgPolicy("canton.app", "Undo", "Write", "Owner"),
-              msgPolicy("canton.app", "ApplyTwice", "Write", "Owner"),
-              msgPolicy("canton.app", "Echo", "Read", "Owner"),
-              msgPolicy("canton.app", "Refill", "Write", "Owner")));
-      upsertPair(app, CantonIds.BOOKING, "Record of holding adjustments",
-          bookingSrvJson(),
-          clsJson(CantonIds.BOOKING, "canton.booking",
-              msgPolicy("canton.booking", "GetBooking", "Read", "Owner"),
-              msgPolicy("canton.booking", "Post", "Write", "Owner", "Unpost", null),
-              msgPolicy("canton.booking", "Unpost", "Write", "Owner")));
-      BookingImpl.ensure(cls.domId.actId);
+              msgPolicy("canton.app", "Adjust", "Write", "Owner")));
+      retireBooking(cls.domId.actId);
     }
   }
 

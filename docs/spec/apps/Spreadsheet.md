@@ -587,7 +587,8 @@ Operations:
   Syntax:
     [quippin-micha@quippin.quippin.micha@quippin.quip-0NX6oBrH]text
     [canton-<actId>.canton.<actId>.<cid>]Allocations[2].Name
-    [canton-<actId>.canton.<actId>.booking]NetDelta
+    [hecto-<actId>.hecto.<actId>.booking]NetDelta
+    [hecto-<actId>.hecto.<actId>.booking]LastDelta
 
   The suffix after ']' is a path. The first attrName is the Attr key
   (same first-letter-capitalisation as before: text → Text). Each

@@ -2,7 +2,7 @@
  * Copyright (c) 2024 Domatar
  */
 
-package com.canton.webui;
+package com.hecto.webui;
 
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,11 +17,11 @@ import com.domatar.util.JsonMsg;
 import com.domatar.util.ObjAttrs;
 
 /**
- * Routes desk probes through this user's Canton facade, so undo is
- * sent by the same object that forwarded the adjustment.
+ * Routes subscriptions through this user's Hecto facade, so undo is
+ * sent by the same object that forwarded Subscribe.
  */
-@WebServlet("/AdjustWui/*")
-public class AdjustWui extends DomatarServlet
+@WebServlet("/SubscribeWui/*")
+public class SubscribeWui extends DomatarServlet
 {
   private static final long serialVersionUID = 1L;
 
@@ -42,7 +42,7 @@ public class AdjustWui extends DomatarServlet
     }
 
     if (!"Quote".equals(opr) && !"Credits".equals(opr) && !"GetBooking".equals(opr)
-        && !"AdjustHolding".equals(opr) && !"Undo".equals(opr)
+        && !"Subscribe".equals(opr) && !"Undo".equals(opr)
         && !"ApplyTwice".equals(opr) && !"Echo".equals(opr) && !"Refill".equals(opr))
     {
       msg.addError(opr, "Unknown action");
@@ -50,14 +50,16 @@ public class AdjustWui extends DomatarServlet
     }
 
     final String actId = srcAct.actId;
-    final DomId app = new DomId(DomId.subHstId("canton", actId),
-        "canton", actId, "app-canton");
+    final DomId app = new DomId(DomId.subHstId("hecto", actId),
+        "hecto", actId, "app-hecto");
     final ObjAttrs attrs = new ObjAttrs();
 
-    put(attrs, "ContractId", getParam(req, "ContractId"));
-    put(attrs, "Delta", getParam(req, "Delta"));
+    if ("Subscribe".equals(opr) || "ApplyTwice".equals(opr) || "Quote".equals(opr))
+      put(attrs, "ContractId", getParam(req, "ContractId"));
+    if ("Subscribe".equals(opr) || "ApplyTwice".equals(opr))
+      put(attrs, "Delta", getParam(req, "Delta"));
     msg.addRequestHead(srcDomId, app, context);
-    msg.addClsId("canton", "app");
+    msg.addClsId("hecto", "app");
     msg.addRequestBody(opr, attrs);
     return msg;
   }
