@@ -45,7 +45,7 @@ services:
       DOMATAR_HSTID: prv1
       DOMATAR_PRVID: prv1
       DOMATAR_DOMAIN: tomcat:8080
-      DOMATAR_OFFERED_HOSTS: quippin,login,navigator,desktop,aiagent,bookstore,spreadsheet,money,appstore,search,chat,mail,canton,hecto
+      DOMATAR_OFFERED_HOSTS: quippin,login,navigator,desktop,aiagent,bookstore,spreadsheet,money,appstore,search,chat,mail,canton,hecto,travel
       DOMATAR_DIRECTORY: tomcat:8080
       # DEV-ONLY default — change immediately after first /Setup.
       DOMATAR_ADMIN_PASSWORD: ${DOMATAR_ADMIN_PASSWORD:-admin}
@@ -56,6 +56,8 @@ services:
       AIAGENT_API_URL: https://api.groq.com/openai/v1/chat/completions
       AIAGENT_MODEL: llama-3.3-70b-versatile
       AIAGENT_API_KEY: ${AIAGENT_API_KEY:-}
+      TRAVEL_DUFFEL_TOKEN: ${TRAVEL_DUFFEL_TOKEN:-}
+      TRAVEL_GEOAPIFY_KEY: ${TRAVEL_GEOAPIFY_KEY:-}
     entrypoint: ["catalina.sh", "run"]
     networks:
       default:

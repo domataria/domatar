@@ -1,0 +1,7 @@
+AppId=travel
+AppName=Travel
+AppDesc=Flights, hotels, and a trip itinerary
+Version=1.0
+LaunchPage=travel.html
+# The desktop tile opens the travel page.
+ProviderHosts=

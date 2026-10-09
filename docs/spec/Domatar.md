@@ -993,7 +993,7 @@ An application is a JAR (PART 11) that ships:
     PNGs. Reachable as `/domatar/<appId>/<file>` via a per-app
     AppAssetServlet.
 
-The reference distribution today contains nine applications plus
+The reference distribution today contains ten applications plus
 the platform app:
 
   Application    appId         Role
@@ -1035,6 +1035,12 @@ the platform app:
   AI Agent       aiagent       LLM-backed conversations.
                                Conversations, Conv, Msg classes;
                                Groq adapter today. [AI Agent](apps/AIAgent.md).
+  Travel         travel        Flights, hotels, and a booked trip.
+                               SearchFlights, SearchHotels,
+                               SearchSights, BookTrip, GetTrips,
+                               GetTrip. Duffel test orders and
+                               Geoapify places.
+                               [Travel](apps/Travel.md).
 
 The platform does not encode any knowledge of these specific apps in
 its code (with the exception of provider bootstrap, see PART 10).
@@ -1373,6 +1379,18 @@ The reader is `com.domatar.core.DomatarConfig`.
                              apps read them via their own config
                              plumbing.
 
+  TRAVEL_DUFFEL_TOKEN        Per [Travel](apps/Travel.md); an
+                             example of an app-scoped env var. The
+                             platform passes such values through;
+                             apps read them via their own config
+                             plumbing.
+
+  TRAVEL_GEOAPIFY_KEY        Per [Travel](apps/Travel.md); an
+                             example of an app-scoped env var. The
+                             platform passes such values through;
+                             apps read them via their own config
+                             plumbing.
+
   PLATFORM_CONTEXT_PATH      Constant ("/domatar"). Used by
                              HttpClient.sendHttp to build remote
                              /Msg URLs. Not currently overridable;
@@ -1540,7 +1558,7 @@ six hosts it represents in the directory:
 
 tomcat2 likewise wears home-host aliases for the apps
 whose home hosts live on prv2 in the reference simulation
-(bookstore, spreadsheet, money, appstore).
+(bookstore, spreadsheet, money, appstore, travel).
 
 Services:
 

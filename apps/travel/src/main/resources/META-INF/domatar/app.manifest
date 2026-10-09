@@ -1,0 +1,9 @@
+AppId: travel
+Version: 1.0
+InstallClass: com.travel.install.TravelInstall
+AssetDirectory: travel/assets
+Handler: travel, app,   com.travel.objimpl.TravelAppImpl
+Handler: travel, trips, com.travel.objimpl.TravelTripsImpl
+Handler: travel, trip,  com.travel.objimpl.TravelTripImpl
+Handler: travel, cache, com.travel.objimpl.TravelCacheImpl
+Wui:     TravelWui,     com.travel.webui.TravelWui

@@ -31,6 +31,17 @@ the vocabulary.
 - [Navigator](spec/apps/Navigator.md) — the object-graph browser
 - [App Store](spec/apps/AppStore.md) — discovery / install UI (marketplace detail below)
 
+## Apps
+
+- [Quippin](spec/apps/Quippin.md) — the social application family
+- [Bookstore](spec/apps/Bookstore.md) — a marketplace + library app
+- [Spreadsheet](spec/apps/Spreadsheet.md) — cells and formulas
+- [Money](spec/apps/Money.md) — accounts, profile, bank
+- [AI Agent](spec/apps/AIAgent.md) — LLM-backed conversations
+- [Travel](spec/apps/Travel.md) — flights, hotels, and a booked trip
+- [Canton](spec/apps/Canton.md) — a local face onto the Canton ledger
+- [Hecto](spec/apps/Hecto.md) — fund subscriptions on Canton
+
 ## Write or change an app
 
 - [Writing Apps](spec/apps/Writing-Apps.md) — how to write a Domatar app

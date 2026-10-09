@@ -1,0 +1,486 @@
+<!--
+  ~ Copyright (c) 2024 Domatar
+  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Travel</title>
+  <link rel="stylesheet" href="../domatar.css"/>
+  <style>
+    h1 { margin-bottom: 4px; }
+    .hint { color: var(--page-muted); font-size: 0.9em; margin-top: 0; }
+    section { border: 1px solid var(--border); border-radius: var(--radius);
+              padding: 14px 16px; margin: 16px 0; max-width: 980px; }
+    section h2 { margin: 0 0 10px; font-size: 1.05em; }
+    label { display: inline-block; margin: 0 10px 8px 0; font-size: 0.9em; }
+    label input { display: block; margin-top: 3px; padding: 4px 6px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { text-align: left; padding: 5px 8px; vertical-align: top; }
+    th { font-size: 0.82em; color: var(--page-muted); border-bottom: 1px solid var(--border); }
+    tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover td { background: var(--surface, #f4f4f5); }
+    tbody tr.selected td,
+    tbody tr.selected:hover td {
+      background: #1e3a5f !important;
+      color: #ffffff !important;
+    }
+    .status { min-height: 1.2em; font-weight: 600; }
+    .busy { font-weight: 600; }
+    .error { color: #b91c1c; }
+    .empty { color: var(--page-muted); font-style: italic; }
+    button { margin-right: 8px; }
+    #trip dl { display: grid; grid-template-columns: 11em 1fr; gap: 4px 12px; }
+    #trip dt { color: var(--page-muted); }
+    #trip dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <h1>Travel</h1>
+  <p class="hint">Click a result to add it to the travel plan. Hotel and sight names come from the latest search.</p>
+  <p id="status" class="status"></p>
+
+  <section>
+    <h2>Travel Plan</h2>
+    <form id="book-form">
+      <label>Title <input name="Title" id="Title"/></label>
+      <label>Flight <input name="FlightName" id="FlightName"/></label>
+      <label>Hotel <input name="HotelName" id="HotelName"/></label>
+      <label>Day 1 <input name="Day1" id="Day1"/></label>
+      <label>Day 2 <input name="Day2" id="Day2"/></label>
+      <label>Day 3 <input name="Day3" id="Day3"/></label>
+      <button type="submit">Book trip</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Flights</h2>
+    <form id="flight-form">
+      <label>Origin <input name="Origin" value="London"/></label>
+      <label>Destination <input name="Destination" value="New York"/></label>
+      <label>Depart <input name="Depart" value="2026-12-01"/></label>
+      <label>Return <input name="Return" value="2026-12-04"/></label>
+      <button type="submit">Search flights</button>
+      <span id="flight-busy" class="busy"></span>
+    </form>
+    <div id="flights"></div>
+  </section>
+
+  <section>
+    <h2>Hotels</h2>
+    <form id="hotel-form">
+      <label>City <input name="City" value="Paris"/></label>
+      <label>Check-in <input name="CheckIn" value="2026-12-01"/></label>
+      <label>Nights <input name="Nights" value="3"/></label>
+      <button type="submit">Search hotels</button>
+      <button type="button" id="hotel-next" hidden>Next</button>
+      <span id="hotel-busy" class="busy"></span>
+    </form>
+    <p id="hotel-page" class="hint"></p>
+    <div id="hotels"></div>
+  </section>
+
+  <section>
+    <h2>Sights</h2>
+    <form id="sight-form">
+      <label>City <input name="City" value="Paris"/></label>
+      <button type="submit">Search sights</button>
+      <button type="button" id="sight-next" hidden>Next</button>
+      <span id="sight-busy" class="busy"></span>
+    </form>
+    <p id="sight-page" class="hint"></p>
+    <div id="sights"></div>
+  </section>
+
+  <section>
+    <h2>Trips</h2>
+    <div id="trips"></div>
+    <div id="trip"></div>
+  </section>
+
+<script>
+  var WUI = "/domatar/travel/Wui/TravelWui";
+  var hotelPage = 1;
+  var sightPage = 1;
+  var sightSlot = 0;
+
+  var TRIP_FIELDS = [
+    "Title", "Origin", "Destination", "Depart", "Return",
+    "FlightName", "Airline", "FlightPrice", "FlightCurrency",
+    "DuffelOrderId", "BookingReference",
+    "HotelName", "HotelStreet", "CheckIn", "Nights", "NightlyPrice",
+    "HotelTotal", "HotelCurrency", "Day1", "Day2", "Day3", "BookedAt"
+  ];
+
+  function esc(value)
+  {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function setStatus(text, isError)
+  {
+    var el = document.getElementById("status");
+    el.textContent = text || "";
+    el.className = isError ? "status error" : "status";
+  }
+
+  function setSearching(id, on)
+  {
+    document.getElementById(id).textContent = on ? "Searching..." : "";
+  }
+
+  function formFields(form)
+  {
+    var data = {};
+    var elements = form.elements;
+    for (var i = 0; i < elements.length; i++)
+    {
+      if (elements[i].name)
+        data[elements[i].name] = elements[i].value;
+    }
+    return data;
+  }
+
+  function post(fields)
+  {
+    var body = new URLSearchParams();
+    Object.keys(fields).forEach(function(key)
+    {
+      if (fields[key] != null && fields[key] !== "")
+        body.set(key, fields[key]);
+    });
+    return fetch(WUI, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    }).then(function(res)
+    {
+      return res.text();
+    }).then(function(text)
+    {
+      return JSON.parse(text);
+    });
+  }
+
+  function failed(ret)
+  {
+    return !ret || ret.Error === "Failure";
+  }
+
+  function renderRows(targetId, rows, columns, onName)
+  {
+    var target = document.getElementById(targetId);
+    if (!rows || !rows.length)
+    {
+      target.innerHTML = "<p class=\"empty\">No results.</p>";
+      return;
+    }
+    var html = "<table><thead><tr>";
+    for (var c = 0; c < columns.length; c++)
+      html += "<th>" + esc(columns[c]) + "</th>";
+    html += "</tr></thead><tbody>";
+    for (var r = 0; r < rows.length; r++)
+    {
+      html += "<tr data-name=\"" + esc(rows[r].Name) + "\">";
+      for (var k = 0; k < columns.length; k++)
+        html += "<td>" + esc(rows[r][columns[k]]) + "</td>";
+      html += "</tr>";
+    }
+    html += "</tbody></table>";
+    target.innerHTML = html;
+    var body = target.querySelector("tbody");
+    if (!body)
+      return;
+    var found = body.querySelectorAll("tr");
+    for (var i = 0; i < found.length; i++)
+    {
+      found[i].addEventListener("click", function()
+      {
+        onName(this.getAttribute("data-name"));
+        refreshSelection();
+      });
+    }
+    refreshSelection();
+  }
+
+  function namesOf(raw)
+  {
+    var parts = String(raw || "").split(",");
+    var names = [];
+    for (var i = 0; i < parts.length; i++)
+    {
+      var name = parts[i].replace(/^\s+|\s+$/g, "");
+      if (name)
+        names.push(name);
+    }
+    return names;
+  }
+
+  function markSelected(targetId, names)
+  {
+    var rows = document.getElementById(targetId).querySelectorAll("tbody tr");
+    for (var i = 0; i < rows.length; i++)
+    {
+      var name = rows[i].getAttribute("data-name");
+      var on = false;
+      for (var n = 0; n < names.length; n++)
+      {
+        if (names[n] === name)
+          on = true;
+      }
+      if (on)
+        rows[i].classList.add("selected");
+      else
+        rows[i].classList.remove("selected");
+    }
+  }
+
+  function refreshSelection()
+  {
+    markSelected("flights", namesOf(document.getElementById("FlightName").value));
+    markSelected("hotels", namesOf(document.getElementById("HotelName").value));
+    markSelected("sights", namesOf(document.getElementById("Day1").value)
+      .concat(namesOf(document.getElementById("Day2").value))
+      .concat(namesOf(document.getElementById("Day3").value)));
+  }
+
+  function showPage(labelId, buttonId, page, total)
+  {
+    document.getElementById(labelId).textContent =
+      total == null ? "" : ("Page " + page + ", " + total + " total");
+    document.getElementById(buttonId).hidden = !(total > page * 12);
+  }
+
+  function searchFlights(event)
+  {
+    if (event)
+      event.preventDefault();
+    var fields = formFields(document.getElementById("flight-form"));
+    fields.Action = "SearchFlights";
+    setSearching("flight-busy", true);
+    document.getElementById("flights").innerHTML = "";
+    post(fields).then(function(ret)
+    {
+      setSearching("flight-busy", false);
+      if (failed(ret))
+      {
+        setStatus(ret && ret.ErrorMsg ? ret.ErrorMsg : "Flight search failed", true);
+        return;
+      }
+      setStatus("");
+      renderRows("flights", ret.Attrs.Offers,
+        ["Name", "Airline", "Origin", "Destination", "DepartAt", "ArriveAt", "Price", "Currency", "Cabin"],
+        function(name) { document.getElementById("FlightName").value = name; });
+    }).catch(function()
+    {
+      setSearching("flight-busy", false);
+      setStatus("Flight search failed", true);
+    });
+  }
+
+  function searchHotels(event)
+  {
+    if (event)
+      event.preventDefault();
+    hotelPage = 1;
+    runHotels();
+  }
+
+  function nextHotels()
+  {
+    hotelPage += 1;
+    runHotels();
+  }
+
+  function runHotels()
+  {
+    var fields = formFields(document.getElementById("hotel-form"));
+    fields.Action = "SearchHotels";
+    fields.Page = String(hotelPage);
+    setSearching("hotel-busy", true);
+    document.getElementById("hotels").innerHTML = "";
+    document.getElementById("hotel-page").textContent = "";
+    post(fields).then(function(ret)
+    {
+      setSearching("hotel-busy", false);
+      if (failed(ret))
+      {
+        setStatus(ret && ret.ErrorMsg ? ret.ErrorMsg : "Hotel search failed", true);
+        showPage("hotel-page", "hotel-next", hotelPage, 0);
+        return;
+      }
+      setStatus("");
+      var total = ret.Attrs.Total;
+      showPage("hotel-page", "hotel-next", ret.Attrs.Page || hotelPage, total);
+      renderRows("hotels", ret.Attrs.Hotels,
+        ["Name", "Street", "City", "NightlyPrice", "Currency", "Nights", "TotalPrice"],
+        function(name) { document.getElementById("HotelName").value = name; });
+    }).catch(function()
+    {
+      setSearching("hotel-busy", false);
+      setStatus("Hotel search failed", true);
+    });
+  }
+
+  function searchSights(event)
+  {
+    if (event)
+      event.preventDefault();
+    sightPage = 1;
+    sightSlot = 0;
+    runSights();
+  }
+
+  function nextSights()
+  {
+    sightPage += 1;
+    runSights();
+  }
+
+  function runSights()
+  {
+    var fields = formFields(document.getElementById("sight-form"));
+    fields.Action = "SearchSights";
+    fields.Page = String(sightPage);
+    setSearching("sight-busy", true);
+    document.getElementById("sights").innerHTML = "";
+    document.getElementById("sight-page").textContent = "";
+    post(fields).then(function(ret)
+    {
+      setSearching("sight-busy", false);
+      if (failed(ret))
+      {
+        setStatus(ret && ret.ErrorMsg ? ret.ErrorMsg : "Sight search failed", true);
+        showPage("sight-page", "sight-next", sightPage, 0);
+        return;
+      }
+      setStatus("");
+      showPage("sight-page", "sight-next", ret.Attrs.Page || sightPage, ret.Attrs.Total);
+      renderRows("sights", ret.Attrs.Sights,
+        ["Name", "Street", "City", "Category"],
+        function(name)
+        {
+          var day = "Day" + ((sightSlot % 3) + 1);
+          document.getElementById(day).value = name;
+          sightSlot += 1;
+        });
+    }).catch(function()
+    {
+      setSearching("sight-busy", false);
+      setStatus("Sight search failed", true);
+    });
+  }
+
+  function bookTrip(event)
+  {
+    if (event)
+      event.preventDefault();
+    var fields = formFields(document.getElementById("book-form"));
+    fields.Action = "BookTrip";
+    setStatus("Booking\u2026");
+    post(fields).then(function(ret)
+    {
+      if (failed(ret))
+      {
+        setStatus(ret && ret.ErrorMsg ? ret.ErrorMsg : "Book failed", true);
+        return;
+      }
+      setStatus("Booked " + (ret.Attrs.Title || ""));
+      loadTrips();
+      showTrip(ret.Attrs);
+    }).catch(function()
+    {
+      setStatus("Book failed", true);
+    });
+  }
+
+  function loadTrips()
+  {
+    post({ Action: "GetTrips" }).then(function(ret)
+    {
+      var target = document.getElementById("trips");
+      if (failed(ret))
+      {
+        target.innerHTML = "<p class=\"error\">" + esc(ret && ret.ErrorMsg) + "</p>";
+        return;
+      }
+      var trips = (ret.Attrs && ret.Attrs.Trips) ? ret.Attrs.Trips : [];
+      if (!trips.length)
+      {
+        target.innerHTML = "<p class=\"empty\">No trips yet.</p>";
+        return;
+      }
+      var html = "<ul>";
+      for (var i = 0; i < trips.length; i++)
+      {
+        html += "<li><button type=\"button\" data-title=\"" + esc(trips[i].Title) + "\">"
+          + esc(trips[i].Title) + "</button> "
+          + esc(trips[i].Destination) + " \u00b7 " + esc(trips[i].HotelName) + "</li>";
+      }
+      html += "</ul>";
+      target.innerHTML = html;
+      var buttons = target.querySelectorAll("button");
+      for (var b = 0; b < buttons.length; b++)
+      {
+        buttons[b].addEventListener("click", function()
+        {
+          openTrip(this.getAttribute("data-title"));
+        });
+      }
+    }).catch(function()
+    {
+      document.getElementById("trips").innerHTML = "<p class=\"error\">Could not load trips.</p>";
+    });
+  }
+
+  function openTrip(title)
+  {
+    setStatus("Opening trip\u2026");
+    post({ Action: "GetTrip", Title: title }).then(function(ret)
+    {
+      if (failed(ret))
+      {
+        setStatus(ret && ret.ErrorMsg ? ret.ErrorMsg : "Could not open trip", true);
+        return;
+      }
+      setStatus("");
+      showTrip(ret.Attrs);
+    }).catch(function()
+    {
+      setStatus("Could not open trip", true);
+    });
+  }
+
+  function showTrip(attrs)
+  {
+    var html = "<dl>";
+    for (var i = 0; i < TRIP_FIELDS.length; i++)
+    {
+      var key = TRIP_FIELDS[i];
+      html += "<dt>" + esc(key) + "</dt><dd>" + esc(attrs ? attrs[key] : "") + "</dd>";
+    }
+    html += "</dl>";
+    document.getElementById("trip").innerHTML = html;
+  }
+
+  document.getElementById("flight-form").addEventListener("submit", searchFlights);
+  document.getElementById("hotel-form").addEventListener("submit", searchHotels);
+  document.getElementById("sight-form").addEventListener("submit", searchSights);
+  document.getElementById("book-form").addEventListener("submit", bookTrip);
+  document.getElementById("hotel-next").addEventListener("click", nextHotels);
+  document.getElementById("sight-next").addEventListener("click", nextSights);
+  ["FlightName", "HotelName", "Day1", "Day2", "Day3"].forEach(function(id)
+  {
+    document.getElementById(id).addEventListener("input", refreshSelection);
+  });
+  loadTrips();
+</script>
+</body>
+</html>

@@ -234,6 +234,42 @@ Notes:
   Useful for answering "what are my login names / handles?".
   Low priority for initial implementation — rarely useful in agent queries.
 
+# TRAVEL (travel)
+
+Status: [DONE]
+
+Description:
+  Travel app entry point. Search flights, hotels, and sights, then
+  book one trip. Call the searches first. BookTrip only accepts Names
+  returned by those searches. Do not invent flight numbers, hotel
+  names, or sight names.
+
+Msgs:
+  SearchFlights(Origin,Destination,Depart,Return) -> {Total, Offers:[{Name,Airline,Origin,Destination,DepartAt,ArriveAt,Price,Currency,Cabin}]};
+  SearchHotels(City,CheckIn,Nights,Page) -> {Total, Page, Hotels:[{Name,Street,City,NightlyPrice,Currency,Nights,TotalPrice}]};
+  SearchSights(City,Page) -> {Total, Page, Sights:[{Name,Street,City,Category}]};
+  BookTrip(Title,FlightName,HotelName,Day1,Day2,Day3) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt};
+  GetTrips() -> {Trips:[{Title,Destination,Depart,Return,HotelName}]};
+  GetTrip(Title) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt}
+
+SideEffect:
+  SearchFlights:Read, SearchHotels:Read, SearchSights:Read, BookTrip:Write,
+  GetTrips:Read, GetTrip:Read
+
+Notes:
+  Hotel NightlyPrice and TotalPrice are displayed EUR amounts computed
+  by the app (95 through 480). They are not Duffel Stays rates, and
+  they are not charged. Flight Price and Currency are the Duffel offer
+  total. A flight city other than Paris, London, and New York is
+  resolved with Duffel place suggestions to an airport code,
+  preferring the city's own airport code.
+  SearchFlights returns at most 8 offers. SearchHotels and
+  SearchSights return at most 12 rows; Page defaults to 1.
+  BookTrip is the only Write. It accepts Names from the searches above
+  and refuses a second trip with the same Title.
+  Implementation: TravelAppImpl handling (travel, app) on app-travel.
+  See docs/spec/apps/Travel.md.
+
 # IMPLEMENTATION PRIORITY
 
 Implement in this order (highest user value first):

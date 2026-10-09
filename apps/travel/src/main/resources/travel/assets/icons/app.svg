@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"
+     width="64" height="64" role="img" aria-label="Travel">
+  <defs>
+    <radialGradient id="ocean" cx="36%" cy="30%" r="72%">
+      <stop offset="0%" stop-color="#4ea4dc"/>
+      <stop offset="55%" stop-color="#1d6eae"/>
+      <stop offset="100%" stop-color="#0e4a7a"/>
+    </radialGradient>
+    <clipPath id="disc">
+      <circle cx="32" cy="32" r="20"/>
+    </clipPath>
+  </defs>
+  <!-- Upright globe, then tilted so the axis is 23.5° from vertical.
+       The axle is drawn through the center, and the sphere is translucent
+       so the line stays visible inside, the way the equator does. -->
+  <g transform="rotate(23.5 32 32)">
+    <line x1="32" y1="3.5" x2="32" y2="60.5" stroke="#16324d" stroke-width="1.6" stroke-linecap="round"/>
+    <circle cx="32" cy="3.5" r="1.7" fill="#16324d"/>
+    <circle cx="32" cy="60.5" r="1.7" fill="#16324d"/>
+    <g clip-path="url(#disc)">
+      <circle cx="32" cy="32" r="20" fill="url(#ocean)" fill-opacity="0.58"/>
+      <g fill="none" stroke="#d7eefb" stroke-linecap="round">
+        <ellipse cx="32" cy="32" rx="20" ry="6.2" stroke-width="0.95"/>
+        <ellipse cx="32" cy="32" rx="6.4" ry="20" stroke-width="0.8"/>
+        <ellipse cx="32" cy="32" rx="14" ry="20" stroke-width="0.55" opacity="0.75"/>
+      </g>
+      <g fill="#3eae62" fill-opacity="0.5">
+        <!-- Greenland -->
+        <path d="M25.5 13.2l3.6.4 1.2 2.2-2.8 1.4-2.8-.6z"/>
+        <!-- North America -->
+        <path d="M16.4 19.2l3.2-3.4 5.2.4 3.2 2.6 1.4 4.2 1.6 3.6-1.2 3.4-2.6 2.2-2.4-.8-1.6-2.6-3.6-.4-3.2-1.6-2.2-3.2z"/>
+        <!-- Central America -->
+        <path d="M24.2 34.2l2.6.6.8 2.4-1.2 2.2-1.6 1.2-.8-1.6.4-2.2-1.2-1.6z"/>
+        <!-- South America -->
+        <path d="M24.8 38.6l3.2 1.2 1.6 3.4.4 4.2-1.6 3.6-2.4 1.2-1.8-2.6-.2-4.2.6-3.6-.8-2.2z"/>
+        <!-- Europe -->
+        <path d="M34.6 18.6l3.2-1.2 3.4.8 1.2 2.2-2.6 1.6-3.4-.2-2.2-1.6z"/>
+        <!-- Africa -->
+        <path d="M35.4 24.8l4.2-1.4 4.2 1.6 1.8 3.6.6 4.4-1.2 4.2-2.6 3.2-3.2.6-2.2-3.2-.6-4.6.4-4.2 1.2-3.2z"/>
+        <!-- Asia, clipped by the limb -->
+        <path d="M43.6 17.4l5.2-.6 3.4 2.6 1.2 3.4-2.2 2.4-4.2.4-3.2-2.2-1.4-3.2z"/>
+        <!-- Australia -->
+        <path d="M46.6 37.8l4.2-.2 2.2 2.2-.4 2.4-3.2 1.2-2.6-1.4-.8-2.2z"/>
+        <!-- Antarctica -->
+        <path d="M15 47.4c4.4-2.4 10.6-3.6 17-3.6s12.6 1.2 17 3.6c-3.8 2.2-10.2 3.4-17 3.4s-13.2-1.2-17-3.4z"/>
+      </g>
+    </g>
+  </g>
+</svg>

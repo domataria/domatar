@@ -87,6 +87,11 @@
         </dependency>
         <dependency>
             <groupId>com.domatar</groupId>
+            <artifactId>travel</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.domatar</groupId>
             <artifactId>search</artifactId>
             <scope>provided</scope>
         </dependency>
@@ -149,7 +154,7 @@
                         <configuration>
                             <includeArtifactIds>
                                 navigator,login,desktop,appstore,quippin,
-                                bookstore,spreadsheet,money,canton,hecto,search,chat,mail,
+                                bookstore,spreadsheet,money,canton,hecto,travel,search,chat,mail,
                                 aiagent,domatar-app
                             </includeArtifactIds>
                             <outputDirectory>${project.build.directory}/domatar/WEB-INF/apps</outputDirectory>
