@@ -9,3 +9,5 @@
 **/*.doc # ignore all doc files
 *.xls # ignore all xls files
 **/*.xls # ignore all xls files
+# Maven build output
+target/
