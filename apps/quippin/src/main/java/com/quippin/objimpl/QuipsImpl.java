@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import java.util.List;
@@ -19,6 +23,12 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, quips)} on {@code quippin-<actId>}.
+ *
+ * <p>Ops: GetQuips, AddQuip, BanUser. Verified callers only. GetQuips
+ * returns at most 50 objects whose id starts with {@code quip}.
+ */
 public class QuipsImpl extends ObjImpl
 {
   @Override

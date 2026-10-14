@@ -4,6 +4,14 @@
 
 package com.domatar.util;
 
+/**
+ * In-memory account: permanent {@code actId}, mutable {@code usrId}
+ * ({@code localname@appId}), display name, session token, and the
+ * fingerprint version that minted the actId (default 1).
+ *
+ * <p>{@link #getLocalPrvAct} reads UsrId and UsrName through the
+ * act-cache on the user's home host. The returned token is null.
+ */
 public class Act
 {
   public final String actId;

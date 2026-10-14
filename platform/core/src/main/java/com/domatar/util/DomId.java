@@ -1,7 +1,24 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import com.domatar.db.HstDb;
 
+/**
+ * Dotted object address {@code hstId.appId.actId.objId}. The dot is the
+ * field separator, so it is excluded from the host and object alphabets.
+ * An empty host id or object id is legal (a namespace-only id used at
+ * install); app id and act id are not.
+ *
+ * <p>{@link #equals} also accepts the dotted string.
+ * {@link #getUsrHandle} strips a {@code @quippin} suffix only; every
+ * other host keeps the full usrId. {@link #getUsrHst} is the part after
+ * {@code @}. Host-id helpers ({@link #subHstId}, replica parsing) live
+ * here so actId width stays in one place. Do not re-encode an actId at
+ * a call site.
+ */
 public class DomId
 {
   /**
@@ -195,6 +212,10 @@ public class DomId
            this.objId.equals(domId.objId);
   }
 
+  /**
+   * Strips a {@code @quippin} suffix. Any other {@code @} host is kept,
+   * so a non-quippin usrId is returned unchanged.
+   */
   public static String getUsrHandle(String usrId)
   {
     if (usrId == null)
@@ -213,6 +234,7 @@ public class DomId
     return usrId;
   }
 
+  /** The part after {@code @}, or the whole string when there is no {@code @}. */
   public static String getUsrHst(String usrId)
   {
     if (usrId == null)

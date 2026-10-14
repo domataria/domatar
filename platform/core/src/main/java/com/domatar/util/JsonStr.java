@@ -1,7 +1,15 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.math.BigDecimal;
 
+/**
+ * Recursive-descent parser behind {@link Json#parse}. Package-private;
+ * callers use {@link Json}.
+ */
 class JsonStr
 {
   final String str;

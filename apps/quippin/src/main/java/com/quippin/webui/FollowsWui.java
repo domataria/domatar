@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.webui;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -13,6 +17,11 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Browser adapter {@code /FollowsWui/*}. Forwards Follow, Unfollow,
+ * IsFollowed, and GetFollows. A handle is resolved through
+ * {@link com.domatar.core.LoginRemote} before the message is addressed.
+ */
 @WebServlet("/FollowsWui/*")
 public class FollowsWui extends DomatarServlet
 {

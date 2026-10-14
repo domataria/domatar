@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.hst;
 
 import com.domatar.core.RequestContext;
@@ -16,6 +20,14 @@ import com.domatar.util.DomatarMsgClient;
 
 import java.security.PublicKey;
 
+/**
+ * Handler for the directory object {@code (hst, hsts)}.
+ *
+ * <p>Ops: GetHst, UpdateHst. Rights stay public so a peer that is not
+ * logged in here can still read the directory. When mTLS is required,
+ * UpdateHst checks the client certificate against the stored provider
+ * key; the first write for a host with no stored key is the bootstrap.
+ */
 public class HstsImpl extends ObjImpl
 {
   @Override

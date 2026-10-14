@@ -32,6 +32,12 @@ import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 import com.domatar.util.DomId;
 
+/**
+ * Browser entry for a WUI. Subclasses build one message in
+ * {@link #getMsg}; this class verifies the session, then sends.
+ * Override {@link #isAnonymousAccess} for servlets that must run before
+ * a session exists. The default requires a verified user.
+ */
 public abstract class DomatarServlet extends HttpServlet
 {
   private static final long serialVersionUID = 1013814213213857810L;

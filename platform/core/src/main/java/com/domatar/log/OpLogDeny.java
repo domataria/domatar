@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.log;
 
 import com.domatar.util.DomatarException;

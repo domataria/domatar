@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.core;
 
 import com.domatar.util.JsonMap;

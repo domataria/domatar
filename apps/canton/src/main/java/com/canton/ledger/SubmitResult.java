@@ -8,6 +8,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Contracts archived and created by one ledger submit. Both lists are
+ * copied and unmodifiable; a null argument becomes an empty list.
+ */
 public final class SubmitResult
 {
   public final List<String> archived;

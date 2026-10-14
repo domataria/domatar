@@ -11,19 +11,14 @@ import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 import com.domatar.util.DomId;
 
+/**
+ * Routes account lookup and login verification to the central host of
+ * the appId in a {@code localname@appId} usrId. Fingerprint actIds have
+ * no {@code @} and cannot be routed here; pass a usrId.
+ * {@code DomatarServlet} and {@code Msg} treat the return as the verdict.
+ */
 public class LoginRemote
 {
-  // Federated identity (Spec-Login.txt). Verification and account lookup
-  // for a given usrId are routed to the CENTRAL HOST of the appId in the
-  // usrId's "@<appId>" suffix - not to this prv's own act manager. The
-  // central host is the only authority for its own act rows and passwords;
-  // every prv reaches the same authority for the same usrId, which is
-  // what makes a session world-wide.
-  //
-  // The trust-boundary callers (DomatarServlet, Msg.doAction) are
-  // unchanged - they call verifyLogin / getAct and treat the return
-  // value as the verdict; the routing change is invisible to them.
-
   /**
    * Build the DomId addressing the central act manager for the appId in
    * the given usrId (must be of the form {@code <localname>@<appId>}).

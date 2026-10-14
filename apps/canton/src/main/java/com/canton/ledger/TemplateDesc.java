@@ -8,6 +8,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * One Daml template as the ledger client reports it: payload fields,
+ * signatories, observers, and choices. The lists are copied and
+ * unmodifiable.
+ */
 public final class TemplateDesc
 {
   public final String templateId;
@@ -41,6 +46,12 @@ public final class TemplateDesc
     }
   }
 
+  /**
+   * One choice. {@code controllerFields} are payload field names;
+   * {@code ContractImpl} allows the choice only when each one equals
+   * the caller's bound party. {@code consuming} means the choice
+   * archives the contract.
+   */
   public static final class ChoiceDesc
   {
     public final String name;

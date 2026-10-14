@@ -12,6 +12,12 @@ import com.domatar.util.ObjImpl;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (canton, party)}.
+ *
+ * <p>Ops: GetParty, BindParty. Verified owner. BindParty stores
+ * {@code PartyId} on the object; an omitted id is stored as empty.
+ */
 public class PartyImpl extends ObjImpl
 {
   @Override

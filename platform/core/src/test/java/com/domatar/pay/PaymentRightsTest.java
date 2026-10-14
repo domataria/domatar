@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.pay;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

@@ -49,6 +49,16 @@ import com.domatar.util.DomatarInterface;
 import com.domatar.util.DomatarMsgClient;
 import com.domatar.util.DomId;
 
+/**
+ * {@link DomatarMsgClient} for in-process delivery and the
+ * cross-provider HTTP hop to {@code /Msg}.
+ *
+ * <p>{@code send} appends one hop to the held chain and does not read
+ * the database for that signature. An empty chain on an ordinary
+ * client throws; only a root-capable client (bootstrap, and
+ * {@link #rootAs} from account minting) may mint hop 0. Directory rows
+ * are cached for 60 seconds.
+ */
 public class HttpClient implements DomatarMsgClient
 {
   private static final Logger LOG = Logger.getLogger(HttpClient.class.getName());

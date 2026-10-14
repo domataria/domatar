@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
+/**
+ * Attribute bag stored as JSON on an object. {@link #toSqlString}
+ * backslash-escapes the characters MySQL treats specially inside a
+ * string literal. A null or blank document becomes an empty map.
+ */
 public class ObjAttrs
 {
   private final JsonMap jsonMap;

@@ -15,6 +15,14 @@ import com.domatar.util.DomatarException;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Builds the display map for one quip. Returns null when the viewer is
+ * banned; callers omit that quip.
+ *
+ * <p>A repost with no text of its own is {@code Type=ReQuip} and keeps
+ * its own DomId and timestamp so the news feed does not collapse it
+ * into the original. A repost that adds text is {@code Type=QuoteQuip}.
+ */
 public class Quip
 {
   static JsonMap getAttrs(final String name,

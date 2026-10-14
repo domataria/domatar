@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.db;
 
 import java.sql.PreparedStatement;
@@ -10,6 +14,12 @@ import java.util.List;
 import com.domatar.util.Hst;
 import com.domatar.util.DomatarException;
 
+/**
+ * Directory table {@code hst}. {@link #getHst} returns null when the
+ * host is unknown. {@code PubKey} and {@code RecordSig} are null on
+ * rows that have not published a provider key. Column order lives in
+ * {@code SELECT_COLS}; keep the row mapper aligned with it.
+ */
 public class HstDb
 {
   // Centralised select clause: keeps the column order in sync between getHst,
@@ -117,6 +127,7 @@ public class HstDb
     }
   }
 
+  /** Directory row, or null when the host is unknown. */
   public static Hst getHst(String hstId) throws DomatarException
   {
     DbConnection conn = null;

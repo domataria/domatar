@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.act;
 
 import com.domatar.app.App;
@@ -39,6 +43,15 @@ import com.domatar.util.DomatarMsgClient;
 import java.util.LinkedHashSet;
 import java.util.Map;
 
+/**
+ * Handler for {@code (act, actManager)} on an app's central host: mint,
+ * login, session check, profile, install, rebind, and host provisioning.
+ * Per-op rights are on {@link #hasRights}.
+ *
+ * <p>Ops: AddAct, GetAct, Login, Logout, VerifyLogin, UpdateAct,
+ * ChangePwd, DeleteAct, InstallApp, Rebind, AttachProvision,
+ * HostProvision. Compensate is delegated to {@link com.domatar.util.ObjImpl}.
+ */
 public class ActManagerImpl extends ObjImpl
 {
   @Override
@@ -101,8 +114,9 @@ public class ActManagerImpl extends ObjImpl
    *     enforces verified+owner-match itself, see addAct.)
    *   - GetAct, Logout: verified. Looking up someone's account or
    *     logging a user out requires a real local session.
-   *   - UpdateAct, ChangePwd, DeleteAct, Rebind, AttachProvision,
-   *     HostProvision: verified (+ owner-match / ActId checks inside
+   *   - UpdateAct, ChangePwd, DeleteAct, InstallApp, Rebind,
+   *     AttachProvision, HostProvision: verified (+ owner-match / ActId
+   *     checks inside
    *     the handler). AttachProvision and HostProvision require
    *     Auth.isVerified; the Sec chain proves the caller holds a valid
    *     delegation for ActId (K4 / PART 8.3). HostProvision does not

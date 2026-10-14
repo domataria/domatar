@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.List;
@@ -8,6 +12,12 @@ import com.domatar.db.ObjDb;
 import com.domatar.log.OpLog;
 import com.domatar.saga.Compensate;
 
+/**
+ * Default handler for GetObj, GetLnks, and Compensate. Subclasses
+ * delegate Compensate and any operation they do not recognize here.
+ * Authorization is {@link #hasRights} (default public). Cycle denial is
+ * {@link #rights}, which runs before that hook.
+ */
 public class ObjImpl implements DomatarInterface
 {
   @Override
@@ -148,6 +158,25 @@ public class ObjImpl implements DomatarInterface
   }
 
   /**
+   * When the request carries a ClsId envelope, sendLocal passes obj=null;
+   * load the destination row from the message head.
+   */
+  private static Obj resolveObj(final JsonMsg inMsg, final Obj obj) throws DomatarException
+  {
+    if (obj != null && obj.domId != null)
+      return obj;
+
+    final String clsAppId = inMsg.getClsAppId();
+    final String clsId    = inMsg.getClsId();
+
+    if (clsAppId != null && !clsAppId.isEmpty()
+        && clsId != null && !clsId.isEmpty())
+      return ObjDb.getObj(inMsg.getDstId());
+
+    return obj;
+  }
+
+  /**
    * Open protocol (Spec-Navigator PART 4; Spec-Icons.txt PART 7.3).
    *
    * Returns the obj's metadata and all of its outgoing lnks.
@@ -177,25 +206,6 @@ public class ObjImpl implements DomatarInterface
    *     }
    *   }
    */
-  /**
-   * When the request carries a ClsId envelope, sendLocal passes obj=null;
-   * load the destination row from the message head.
-   */
-  private static Obj resolveObj(final JsonMsg inMsg, final Obj obj) throws DomatarException
-  {
-    if (obj != null && obj.domId != null)
-      return obj;
-
-    final String clsAppId = inMsg.getClsAppId();
-    final String clsId    = inMsg.getClsId();
-
-    if (clsAppId != null && !clsAppId.isEmpty()
-        && clsId != null && !clsId.isEmpty())
-      return ObjDb.getObj(inMsg.getDstId());
-
-    return obj;
-  }
-
   private void openObj(final JsonMsg inMsg, final JsonMsg outMsg, final Obj obj, final DomatarMsgClient msgClient) throws DomatarException
   {
     int maxLnks = 500;

@@ -1,8 +1,15 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Manual {@code main} for the JSON parser. Not a JUnit test.
+ */
 public class JsonTest
 {
   public static void main(final String[] args) throws DomatarException

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.servlet;
 
 import java.io.IOException;
@@ -22,7 +26,10 @@ import com.domatar.util.JsonMsg;
 import com.domatar.util.DomatarException;
 
 /**
- * Servlet implementation class Msg
+ * Inbound {@code /Msg} endpoint, the cross-provider trust boundary.
+ * Identity is {@link com.domatar.crypto.Provenance#verify}; delivery is
+ * {@link com.domatar.core.HttpClient#receive}. Unsigned messages are
+ * rejected. The per-request rules are on {@link #doAction}.
  */
 @WebServlet("/Msg")
 public class Msg extends HttpServlet

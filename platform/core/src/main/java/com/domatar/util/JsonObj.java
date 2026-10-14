@@ -1,9 +1,17 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Unused. Build objects with {@link JsonHashMap}. Nothing in the tree
+ * constructs this class.
+ */
 public class JsonObj
 {
   Map<String, Object> map;

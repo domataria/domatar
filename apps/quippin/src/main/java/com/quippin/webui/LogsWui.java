@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.webui;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -12,6 +16,10 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Browser adapter {@code /LogsWui}. Forwards GetLogs to the caller's
+ * own logs container. Rights stay on {@code LogsImpl}.
+ */
 @WebServlet("/LogsWui")
 public class LogsWui extends DomatarServlet
 {

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.servlet;
 
 import java.net.URLDecoder;
@@ -8,6 +12,11 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import com.domatar.util.DomatarException;
 
+/**
+ * Browser cookies. Values are UTF-8 percent-encoded, and
+ * {@link #setCookie} always uses path {@code /}. {@code age} is
+ * {@code Max-Age} in seconds.
+ */
 public class Cookies
 {
   public static String getCookie(final Cookie[] cookies, final String cookieName) throws DomatarException

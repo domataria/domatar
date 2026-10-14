@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.db;
 
 import com.mysql.cj.jdbc.Driver;
@@ -16,6 +20,11 @@ import java.util.Stack;
 
 // import com.mysql.jdbc.Driver;
 
+/**
+ * Pooled JDBC connection. Idle connections sit on a static stack and
+ * are closed after an hour. {@link #setConnectStr} keeps the first
+ * value and ignores later calls, so the process has one database.
+ */
 public class DbConnection
 {
   static final long HOUR_OF_MILLS = 3600000;
@@ -41,6 +50,7 @@ public class DbConnection
     Connection c;
   }
 
+  /** First call wins. Later calls are ignored. */
   public static void setConnectStr(String str)
   {
     if (connectStr == null)

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import com.domatar.core.Auth;
@@ -10,6 +14,12 @@ import com.domatar.util.ObjImpl;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, sentiment)}.
+ *
+ * <p>Op: GetSentiment. Verified callers only. The author name is read
+ * through the act cache, not from the sentiment row.
+ */
 public class SentimentImpl extends ObjImpl
 {
   @Override

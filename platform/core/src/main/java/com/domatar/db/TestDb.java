@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.db;
 
 import java.sql.PreparedStatement;
@@ -7,6 +11,9 @@ import java.util.Random;
 import com.domatar.util.Base64Encoder;
 import com.domatar.util.DomatarException;
 
+/**
+ * Local insert benchmark with a {@code main}. Not on the product path.
+ */
 public class TestDb
 {
   private static final Random random = new Random();

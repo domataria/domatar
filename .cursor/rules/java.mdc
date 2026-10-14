@@ -11,8 +11,7 @@ Full rules: `docs/spec/platform/CodeStyle.md` (source of truth). Key points:
 - **Allman braces** — opening brace on the NEXT line for every construct.
 - **2-space indent**, never tabs. CRLF line endings. File ends with one newline.
 - **`final` locals** where practical; WHY-only comments (no change-narration).
-- Preserve the existing `/* Copyright (c) 2024 Domatar */` header when present;
-  do not add one to files that lack it.
+- Every Java file starts with the `/* Copyright (c) 2024 Domatar */` header.
 
 ## Library choices (do not substitute)
 

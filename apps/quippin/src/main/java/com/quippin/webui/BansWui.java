@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.webui;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -12,6 +16,10 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Browser adapter {@code /BansWui/*}. Forwards Ban, Unban, GetActBans,
+ * and GetIpBans. Rights stay on {@code BansImpl}.
+ */
 @WebServlet("/BansWui/*")
 public class BansWui extends DomatarServlet
 {

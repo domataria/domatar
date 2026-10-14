@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import java.util.List;
@@ -19,6 +23,13 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, logs)} on {@code quippin-<actId>}.
+ *
+ * <p>Ops: Log, GetLogs. Verified callers only. A log object id is
+ * {@code log-} plus the current time and {@link com.domatar.util.IdGen#getRandBase64},
+ * so two logs in the same millisecond stay distinct.
+ */
 public class LogsImpl extends ObjImpl
 {
   private static long lastDelete = 0;

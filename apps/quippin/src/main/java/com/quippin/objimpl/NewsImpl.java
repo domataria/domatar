@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import java.util.ArrayList;
@@ -19,6 +23,15 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, news)}, addressed at the provider
+ * ({@code quippin@quippin}), not a user sub-host.
+ *
+ * <p>Op: GetNews. Rights stay public so a logged-in user on another
+ * provider can read followed accounts' quips without an account here.
+ * The body lists act ids ({@code Acts}); only public quip fields are
+ * returned.
+ */
 public class NewsImpl extends ObjImpl
 {
   @Override

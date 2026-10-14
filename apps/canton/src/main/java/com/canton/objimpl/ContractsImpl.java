@@ -23,6 +23,12 @@ import com.domatar.util.ObjImpl;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for the {@code (canton, contracts)} container.
+ *
+ * <p>Ops: Sync, Create, GetContracts, and GetLnks. Verified owner.
+ * GetLnks syncs the ledger into local rows before the default open.
+ */
 public class ContractsImpl extends ObjImpl
 {
   @Override

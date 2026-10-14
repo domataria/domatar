@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.db;
 
 import java.sql.PreparedStatement;
@@ -13,6 +17,12 @@ import com.domatar.util.ObjAttrs;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 
+/**
+ * Object table {@code obj}, keyed by the four DomId parts.
+ * {@link #getObj} returns null when the row is absent. {@link #addObj}
+ * inserts; it does not update. Name and description are capped at 40
+ * and 100 characters.
+ */
 public class ObjDb
 {
   // Column length limits matching the obj table DDL.
@@ -31,6 +41,7 @@ public class ObjDb
     return s.substring(0, maxLen);
   }
 
+  /** Insert. Does not update an existing row. */
   public static void addObj(Obj obj) throws DomatarException
   {
     DbConnection conn = null;
@@ -92,6 +103,7 @@ public class ObjDb
       addObj(new Obj(domId, clsAppId, clsId, objName, objDesc, attrs));
   }
 
+  /** Local row, or null when absent. */
   public static Obj getObj(DomId domId) throws DomatarException
   {
     DbConnection conn = null;

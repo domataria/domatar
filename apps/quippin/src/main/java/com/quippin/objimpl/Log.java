@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import com.domatar.util.JsonMap;
@@ -7,6 +11,11 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Sends {@code Log} to {@code (quippin-<actId>, quippin, actId, logs)}.
+ * The actId is the destination account of the message being logged,
+ * not the caller's.
+ */
 public class Log
 {
   public static JsonMsg add(final String logType, final JsonMsg inMsg, final DomatarMsgClient msgClient) throws DomatarException

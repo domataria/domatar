@@ -18,6 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+/**
+ * Account rows: actId, usrId, password, session tokens, the sealed
+ * ownership private key, the actId-to-ownId binding, and the delegation.
+ * The genesis private key is never stored here.
+ *
+ * <p>Verification uses the row's stored {@code FpVersion}. Minting uses
+ * {@code AccountKeys.defaultVersion()}; do not re-encode an actId at a
+ * call site.
+ */
 public class ActDb
 {
   /**
@@ -35,6 +44,7 @@ public class ActDb
     }
   }
 
+  /** Session tokens. {@code java.util.Random} is not a CSPRNG; do not copy this for new secrets. */
   private static final Random random = new Random();
 
   /**

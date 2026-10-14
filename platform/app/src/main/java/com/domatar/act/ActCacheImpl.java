@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.act;
 
 import com.domatar.core.Auth;
@@ -12,6 +16,14 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (act, actCache)} on the user's home host.
+ *
+ * <p>GetAct returns the cached UsrId and UsrName, creating the row from
+ * {@link com.domatar.core.LoginRemote#getAct} on the first call. Rights
+ * are verified: a lookup is a logged-in display step. Compensate is
+ * delegated to {@link com.domatar.util.ObjImpl}.
+ */
 public class ActCacheImpl extends ObjImpl
 {
   @Override

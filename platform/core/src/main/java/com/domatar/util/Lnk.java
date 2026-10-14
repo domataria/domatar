@@ -1,5 +1,15 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
+/**
+ * One parent-to-child edge. {@code domId} is the parent and
+ * {@code lnkDomId} the child. {@code tagAppId} and {@code tag} classify
+ * the edge, {@code val} is the tag payload, and {@code seqNum} is the
+ * sibling order.
+ */
 public class Lnk
 {
   public final DomId domId;

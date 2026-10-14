@@ -1,7 +1,15 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.List;
 
+/**
+ * JSON array as a {@link java.util.List}. The typed getters cast; a
+ * wrong element type throws {@link ClassCastException}.
+ */
 public interface JsonList extends List<Object>
 {
   public default Boolean getBoolean(final int i)

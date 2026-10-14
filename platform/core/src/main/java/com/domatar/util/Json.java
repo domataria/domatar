@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
+/**
+ * In-tree JSON. Object values are {@link JsonHashMap} (insertion order).
+ * Signatures do not use this writer; they use
+ * {@link com.domatar.crypto.CanonicalJson}, which sorts keys.
+ */
 public class Json
 {
   public static Object parse(final String jsonStr) throws DomatarException

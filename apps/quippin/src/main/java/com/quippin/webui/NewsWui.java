@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.webui;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -12,6 +16,12 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Browser adapter {@code /NewsWui/*}. Forwards GetNews. The destination
+ * host is the {@code PrvId} parameter, the act is {@code quippin@quippin},
+ * and the object is {@code news}. {@code Acts} is a JSON attribute
+ * document.
+ */
 @WebServlet("/NewsWui/*")
 public class NewsWui extends DomatarServlet
 {

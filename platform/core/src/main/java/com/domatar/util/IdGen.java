@@ -1,7 +1,18 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.Random;
 
+/**
+ * Object ids of the form {@code prefix-} plus 8 characters of
+ * {@link Base64Encoder} time. A second id in the same millisecond
+ * collides unless the caller adds {@link #getRandBase64}.
+ * {@code java.util.Random} here is not a CSPRNG; do not use these
+ * helpers for keys or session tokens.
+ */
 public class IdGen
 {
   private static Random random = new Random();

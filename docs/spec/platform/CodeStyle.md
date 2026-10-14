@@ -11,13 +11,13 @@ those of the existing codebase.
 1.1  Encoding: UTF-8.
 1.2  Line endings: CRLF (Windows, \r\n).
 1.3  Every file ends with a single newline.
-1.4  The first non-blank line of every source file (after a copyright header, if
-     present) is the package declaration, then a blank line, then imports.
-1.5  Copyright header when one already exists in the file being edited:
+1.4  The first non-blank line after the copyright header is the package
+     declaration, then a blank line, then imports.
+1.5  Every Java source file starts with this header, a blank line, then the
+     package declaration:
        /*
         * Copyright (c) 2024 Domatar
         */
-     Do not add a header to files that do not already have one.
 
 ## PART 2 — INDENTATION
 

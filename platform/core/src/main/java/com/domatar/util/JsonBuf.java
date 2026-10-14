@@ -1,8 +1,17 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Writer used by {@link Json#toJson}. A {@link java.util.Map} must be a
+ * {@link JsonMap} and a {@link java.util.List} a {@link JsonList};
+ * another implementation throws {@link ClassCastException}.
+ */
 class JsonBuf
 {
   StringBuffer buf = new StringBuffer();

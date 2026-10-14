@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import java.util.List;
@@ -21,6 +25,13 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, bans)} on {@code quippin-<actId>}.
+ *
+ * <p>Ops: Ban, Unban, GetActBans, GetIpBans. Verified callers only.
+ * An act-ban object id is {@code banAct-} plus the target actId, with
+ * characters outside the object-id alphabet replaced by {@code _}.
+ */
 public class BansImpl extends ObjImpl
 {
   @Override

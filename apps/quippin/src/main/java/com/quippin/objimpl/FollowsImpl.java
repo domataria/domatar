@@ -27,6 +27,14 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, follows)} on {@code quippin-<actId>}.
+ *
+ * <p>Ops: Follow, Unfollow, IsFollowed, GetFollows. Any verified caller
+ * on this provider may use any local follows container; owner-match is
+ * not enforced. Follow writes two links: the container to the follow
+ * row, and the follow row to the followee's quips.
+ */
 public class FollowsImpl extends ObjImpl
 {
   @Override

@@ -25,6 +25,15 @@ import com.domatar.util.ObjImpl;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for one Canton contract ({@code iou} or {@code contract}).
+ *
+ * <p>Reads (GetLnks, GetObj, GetIou, GetContract) require a verified
+ * owner. Transfer, Settle, Archive, and Exercise also require the
+ * caller's bound party to equal every controller field of that choice.
+ * GetLnks and GetObj refresh the row and fail when the contract is no
+ * longer visible.
+ */
 public class ContractImpl extends ObjImpl
 {
   @Override

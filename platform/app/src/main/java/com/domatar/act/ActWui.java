@@ -21,8 +21,6 @@ import com.domatar.util.DomatarMsgClient;
 import com.domatar.util.DomId;
 
 /**
- * Servlet implementation class ActWui.
- *
  * Federated identity entry-point (Spec-Login.txt). All four ops dispatch
  * to the CENTRAL HOST of the appId in the user's identity, not to this
  * prv's local act manager:

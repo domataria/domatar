@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
+/**
+ * One directory row. {@code prvId} is the host that physically provides
+ * this one. {@code version == 0} and {@code fetchedAt == 0} mean
+ * unknown. {@code pubKey} is null on a sub-host.
+ */
 public class Hst
 {
   public final String hstId;     // Host Id
@@ -46,9 +55,11 @@ public class Hst
   }
 
   /**
-   * Returns the actId section of a per-user sub-host id of the form
-   * {@code "<appPrefix>-<actId>"} (separator is {@link DomId#HOST_SEP}).
-   * Returns the full {@code hstId} if no separator is found.
+   * Part of a sub-host id after the first {@link DomId#HOST_SEP}.
+   * For {@code app-actId} that is the actId. For a replica
+   * {@code app-actId-prvId} it is {@code actId-prvId}, not the actId;
+   * use {@link DomId#replicaActId} for that shape. Returns the whole
+   * id when there is no separator.
    */
   public String getSubHst()
   {

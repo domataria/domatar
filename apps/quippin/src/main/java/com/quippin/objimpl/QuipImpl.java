@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import java.util.List;
@@ -19,6 +23,14 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, quip)} on {@code quippin-<actId>}.
+ *
+ * <p>Ops: GetQuip, AddQuipChild, RemoveQuipChild, DeleteQuip,
+ * GetQuipChildren, AddSentiment, BanChild. Verified callers only.
+ * RemoveQuipChild and BanChild add an owner check inside the method,
+ * on top of verified.
+ */
 public class QuipImpl extends ObjImpl
 {
   @Override

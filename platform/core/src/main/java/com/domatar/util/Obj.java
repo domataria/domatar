@@ -1,9 +1,22 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 import java.util.List;
 
 import com.domatar.db.LnkDb;
 
+/**
+ * One stored object. {@code objName} is capped at 40 characters and
+ * {@code objDesc} at 100, matching the {@code obj} table.
+ *
+ * <p>The {@link DomatarMsgClient} constructor sends GetObj.
+ * {@link com.domatar.db.ObjDb#getObj} is the local read and returns null
+ * when the row is absent. {@link #modify} keeps a field when the
+ * corresponding argument is null.
+ */
 public class Obj
 {
   public final DomId domId;

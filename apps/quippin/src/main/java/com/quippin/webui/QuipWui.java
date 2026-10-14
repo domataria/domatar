@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.webui;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -15,7 +19,9 @@ import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
 /**
- * Servlet implementation class Quips
+ * Browser adapter {@code /QuipWui/*}. Forwards GetQuip, GetQuipChildren,
+ * RemoveQuipChild, AddSentiment, DeleteQuip, and BanChild. Rights stay
+ * on {@code QuipImpl}.
  */
 @WebServlet("/QuipWui/*")
 public class QuipWui extends DomatarServlet

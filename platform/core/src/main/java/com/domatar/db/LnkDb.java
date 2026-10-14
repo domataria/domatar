@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.db;
 
 import java.sql.PreparedStatement;
@@ -12,6 +16,12 @@ import com.domatar.util.Lnk;
 import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 
+/**
+ * Parent-to-child edges in {@code lnk}. A link is ordered by
+ * {@code SeqNum}. Name and description are capped at 40 and 100
+ * characters, matching the table. A {@code startSeqNum} of
+ * {@code Long.MIN_VALUE} starts at the first child.
+ */
 public class LnkDb
 {
   // Column length limits that match the lnk (and obj) table DDL.

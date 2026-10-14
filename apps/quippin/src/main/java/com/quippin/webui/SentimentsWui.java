@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.webui;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,6 +16,11 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Not mounted: there is no {@code @WebServlet} and no web.xml entry.
+ * Despite the name, GetQuips and AddQuip are addressed to
+ * {@code (quippin-<actId>, quippin, actId, quips)}, not to sentiments.
+ */
 public class SentimentsWui extends DomatarServlet
 {
 

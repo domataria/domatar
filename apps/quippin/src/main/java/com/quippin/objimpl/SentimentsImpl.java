@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.quippin.objimpl;
 
 import com.domatar.core.Auth;
@@ -11,6 +15,13 @@ import com.domatar.util.DomId;
 import com.domatar.util.DomatarException;
 import com.domatar.util.DomatarMsgClient;
 
+/**
+ * Handler for {@code (quippin, sentiments)} on {@code quippin-<actId>}.
+ *
+ * <p>Op: LnkSentiment. Verified callers only. The previous link to that
+ * sentiment is removed first; a sentiment of {@code "None"} stores no
+ * replacement.
+ */
 public class SentimentsImpl extends ObjImpl
 {
   @Override

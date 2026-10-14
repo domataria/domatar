@@ -1,8 +1,16 @@
+/*
+ * Copyright (c) 2024 Domatar
+ */
+
 package com.domatar.util;
 
 // import org.apache.logging.log4j.LogManager;
 // import org.apache.logging.log4j.Logger;
 
+/**
+ * Checked failure. A wrapped cause is joined into {@link #getMessage}
+ * as {@code "outer wraps: inner"}. Callers log; this type does not.
+ */
 public class DomatarException extends Exception
 {
   /**
