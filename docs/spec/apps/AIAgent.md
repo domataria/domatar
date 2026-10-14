@@ -472,7 +472,10 @@ User selects a conversation in the left pane:
 User types and clicks Send:
   - POST { Action=SendMessage, ConvId=<current or empty>,
                                 Text=<typed text> }
-  - Disable the text area and show "..." typing indicator.
+  - Disable the text area and show "Working..." until the reply.
+    SendMessage, ApproveToolCall, and RejectToolCall each wait
+    210000 ms. Approve and Reject show "Working..." the same way
+    while they are in flight.
   - On reply: append the user message, every Role="tool" message
     the server emitted during the agent loop (collapsed by
     default; expandable to show args/result), and the final
@@ -513,9 +516,12 @@ In the right pane's header:
                       that POSTs SetMode for the current conv.
                       Switching out of Chat the first time shows
                       a one-time explanation of what changes.
-  Settings            Opens the Policy panel (PART 17.1): allow /
-                      deny lists, foreign actIds, budgets,
-                      pre-approved writes.
+  Settings            Opens the conversation settings: a System
+                      prompt box saved by SetSystemPrompt, plus
+                      the Policy panel (PART 17.1): allow / deny
+                      lists, foreign actIds, budgets, and
+                      pre-approved writes. Saving the system
+                      prompt does not change mode or budgets.
   Sign out            Same as Account's Sign out.
 
 The Mode selector and Settings panel are part of the destination
@@ -860,6 +866,10 @@ SetPolicy, ApproveToolCall, and RejectToolCall are implemented.
           public String toolCallId;   // populated for role="tool"
                                       // replies; matches a prior
                                       // tool_call's id
+          public String toolName;     // populated for role="tool";
+                                      // the function name. gpt-oss
+                                      // rejects a tool result that
+                                      // omits it.
           public List<LlmToolCall> toolCalls;  // populated when an
                                                // assistant turn is
                                                // a tool_call request
@@ -933,6 +943,7 @@ already on the Tomcat classpath). Request:
                                        "function":{"name":"...",
                                        "arguments":"..."}}]},
                        {"role":"tool","tool_call_id":"...",
+                        "name":"...",
                         "content":"..."} ],
       "tools"      : [ {"type":"function",
                         "function":{"name":"...",
@@ -1441,7 +1452,7 @@ For each user turn:
 
 15.3 Termination and budgets
 
-  - Hard iteration cap: ITERATIONS_PER_TURN (default 8). When
+  - Hard iteration cap: ITERATIONS_PER_TURN (default 12). When
     reached, the agent stops the loop and asks the LLM for a
     final summary using the partial history. Path depth
     ([Security](../platform/Security.md) PART 8.11) and the
@@ -1452,7 +1463,7 @@ For each user turn:
   - Token / cost budget: per-conversation TokensInPerTurn,
     TokensOutPerTurn (PART 17.1). Enforced before each LLM call.
   - Wall-clock deadline: per-turn DEADLINE_MS_PER_TURN (default
-    60000ms). Enforced before each LLM call and before each tool
+    180000ms). Enforced before each LLM call and before each tool
     dispatch.
   - User stop: a Stop button on the chat pane cancels the current
     turn; in-flight tool calls finish but no new tool calls are
@@ -1595,18 +1606,30 @@ MsgsSchemaBuilder handles two descriptor formats:
 
 16.4 The Domatar primer
 
-The system-prompt primer for non-Chat turns is three sentences:
+The system-prompt primer for non-Chat turns starts with listApps
+and useApp, in order: call listApps, call useApp with the exact
+name from that list, call the loaded operation tools, and call
+useApp again to switch apps. It then states:
 
-  "You have two base tools: listApps() shows available apps;
-  useApp(name) loads that app's tools as callable functions.
-  Call the loaded function directly to answer the question.
-  For a second app, call useApp again — this replaces the
-  previous app's tools."
-  "Your identity: actId = <actId>."
+  If a tool description says to copy a value from an earlier
+  result, copy it unchanged.
 
-The primer is assembled at turn time; improving it improves every
-conversation at once. The user's per-conversation SystemPrompt is
-appended after the primer and never replaces it.
+  Do not invent names, prices, dates, or booking references.
+
+  If a required argument is not in the conversation, ask the
+  user. Do not guess a city or a date.
+
+  Call a write when the user asked for the change, then wait.
+  After it runs, describe what the result contains. Do not add
+  a payment, a reservation, or a confirmation the result does
+  not contain.
+
+The primer names the caller's actId. It does not name a
+particular app. It is assembled at turn time; improving it
+improves every conversation at once. The user's
+per-conversation SystemPrompt is appended after the primer and
+never replaces it. That prompt defaults to "You are a helpful
+assistant."
 
 16.5 Descriptor fields the agent reads at runtime
 
@@ -1760,10 +1783,10 @@ Each conv obj carries a Policy attr (a JSON document; PART 5.2):
     "PreApprovedWrites" : [ "<ClsAppId>.<ClsId>.<Msg>", ... ],
     "ForeignActIds"  : [ "<actId>", ... ],
     "Budgets" : {
-      "IterationsPerTurn"  : 8,
+      "IterationsPerTurn"  : 12,
       "TokensInPerTurn"    : 50000,
       "TokensOutPerTurn"   : 8000,
-      "DeadlineMsPerTurn"  : 60000
+      "DeadlineMsPerTurn"  : 180000
     }
   }
 
@@ -1841,6 +1864,11 @@ When a prompt is required:
 The state of "pending approval" lives on the persisted msg row,
 not in memory, so a browser reload does not lose the queue: the
 user comes back to the chat and the pending card is still there.
+A later user message replays that pending call as a tool result
+named with the tool, content "Awaiting user approval.", so the
+next completion stays paired. Completed tool results carry the
+same name. gpt-oss rejects the request when a tool result has
+no name.
 
 17.4 Allow / deny
 
@@ -2394,7 +2422,7 @@ of the task document; it builds on the same prerequisites.
     Type "Hello" in the text box. Click Send (or press Enter).
     Expected:
       - A "user" message block appears immediately.
-      - A "..." typing indicator appears.
+      - A "Working..." bubble appears while the reply is in flight.
       - Within a few seconds the assistant reply appears.
       - The left pane gains a new entry "Hello".
       - The right-pane title changes to "Hello".

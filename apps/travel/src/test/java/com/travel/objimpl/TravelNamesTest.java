@@ -5,6 +5,7 @@
 package com.travel.objimpl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.LinkedHashSet;
@@ -38,5 +39,19 @@ public class TravelNamesTest
 
     assertEquals("Duffel Airways LHR-JFK 2026-11-01T08:00", first);
     assertTrue(second.endsWith(" (2)"));
+  }
+
+  @Test
+  public void same_foldsNonBreakingHyphen()
+  {
+    assertTrue(TravelNames.same(
+        "British Airways LHR\u2011CDG 2026\u201112\u201101T00:00:00",
+        "British Airways LHR-CDG 2026-12-01T00:00:00"));
+    assertTrue(TravelNames.same(
+        "Route de S\u00e8vres \u00e0 Neuilly \u2014 Route de S\u00e8vres \u00e0 Neuilly",
+        "Route de S\u00e8vres \u00e0 Neuilly - Route de S\u00e8vres \u00e0 Neuilly"));
+    assertFalse(TravelNames.same(
+        "British Airways LHR-CDG 2026-12-01T00:00:00",
+        "Duffel Airways LHR-CDG 2026-12-01T00:00:00"));
   }
 }

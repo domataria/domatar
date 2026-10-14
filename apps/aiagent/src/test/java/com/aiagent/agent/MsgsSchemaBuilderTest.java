@@ -45,6 +45,34 @@ public class MsgsSchemaBuilderTest
   }
 
   @Test
+  public void build_optionalParmIsNotRequired()
+  {
+    final JsonHashMap page = new JsonHashMap();
+    page.put("Name", "Page");
+    page.put("Type", "String?");
+    page.put("Description", "Page number. Omit it to get page 1.");
+
+    final JsonHashMap city = new JsonHashMap();
+    city.put("Name", "City");
+    city.put("Type", "String");
+    city.put("Description", "City to search.");
+
+    final JsonArrayList parms = new JsonArrayList();
+    parms.add(city);
+    parms.add(page);
+
+    final JsonHashMap message = msg("SearchHotels", "Search hotels", "Read", null);
+    message.put("Parms", parms);
+
+    final List<MsgsSchemaBuilder.ToolEntry> tools = MsgsSchemaBuilder.build(doc(message));
+    final String schema = tools.get(0).tool.parametersSchema;
+
+    assertTrue(schema.contains("\"Page\""));
+    assertTrue(schema.contains("\"required\":[\"City\"]"));
+    assertFalse(schema.contains("\"Page\"]"));
+  }
+
+  @Test
   public void build_omitsForeignUnit()
   {
     final List<MsgsSchemaBuilder.ToolEntry> tools = MsgsSchemaBuilder.build(

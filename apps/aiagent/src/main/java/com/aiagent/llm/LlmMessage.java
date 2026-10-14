@@ -16,6 +16,8 @@ import java.util.List;
  *   "assistant" - the model's reply; may carry toolCalls when
  *                 finishReason is "tool_calls"
  *   "tool"      - result of a tool call; must carry toolCallId
+ *                 and toolName. gpt-oss rejects a tool result
+ *                 that has no name.
  *
  * The two-arg constructor (role, content) is preserved so all
  * existing call sites in ConvImpl and elsewhere continue to compile.
@@ -26,10 +28,11 @@ public class LlmMessage
   public final String            content;
   public final String            toolCallId;
   public final List<LlmToolCall> toolCalls;
+  public final String            toolName;
 
   public LlmMessage(final String role, final String content)
   {
-    this(role, content, null, null);
+    this(role, content, null, null, null);
   }
 
   public LlmMessage(final String            role,
@@ -37,9 +40,19 @@ public class LlmMessage
                     final String            toolCallId,
                     final List<LlmToolCall> toolCalls)
   {
+    this(role, content, toolCallId, toolCalls, null);
+  }
+
+  public LlmMessage(final String            role,
+                    final String            content,
+                    final String            toolCallId,
+                    final List<LlmToolCall> toolCalls,
+                    final String            toolName)
+  {
     this.role       = role;
     this.content    = content;
     this.toolCallId = toolCallId;
     this.toolCalls  = toolCalls;
+    this.toolName   = toolName;
   }
 }

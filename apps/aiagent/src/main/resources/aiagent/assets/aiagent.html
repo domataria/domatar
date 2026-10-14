@@ -1020,6 +1020,7 @@
                     Mode           : attrs.Mode           || "Chat",
                     Policy         : attrs.Policy         || "{}",
                     ForeignActIds  : attrs.ForeignActIds  || "[]",
+                    SystemPrompt   : attrs.SystemPrompt   || "You are a helpful assistant.",
                     Messages       : attrs.Messages       || []
                 };
 
@@ -1236,6 +1237,7 @@
     {
         if (!currentConvId) return;
         $card.find("button").prop("disabled", true);
+        showWorking();
 
         $.ajax({
             type    : "POST",
@@ -1244,9 +1246,10 @@
                       "&ConvId="    + encodeURIComponent(currentConvId) +
                       "&PendingId=" + encodeURIComponent(pendingId) +
                       "&Always="    + (always ? "True" : "False"),
-            timeout : 120000,
+            timeout : 210000,
             success : function(json) { applyResume(json, $card); },
             error   : function(jqXHR, status) {
+                hideWorking();
                 $card.find("button").prop("disabled", false);
                 showError("Network error: " + status);
             }
@@ -1257,6 +1260,7 @@
     {
         if (!currentConvId) return;
         $card.find("button").prop("disabled", true);
+        showWorking();
 
         $.ajax({
             type    : "POST",
@@ -1264,9 +1268,10 @@
             data    : "Action=RejectToolCall" +
                       "&ConvId="    + encodeURIComponent(currentConvId) +
                       "&PendingId=" + encodeURIComponent(pendingId),
-            timeout : 120000,
+            timeout : 210000,
             success : function(json) { applyResume(json, $card); },
             error   : function(jqXHR, status) {
+                hideWorking();
                 $card.find("button").prop("disabled", false);
                 showError("Network error: " + status);
             }
@@ -1279,6 +1284,8 @@
      * ---------------------------------------------------------------- */
     function applyResume(json, $pendingCard)
     {
+        hideWorking();
+
         var resp = safeParse(json);
 
         if (!resp || resp.Error === "Failure")
@@ -1474,6 +1481,8 @@
         var preapp = (policy.PreApprovedWrites  || []).join("\n");
         var budgets = policy.Budgets || {};
 
+        $("#system-prompt").val(convCache[currentConvId].SystemPrompt
+            || "You are a helpful assistant.");
         $("#allow-apps").val(allow);
         $("#deny-apps").val(deny);
         populateForeignPills(foreign);
@@ -1513,8 +1522,10 @@
         }
 
         var cid = currentConvId;
-        var pendingCalls = 2;
+        var systemPrompt = $("#system-prompt").val();
+        var pendingCalls = 3;
         var saveError = null;
+        var savedSystemPrompt = systemPrompt;
 
         function onDone() {
             pendingCalls--;
@@ -1527,10 +1538,32 @@
                 if (convCache[cid]) {
                     convCache[cid].Policy = policyJson;
                     convCache[cid].ForeignActIds = foreignJson;
+                    convCache[cid].SystemPrompt = savedSystemPrompt;
                 }
                 closeSettings();
             }
         }
+
+        $.ajax({
+            type    : "POST",
+            url     : "Wui/AgentWui",
+            data    : "Action=SetSystemPrompt" +
+                      "&ConvId="        + encodeURIComponent(cid) +
+                      "&SystemPrompt="  + encodeURIComponent(systemPrompt),
+            timeout : 10000,
+            success : function(json) {
+                var resp = safeParse(json);
+                if (!resp || resp.Error === "Failure")
+                    saveError = "SetSystemPrompt failed: " + (resp && resp.ErrorMsg || "server error");
+                else if (resp.Attrs && resp.Attrs.SystemPrompt != null)
+                    savedSystemPrompt = resp.Attrs.SystemPrompt;
+                onDone();
+            },
+            error : function(jqXHR, status) {
+                saveError = "SetSystemPrompt failed: " + status;
+                onDone();
+            }
+        });
 
         // Save Policy
         $.ajax({
@@ -1694,6 +1727,20 @@
         showNewChatPlaceholder();
     }
 
+    function showWorking()
+    {
+        var $block = buildMsgBlock({ Role: "assistant", Text: "Working..." }, "typing");
+        $block.attr("data-working", "1");
+        $("#chat-messages").append($block);
+        scrollToBottom();
+        return $block;
+    }
+
+    function hideWorking()
+    {
+        $("#chat-messages [data-working]").remove();
+    }
+
     /* ----------------------------------------------------------------
      * Send message
      * ---------------------------------------------------------------- */
@@ -1718,11 +1765,10 @@
         $msgs.find(".chat-placeholder").remove();
 
         var userNow  = Date.now().toString();
-        var $userBlk = buildMsgBlock({ Role: "user",      Text: text,    Time: userNow });
-        var $typBlk  = buildMsgBlock({ Role: "assistant", Text: "\u2026" }, "typing");
+        var $userBlk = buildMsgBlock({ Role: "user", Text: text, Time: userNow });
 
-        $msgs.append($userBlk).append($typBlk);
-        scrollToBottom();
+        $msgs.append($userBlk);
+        showWorking();
 
         var dataStr = "Action=SendMessage&Text=" + encodeURIComponent(text)
                     + "&Mode="   + encodeURIComponent(currentMode || "ReadOnly")
@@ -1734,12 +1780,12 @@
             type    : "POST",
             url     : "Wui/AgentWui",
             data    : dataStr,
-            timeout : 120000,
+            timeout : 210000,
             success : function(json) {
                 isSending = false;
                 setInputEnabled(true);
                 $userBlk.remove();
-                $typBlk.remove();
+                hideWorking();
 
                 var resp = safeParse(json);
 
@@ -1804,7 +1850,7 @@
                 isSending = false;
                 setInputEnabled(true);
                 $userBlk.remove();
-                $typBlk.remove();
+                hideWorking();
                 showError("Network error: " + status);
             }
         });
@@ -2088,6 +2134,11 @@
   <div class="modal-card">
     <h2>Conversation settings</h2>
 
+    <label>System prompt
+      <textarea id="system-prompt" rows="5"></textarea>
+      <small>Appended after the primer. Does not change mode or budgets.</small>
+    </label>
+
     <label>Allowed apps
       <input id="allow-apps" placeholder="Empty = all apps allowed"/>
       <small>Comma-separated app IDs, e.g. aiagent, quippin</small>
@@ -2116,10 +2167,10 @@
     <details>
       <summary>Budgets</summary>
       <label>Max iterations
-        <input id="b-iter" type="number" min="1" max="32" placeholder="8"/>
+        <input id="b-iter" type="number" min="1" max="32" placeholder="12"/>
       </label>
       <label>Max wall-clock ms
-        <input id="b-ms" type="number" min="1000" placeholder="60000"/>
+        <input id="b-ms" type="number" min="1000" placeholder="180000"/>
       </label>
       <label>Max prompt tokens
         <input id="b-tin" type="number" min="1000" placeholder="50000"/>

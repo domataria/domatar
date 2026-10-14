@@ -41,6 +41,7 @@ import com.domatar.util.DomatarMsgClient;
  *   DeleteConversation  — delete a conversation and all its messages
  *   SetMode             — update the conversation's Mode attr
  *   SetPolicy           — update the conversation's Policy attr
+ *   SetSystemPrompt     — update the conversation's SystemPrompt attr
  *   SetForeignActIds    — update the conversation's ForeignActIds attr
  */
 @WebServlet("/AgentWui/*")
@@ -230,6 +231,25 @@ public class AgentWui extends DomatarServlet
       final DomId dst = new DomId(aiHstId, "aiagent", actId, convId);
       msg.addRequestHead(srcDomId, dst, context);
       msg.addRequestBody("SetPolicy", attrs);
+      msg.addClsId("aiagent", "conv");
+    }
+    else if ("SetSystemPrompt".equals(action))
+    {
+      final String convId = getParam(req, "ConvId");
+      final String prompt = getParam(req, "SystemPrompt");
+
+      if (convId == null || convId.isEmpty() || prompt == null)
+      {
+        msg.addError(action, "ConvId and SystemPrompt are required");
+        return msg;
+      }
+
+      final ObjAttrs attrs = new ObjAttrs();
+      attrs.addAttr("SystemPrompt", prompt);
+
+      final DomId dst = new DomId(aiHstId, "aiagent", actId, convId);
+      msg.addRequestHead(srcDomId, dst, context);
+      msg.addRequestBody("SetSystemPrompt", attrs);
       msg.addClsId("aiagent", "conv");
     }
     else if ("ApproveToolCall".equals(action))

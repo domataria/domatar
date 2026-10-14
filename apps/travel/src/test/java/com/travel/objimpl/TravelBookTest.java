@@ -23,6 +23,7 @@ import com.domatar.crypto.Path;
 import com.domatar.crypto.Provenance;
 import com.domatar.db.DbConnection;
 import com.domatar.db.HstDb;
+import com.domatar.db.LnkDb;
 import com.domatar.db.ObjDb;
 import com.domatar.install.OpLogInstall;
 import com.domatar.util.DomId;
@@ -30,6 +31,7 @@ import com.domatar.util.DomatarException;
 import com.domatar.util.JsonHashMap;
 import com.domatar.util.JsonMap;
 import com.domatar.util.JsonMsg;
+import com.domatar.util.Lnk;
 import com.domatar.util.Obj;
 import com.domatar.util.ObjAttrs;
 import com.travel.remote.FakeTravelHttp;
@@ -136,14 +138,58 @@ public class TravelBookTest
     assertEquals(0, http.postCount);
   }
 
+  @Test
+  public void cancelTrip_cancelsOrderAndSecondCallIsIdle() throws Exception
+  {
+    final DomId tripsId = TravelIds.subHost(actId, TravelIds.TRIPS);
+    final DomId tripId = TravelIds.subHost(actId, "trip1");
+    final ObjAttrs stored = new ObjAttrs();
+
+    stored.addAttr("Title", "Boston-Paris");
+    stored.addAttr("DuffelOrderId", "ord_test");
+    stored.addAttr("BookedAt", "2026-10-14T00:00:00Z");
+    stored.addAttr("Destination", "CDG");
+    ObjDb.addObjIfMissing(tripsId, "travel", "trips", "Trips", "Booked trips");
+    ObjDb.addObj(new Obj(tripId, "travel", "trip", "Boston-Paris", "CDG", stored));
+    LnkDb.addLnk(new Lnk(tripsId, tripId,
+        "travel", "trip",
+        "Boston-Paris", "CDG",
+        "travel", "trip",
+        null, 1L));
+
+    http.putPost("https://api.duffel.com/air/order_cancellations",
+        "{\"data\":{\"id\":\"can_1\"}}");
+
+    final ObjAttrs attrs = new ObjAttrs();
+
+    attrs.addAttr("Title", "Boston-Paris");
+
+    final JsonMsg first = new JsonMsg(new TravelAppImpl().handleMsg(
+        request("CancelTrip", attrs).toString(), app, "/domatar", "", client));
+    final JsonMsg again = new JsonMsg(new TravelAppImpl().handleMsg(
+        request("CancelTrip", attrs).toString(), app, "/domatar", "", client));
+
+    assertEquals("Success", first.getError());
+    assertEquals("Success", again.getError());
+    assertEquals(2, http.postCount);
+    assertEquals(false, first.getAttrs().getAttr("CancelledAt").isEmpty());
+    assertEquals(first.getAttrs().getAttr("CancelledAt"),
+        again.getAttrs().getAttr("CancelledAt"));
+  }
+
   private JsonMsg request(final ObjAttrs attrs) throws DomatarException
+  {
+    return request("BookTrip", attrs);
+  }
+
+  private JsonMsg request(final String op, final ObjAttrs attrs) throws DomatarException
   {
     final JsonMsg msg = new JsonMsg();
 
     msg.addRequestHead(new DomId(hst, "ui", actId, "uiObj"), appId, ctx);
     msg.setContext(ctx);
     msg.addClsId("travel", "app");
-    msg.addRequestBody("BookTrip", attrs);
+    msg.addRequestBody(op, attrs);
     return msg;
   }
 

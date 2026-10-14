@@ -20,6 +20,7 @@ import com.domatar.util.JsonArrayList;
 import com.domatar.util.JsonHashMap;
 import com.domatar.util.JsonList;
 import com.domatar.util.Lnk;
+import com.domatar.util.Obj;
 import com.travel.objimpl.TravelCache;
 import com.travel.objimpl.TravelIds;
 
@@ -40,6 +41,31 @@ public class TravelInstall implements AppInstall
 
     if (home == null || prvId == null || !prvId.equals(home.prvId))
       return;
+
+    refreshUserDescriptors();
+  }
+
+  /**
+   * Setup calls installProvider and does not call installUser again.
+   * Refresh each installed (travel, app) so BookTrip's Compensates
+   * and CancelTrip are on the descriptor useApp reads.
+   */
+  private static void refreshUserDescriptors() throws DomatarException
+  {
+    for (final Obj cls : ObjDb.listClsDescriptors())
+    {
+      if (cls.domId == null
+          || !TravelIds.HOME.equals(cls.domId.appId)
+          || !"appCls".equals(cls.domId.objId))
+        continue;
+
+      final DomId appId = new DomId(cls.domId.hstId, cls.domId.appId,
+          cls.domId.actId, TravelIds.APP);
+
+      if (ObjDb.getObj(appId) == null)
+        continue;
+      writeUserDescriptors(appId);
+    }
   }
 
   @Override

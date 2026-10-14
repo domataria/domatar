@@ -53,6 +53,11 @@ public final class TravelErrors
     return "Trip already exists: " + title;
   }
 
+  public static String unknownTrip(final String title)
+  {
+    return "Unknown trip: " + title;
+  }
+
   public static String duffelRejected(final String reason)
   {
     return "Duffel rejected the order: " + reason;

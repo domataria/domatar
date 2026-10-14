@@ -84,10 +84,10 @@ public final class AgentDefaults
   public static final String SIDE_EFFECT_OP_NOT_FOUND = "op-not-found:";
 
   /** Maximum agent loop iterations per user turn. */
-  public static final int  ITERATIONS_PER_TURN  = 8;
+  public static final int  ITERATIONS_PER_TURN  = 12;
 
   /** Maximum wall-clock time per user turn (milliseconds). */
-  public static final long DEADLINE_MS_PER_TURN = 60_000L;
+  public static final long DEADLINE_MS_PER_TURN = 180_000L;
 
   /** Maximum prompt tokens charged per user turn. */
   public static final int  TOKENS_IN_PER_TURN   = 50_000;

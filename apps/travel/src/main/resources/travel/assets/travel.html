@@ -111,7 +111,8 @@
     "FlightName", "Airline", "FlightPrice", "FlightCurrency",
     "DuffelOrderId", "BookingReference",
     "HotelName", "HotelStreet", "CheckIn", "Nights", "NightlyPrice",
-    "HotelTotal", "HotelCurrency", "Day1", "Day2", "Day3", "BookedAt"
+    "HotelTotal", "HotelCurrency", "Day1", "Day2", "Day3", "BookedAt",
+    "CancelledAt"
   ];
 
   function esc(value)
@@ -420,23 +421,53 @@
       var html = "<ul>";
       for (var i = 0; i < trips.length; i++)
       {
-        html += "<li><button type=\"button\" data-title=\"" + esc(trips[i].Title) + "\">"
+        html += "<li><button type=\"button\" class=\"open-trip\" data-title=\""
+          + esc(trips[i].Title) + "\">"
           + esc(trips[i].Title) + "</button> "
-          + esc(trips[i].Destination) + " \u00b7 " + esc(trips[i].HotelName) + "</li>";
+          + esc(trips[i].Destination) + " \u00b7 " + esc(trips[i].HotelName)
+          + " <button type=\"button\" class=\"cancel-trip\" data-title=\""
+          + esc(trips[i].Title) + "\">Cancel</button></li>";
       }
       html += "</ul>";
       target.innerHTML = html;
-      var buttons = target.querySelectorAll("button");
-      for (var b = 0; b < buttons.length; b++)
+      var openers = target.querySelectorAll("button.open-trip");
+      for (var b = 0; b < openers.length; b++)
       {
-        buttons[b].addEventListener("click", function()
+        openers[b].addEventListener("click", function()
         {
           openTrip(this.getAttribute("data-title"));
+        });
+      }
+      var cancels = target.querySelectorAll("button.cancel-trip");
+      for (var c = 0; c < cancels.length; c++)
+      {
+        cancels[c].addEventListener("click", function()
+        {
+          cancelTrip(this.getAttribute("data-title"));
         });
       }
     }).catch(function()
     {
       document.getElementById("trips").innerHTML = "<p class=\"error\">Could not load trips.</p>";
+    });
+  }
+
+  function cancelTrip(title)
+  {
+    setStatus("Cancelling\u2026");
+    post({ Action: "CancelTrip", Title: title }).then(function(ret)
+    {
+      if (failed(ret))
+      {
+        setStatus(ret && ret.ErrorMsg ? ret.ErrorMsg : "Could not cancel trip", true);
+        return;
+      }
+      setStatus("Cancelled " + (ret.Attrs && ret.Attrs.Title ? ret.Attrs.Title : title));
+      loadTrips();
+      showTrip(ret.Attrs);
+    }).catch(function()
+    {
+      setStatus("Could not cancel trip", true);
     });
   }
 

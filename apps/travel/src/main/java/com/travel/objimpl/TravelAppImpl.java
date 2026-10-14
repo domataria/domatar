@@ -37,7 +37,7 @@ import com.travel.remote.TravelHttpClient;
 
 /**
  * Facade. Search calls Duffel and Geoapify. BookTrip creates one
- * Duffel test order and one trip.
+ * Duffel test order and one trip. CancelTrip cancels that order.
  */
 public class TravelAppImpl extends ObjImpl
 {
@@ -48,7 +48,8 @@ public class TravelAppImpl extends ObjImpl
       "FlightName", "Airline", "FlightPrice", "FlightCurrency",
       "DuffelOrderId", "BookingReference",
       "HotelName", "HotelStreet", "CheckIn", "Nights", "NightlyPrice",
-      "HotelTotal", "HotelCurrency", "Day1", "Day2", "Day3", "BookedAt"
+      "HotelTotal", "HotelCurrency", "Day1", "Day2", "Day3", "BookedAt",
+      "CancelledAt"
   };
 
   private static final TravelHttp HTTP = new TravelHttpClient();
@@ -151,6 +152,8 @@ public class TravelAppImpl extends ObjImpl
         return searchSights(inMsg, msgClient);
       case "BookTrip":
         return bookTrip(inMsg, msgClient);
+      case "CancelTrip":
+        return cancelTrip(inMsg, msgClient);
       case "GetTrips":
         return getTrips(msgClient);
       case "GetTrip":
@@ -524,7 +527,7 @@ public class TravelAppImpl extends ObjImpl
     final String actId = Auth.actId(msgClient);
     final String title = inMsg.getAttr("Title").trim();
 
-    if (tripByTitle(actId, title) != null)
+    if (tripByTitle(actId, title, true) != null)
       return failure(opr, TravelErrors.tripExists(title));
 
     final TravelCache.FlightHit flight = TravelCache.findFlight(actId, inMsg.getAttr("FlightName"));
@@ -628,12 +631,57 @@ public class TravelAppImpl extends ObjImpl
     }
   }
 
+  private String cancelTrip(final JsonMsg inMsg, final DomatarMsgClient msgClient)
+      throws DomatarException
+  {
+    final String opr = "CancelTrip";
+    final String titleRaw = inMsg.getAttr("Title");
+
+    if (titleRaw == null || titleRaw.isBlank())
+      return failure(opr, "Missing Title");
+
+    final String title = titleRaw.trim();
+    final Obj trip = tripByTitle(Auth.actId(msgClient), title, false);
+
+    if (trip == null)
+      return failure(opr, TravelErrors.unknownTrip(title));
+    if (cancelled(trip))
+      return tripOk(opr, copyTrip(trip));
+
+    final String orderId = attr(trip, "DuffelOrderId");
+
+    if (!orderId.isEmpty())
+    {
+      final TravelHttp http = testHttp != null ? testHttp : HTTP;
+      final String token = testHttp != null
+          ? testDuffelToken
+          : System.getenv("TRAVEL_DUFFEL_TOKEN");
+      final DuffelClient client = new DuffelClient(http, token);
+
+      try
+      {
+        client.cancelOrder(orderId);
+      }
+      catch (final DomatarException e)
+      {
+        return failure(opr, duffelFailure(e));
+      }
+    }
+
+    trip.attrs.addAttr("CancelledAt", Instant.now().toString());
+    ObjDb.modifyObj(trip);
+    return tripOk(opr, copyTrip(trip));
+  }
+
   private String getTrips(final DomatarMsgClient msgClient) throws DomatarException
   {
     final JsonList rows = new JsonArrayList();
 
     for (final Obj trip : trips(Auth.actId(msgClient)))
     {
+      if (cancelled(trip))
+        continue;
+
       final JsonMap row = new JsonHashMap();
 
       row.put("Title", attr(trip, "Title"));
@@ -660,10 +708,10 @@ public class TravelAppImpl extends ObjImpl
     if (title == null || title.isBlank())
       return failure("GetTrip", "Missing Title");
 
-    final Obj trip = tripByTitle(Auth.actId(msgClient), title.trim());
+    final Obj trip = tripByTitle(Auth.actId(msgClient), title.trim(), false);
 
     if (trip == null)
-      return failure("GetTrip", "Unknown trip: " + title.trim());
+      return failure("GetTrip", TravelErrors.unknownTrip(title.trim()));
     return tripOk("GetTrip", copyTrip(trip));
   }
 
@@ -747,15 +795,27 @@ public class TravelAppImpl extends ObjImpl
     return rows;
   }
 
-  private static Obj tripByTitle(final String actId, final String title)
+  private static Obj tripByTitle(final String actId, final String title,
+                                 final boolean activeOnly)
       throws DomatarException
   {
+    Obj cancelledMatch = null;
+
     for (final Obj trip : trips(actId))
     {
-      if (title.equalsIgnoreCase(attr(trip, "Title")))
+      if (!title.equalsIgnoreCase(attr(trip, "Title")))
+        continue;
+      if (!cancelled(trip))
         return trip;
+      if (cancelledMatch == null)
+        cancelledMatch = trip;
     }
-    return null;
+    return activeOnly ? null : cancelledMatch;
+  }
+
+  private static boolean cancelled(final Obj trip) throws DomatarException
+  {
+    return !attr(trip, "CancelledAt").isEmpty();
   }
 
   private static ObjAttrs copyTrip(final Obj trip) throws DomatarException

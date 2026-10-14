@@ -50,7 +50,7 @@ public class AgentLoop
 {
   /** Recent turns only — keeps Groq on_demand requests under ~12k TPM. */
   private static final int MAX_HISTORY_MSGS     = 12;
-  private static final int MAX_TOOL_RESULT_CHARS = 4000;
+  private static final int MAX_TOOL_RESULT_CHARS = 16000;
 
   // ── public entry point ───────────────────────────────────────────────────
 
@@ -276,7 +276,7 @@ public class AgentLoop
               decodeTargetSov(call.argumentsJson),
               call.argumentsJson != null ? call.argumentsJson : "{}",
               refusedText, "error", opName + " (refused)", refusedTimeStr));
-          history.add(new LlmMessage("tool", refusedText, call.id, null));
+          history.add(new LlmMessage("tool", refusedText, call.id, null, call.name));
           continue;
         }
 
@@ -308,7 +308,7 @@ public class AgentLoop
 
         history.add(new LlmMessage("tool",
             llmToolContent(r.resultJson),
-            call.id, null));
+            call.id, null, call.name));
       }
 
       finalFinish = "iterations";
@@ -582,7 +582,7 @@ public class AgentLoop
             decodeTargetSov(call.argumentsJson),
             call.argumentsJson != null ? call.argumentsJson : "{}",
             refusedText, "error", opName + " (refused)", refusedTimeStr));
-        history.add(new LlmMessage("tool", refusedText, call.id, null));
+        history.add(new LlmMessage("tool", refusedText, call.id, null, call.name));
         continue;
       }
 
@@ -611,7 +611,7 @@ public class AgentLoop
       newToolMsgs.add(new ToolMsgInfo(call.id, opName, targetSovStr, r.argsJson,
                                        r.resultJson, r.status, shortText, toolTimeStr));
       history.add(new LlmMessage("tool",
-          llmToolContent(r.resultJson), call.id, null));
+          llmToolContent(r.resultJson), call.id, null, call.name));
     }
 
     // ── Continue main loop (if not paused again) ──────────────────────────
@@ -765,7 +765,7 @@ public class AgentLoop
                 decodeTargetSov(call.argumentsJson),
                 call.argumentsJson != null ? call.argumentsJson : "{}",
                 refusedText, "error", opName + " (refused)", refusedTimeStr));
-            history.add(new LlmMessage("tool", refusedText, call.id, null));
+            history.add(new LlmMessage("tool", refusedText, call.id, null, call.name));
             continue;
           }
 
@@ -793,7 +793,7 @@ public class AgentLoop
           newToolMsgs.add(new ToolMsgInfo(call.id, call.name, targetSovStr, r.argsJson,
                                            r.resultJson, r.status, shortText, toolTimeStr));
           history.add(new LlmMessage("tool",
-              llmToolContent(r.resultJson), call.id, null));
+              llmToolContent(r.resultJson), call.id, null, call.name));
         }
 
         if (!paused)
@@ -1030,10 +1030,22 @@ public class AgentLoop
       else if ("tool".equals(role))
       {
         final String toolStatus = safeGet(m.attrs, "ToolStatus");
-        if ("pending".equals(toolStatus))
-          continue; // no result yet
+        final String pendingId = safeGet(m.attrs, "PendingId");
+        String storedName = safeGet(m.attrs, "ToolCallName");
+        if (storedName == null || storedName.isEmpty())
+          storedName = safeGet(m.attrs, "ToolName");
+        final String toolName = toolNameForHistory(storedName, pendingId, history);
 
-        final String pendingId  = safeGet(m.attrs, "PendingId");
+        if ("pending".equals(toolStatus))
+        {
+          // The write is still on the approval card. Replay it as a
+          // named tool result so the next request stays paired.
+          history.add(new LlmMessage("tool",
+              "Awaiting user approval.",
+              pendingId, null, toolName));
+          continue;
+        }
+
         final String toolResult = safeGet(m.attrs, "ToolResult");
 
         final String content;
@@ -1042,17 +1054,42 @@ public class AgentLoop
         else
           content = llmToolContent(toolResult);
 
-        history.add(new LlmMessage("tool", content, pendingId, null));
+        history.add(new LlmMessage("tool", content, pendingId, null, toolName));
       }
     }
 
     return history;
   }
 
+  /**
+   * Name to put on a replayed tool result. Prefer the name on the
+   * matching assistant tool_call in this window, then the stored name.
+   */
+  private static String toolNameForHistory(final String            storedName,
+                                            final String            pendingId,
+                                            final List<LlmMessage>  history)
+  {
+    if (pendingId != null && !pendingId.isEmpty())
+    {
+      for (int i = history.size() - 1; i >= 0; i--)
+      {
+        final LlmMessage msg = history.get(i);
+        if (msg.toolCalls == null)
+          continue;
+        for (final LlmToolCall c : msg.toolCalls)
+        {
+          if (pendingId.equals(c.id) && c.name != null && !c.name.isEmpty())
+            return c.name;
+        }
+      }
+    }
+    return storedName;
+  }
+
   /** Slim JSON for the completion prompt; the msg row still stores the full result. */
   private static String llmToolContent(final String raw)
   {
-    return truncateForLlm(ToolResultCompact.forLlm(raw));
+    return ToolResultCompact.fit(raw, MAX_TOOL_RESULT_CHARS);
   }
 
   private static String truncateForLlm(final String s)

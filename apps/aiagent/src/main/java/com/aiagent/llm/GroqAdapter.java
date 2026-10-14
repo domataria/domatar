@@ -277,8 +277,12 @@ public class GroqAdapter
       if ("tool".equals(m.role))
       {
         // Role="tool" carries the tool result back to the LLM.
+        // gpt-oss harmony refuses the request unless the tool's
+        // name is on this message ("Tools should have a name!").
         entry.put("tool_call_id", m.toolCallId != null ? m.toolCallId : "");
         entry.put("content",      m.content    != null ? m.content    : "");
+        if (m.toolName != null && !m.toolName.isEmpty())
+          entry.put("name", m.toolName);
       }
       else if ("assistant".equals(m.role)
                && m.toolCalls != null
@@ -291,6 +295,9 @@ public class GroqAdapter
 
         for (final LlmToolCall c : m.toolCalls)
         {
+          if (c.name == null || c.name.isEmpty())
+            continue;
+
           final JsonMap fn = new JsonHashMap(2);
           fn.put("name",      c.name);
           fn.put("arguments", c.argumentsJson != null ? c.argumentsJson : "{}");
@@ -303,7 +310,8 @@ public class GroqAdapter
           tcArray.add(tcEntry);
         }
 
-        entry.put("tool_calls", tcArray);
+        if (!tcArray.isEmpty())
+          entry.put("tool_calls", tcArray);
       }
       else
       {
@@ -326,6 +334,9 @@ public class GroqAdapter
 
       for (final LlmTool t : tools)
       {
+        if (t.name == null || t.name.isEmpty())
+          continue;
+
         final JsonMap fn = new JsonHashMap(3);
         fn.put("name",        t.name);
         fn.put("description", t.description);

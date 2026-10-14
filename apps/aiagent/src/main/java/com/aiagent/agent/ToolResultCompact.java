@@ -4,6 +4,7 @@
 
 package com.aiagent.agent;
 
+import java.util.IdentityHashMap;
 import java.util.Map;
 
 import com.domatar.util.Json;
@@ -42,6 +43,117 @@ final class ToolResultCompact
     {
       return raw;
     }
+  }
+
+  /**
+   * Slim a tool result for the model. JSON stays parseable: extra
+   * map-rows are removed from the end of the longest list, not sliced.
+   */
+  public static String fit(final String raw, final int maxChars)
+  {
+    if (raw == null || raw.isEmpty())
+      return "";
+
+    final Object parsed;
+    try
+    {
+      parsed = Json.parse(raw);
+    }
+    catch (final Exception e)
+    {
+      return slice(raw, maxChars);
+    }
+
+    try
+    {
+      final Object node = slim(parsed);
+      final Map<JsonList, Integer> removed = new IdentityHashMap<>();
+      String json = Json.toJson(node);
+
+      while (json.length() > maxChars)
+      {
+        final ListSite site = longestMapList(node);
+
+        if (site == null)
+          break;
+
+        site.list.remove(site.list.size() - 1);
+        final int count = removed.getOrDefault(site.list, 0) + 1;
+
+        removed.put(site.list, count);
+        if (site.parent != null)
+          site.parent.put("Omitted", Integer.toString(count));
+        json = Json.toJson(node);
+      }
+      return json;
+    }
+    catch (final Exception e)
+    {
+      return "{}";
+    }
+  }
+
+  private static String slice(final String raw, final int maxChars)
+  {
+    if (maxChars >= raw.length())
+      return raw;
+
+    final int cap = Math.max(0, maxChars);
+
+    return raw.substring(0, cap) + "\u2026(truncated)";
+  }
+
+  private static ListSite longestMapList(final Object node)
+  {
+    final ListSite best = new ListSite();
+
+    walk(node, null, best);
+    return best.list == null ? null : best;
+  }
+
+  private static void walk(final Object node, final JsonMap parent, final ListSite best)
+  {
+    if (node instanceof JsonMap)
+    {
+      final JsonMap map = (JsonMap) node;
+
+      for (final Object value : map.values())
+        walk(value, map, best);
+      return;
+    }
+    if (!(node instanceof JsonList))
+      return;
+
+    final JsonList list = (JsonList) node;
+
+    if (allMaps(list) && list.size() > best.size)
+    {
+      best.list = list;
+      best.parent = parent;
+      best.size = list.size();
+    }
+    for (final Object item : list)
+      walk(item, null, best);
+  }
+
+  private static boolean allMaps(final JsonList list)
+  {
+    if (list.isEmpty())
+      return false;
+
+    for (final Object item : list)
+    {
+      if (!(item instanceof JsonMap))
+        return false;
+    }
+    return true;
+  }
+
+  private static final class ListSite
+  {
+    private JsonList list;
+    private JsonMap parent;
+    private int size;
   }
 
   static Object slim(final Object raw)

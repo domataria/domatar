@@ -20,7 +20,7 @@ import com.domatar.util.JsonMap;
 public class TravelFacadeTest
 {
   @Test
-  public void serviceJson_hasSixMessages() throws Exception
+  public void serviceJson_hasSevenMessages() throws Exception
   {
     final JsonMap root = Json.parseMap(TravelFacade.serviceJson());
     final JsonList msgs = root.getList("Msgs");
@@ -29,13 +29,24 @@ public class TravelFacadeTest
     for (final Object item : msgs)
       names.add(((JsonMap) item).getString("Name"));
 
-    assertEquals(6, names.size());
+    assertEquals(7, names.size());
     assertTrue(names.contains("SearchFlights"));
     assertTrue(names.contains("SearchHotels"));
     assertTrue(names.contains("SearchSights"));
     assertTrue(names.contains("BookTrip"));
+    assertTrue(names.contains("CancelTrip"));
     assertTrue(names.contains("GetTrips"));
     assertTrue(names.contains("GetTrip"));
+  }
+
+  @Test
+  public void serviceJson_bookTripCompensatesCancelTrip() throws Exception
+  {
+    assertEquals("CancelTrip", field("BookTrip", "Compensates"));
+    assertEquals(null, field("CancelTrip", "Compensates"));
+    assertEquals("Write", sideEffect("CancelTrip"));
+    assertEquals("CancelTrip", policyCompensates("BookTrip"));
+    assertEquals(null, policyCompensates("CancelTrip"));
   }
 
   @Test
@@ -55,6 +66,15 @@ public class TravelFacadeTest
   }
 
   @Test
+  public void serviceJson_pageIsOptional() throws Exception
+  {
+    assertEquals("String?", parmType("SearchHotels", "Page"));
+    assertEquals("String?", parmType("SearchSights", "Page"));
+    assertEquals("String", parmType("SearchHotels", "City"));
+    assertEquals("String", parmType("SearchSights", "City"));
+  }
+
+  @Test
   public void serviceJson_hasNoCost() throws Exception
   {
     assertFalse(TravelFacade.serviceJson().contains("Cost"));
@@ -63,6 +83,11 @@ public class TravelFacadeTest
 
   private static String sideEffect(final String name) throws Exception
   {
+    return field(name, "SideEffect");
+  }
+
+  private static String field(final String name, final String key) throws Exception
+  {
     final JsonList msgs = Json.parseMap(TravelFacade.serviceJson()).getList("Msgs");
 
     for (final Object item : msgs)
@@ -70,7 +95,45 @@ public class TravelFacadeTest
       final JsonMap msg = (JsonMap) item;
 
       if (name.equals(msg.getString("Name")))
-        return msg.getString("SideEffect");
+        return msg.getString(key);
+    }
+    return null;
+  }
+
+  private static String parmType(final String message, final String parm) throws Exception
+  {
+    final JsonList msgs = Json.parseMap(TravelFacade.serviceJson()).getList("Msgs");
+
+    for (final Object item : msgs)
+    {
+      final JsonMap msg = (JsonMap) item;
+
+      if (!message.equals(msg.getString("Name")))
+        continue;
+
+      final JsonList parms = msg.getList("Parms");
+
+      for (final Object raw : parms)
+      {
+        final JsonMap row = (JsonMap) raw;
+
+        if (parm.equals(row.getString("Name")))
+          return row.getString("Type");
+      }
+    }
+    return null;
+  }
+
+  private static String policyCompensates(final String name) throws Exception
+  {
+    final JsonList policy = Json.parseMap(TravelFacade.classJson()).getList("MsgPolicy");
+
+    for (final Object item : policy)
+    {
+      final JsonMap msg = (JsonMap) item;
+
+      if (name.equals(msg.getString("Name")))
+        return msg.getString("Compensates");
     }
     return null;
   }

@@ -30,9 +30,10 @@ public final class TravelFacade
     root.put("SrvId", "app");
     root.put("Description",
         "Travel app. Search flights, hotels, and sights, then "
-        + "book one trip. Call the searches first. BookTrip only "
-        + "accepts Names returned by those searches. Do not invent "
-        + "flight numbers, hotel names, or sight names.");
+        + "book one trip or cancel a booked trip. Call the searches "
+        + "first. BookTrip only accepts Names returned by those "
+        + "searches. Do not invent flight numbers, hotel names, or "
+        + "sight names. CancelTrip cancels a trip that already exists.");
     msgs.add(described("SearchFlights", "Read",
         parms(
             parm("Origin", "City name or IATA code of the departure airport."),
@@ -47,17 +48,17 @@ public final class TravelFacade
             parm("City", "City to search."),
             parm("CheckIn", "Check-in date, YYYY-MM-DD."),
             parm("Nights", "Number of nights. A positive integer."),
-            parm("Page", "Page number, starting at 1. Defaults to 1.")),
-        "Search hotels. Page defaults to 1. NightlyPrice is a displayed "
+            optionalParm("Page", "Page number, starting at 1. Omit it to get page 1.")),
+        "Search hotels. Page may be omitted and defaults to 1. NightlyPrice is a displayed "
         + "euro price, not a live hotel rate. Copy Name into BookTrip. "
         + "A Total larger than this page means further pages exist."));
     msgs.add(described("SearchSights", "Read",
         parms(
             parm("City", "City to search."),
-            parm("Page", "Page number, starting at 1. Defaults to 1.")),
-        "Search sights. Page defaults to 1. Sights are not reserved. "
+            optionalParm("Page", "Page number, starting at 1. Omit it to get page 1.")),
+        "Search sights. Page may be omitted and defaults to 1. Sights are not reserved. "
         + "Day1, Day2, and Day3 must be Names from this list."));
-    msgs.add(described("BookTrip", "Write",
+    msgs.add(described("BookTrip", "Write", "CancelTrip",
         parms(
             parm("Title", "Title for the new trip."),
             parm("FlightName", "Name from SearchFlights."),
@@ -67,9 +68,17 @@ public final class TravelFacade
             parm("Day3", "Sight Names for day 3, separated by commas.")),
         "Book one trip. Search first and pass Names from those searches "
         + "unchanged. This books the flight and records the hotel and "
-        + "the itinerary. Do not call BookTrip twice for the same Title."));
+        + "the itinerary. Do not call BookTrip twice for the same Title. "
+        + "Compensates: CancelTrip."));
+    msgs.add(described("CancelTrip", "Write",
+        parms(parm("Title", "Trip title from GetTrips or from the booking.")),
+        "Cancel one booked trip. Use this when the user asks to cancel "
+        + "a booking. Pass Title unchanged. This cancels the flight order "
+        + "and marks the trip cancelled. The hotel and the sights were "
+        + "not reserved. A BookTrip still waiting for approval is not a "
+        + "trip."));
     msgs.add(described("GetTrips", "Read", null,
-        "List this user's trips, newest first."));
+        "List this user's trips that are not cancelled, newest first."));
     msgs.add(described("GetTrip", "Read",
         parms(parm("Title", "Trip title returned by GetTrips.")),
         "Read one trip by Title."));
@@ -90,7 +99,8 @@ public final class TravelFacade
     policy.add(policy("SearchFlights", "Read"));
     policy.add(policy("SearchHotels", "Read"));
     policy.add(policy("SearchSights", "Read"));
-    policy.add(policy("BookTrip", "Write"));
+    policy.add(policy("BookTrip", "Write", "CancelTrip"));
+    policy.add(policy("CancelTrip", "Write", null));
     policy.add(policy("GetTrips", "Read"));
     policy.add(policy("GetTrip", "Read"));
     root.put("MsgPolicy", policy);
@@ -99,23 +109,40 @@ public final class TravelFacade
 
   private static JsonHashMap policy(final String name, final String sideEffect)
   {
+    return policy(name, sideEffect, null);
+  }
+
+  private static JsonHashMap policy(final String name, final String sideEffect,
+                                    final String compensates)
+  {
     final JsonHashMap p = new JsonHashMap();
 
     p.put("Srv", "travel.app");
     p.put("Name", name);
     p.put("SideEffect", sideEffect);
     p.put("Auth", "Owner");
+    if (compensates != null && !compensates.isEmpty())
+      p.put("Compensates", compensates);
     return p;
   }
 
   private static JsonHashMap described(final String name, final String sideEffect,
                                        final JsonList parms, final String description)
   {
+    return described(name, sideEffect, null, parms, description);
+  }
+
+  private static JsonHashMap described(final String name, final String sideEffect,
+                                       final String compensates, final JsonList parms,
+                                       final String description)
+  {
     final JsonHashMap m = new JsonHashMap();
 
     m.put("Name", name);
     m.put("SideEffect", sideEffect);
     m.put("Description", description);
+    if (compensates != null && !compensates.isEmpty())
+      m.put("Compensates", compensates);
     if (parms != null)
       m.put("Parms", parms);
     return m;
@@ -132,10 +159,21 @@ public final class TravelFacade
 
   private static JsonHashMap parm(final String name, final String description)
   {
+    return parm(name, description, false);
+  }
+
+  private static JsonHashMap optionalParm(final String name, final String description)
+  {
+    return parm(name, description, true);
+  }
+
+  private static JsonHashMap parm(final String name, final String description,
+                                  final boolean optional)
+  {
     final JsonHashMap p = new JsonHashMap();
 
     p.put("Name", name);
-    p.put("Type", "String");
+    p.put("Type", optional ? "String?" : "String");
     p.put("Description", description);
     return p;
   }

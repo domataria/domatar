@@ -2,10 +2,11 @@
 
 [IMPLEMENTED — Update-TravelApp.txt]
 
-Travel searches flights, hotels, and sights, and books one short
-trip as objects on the installing user's host. One app, one
-install, one desktop tile named Travel. Searching and booking
-are messages on that user's `app-travel` object.
+Travel searches flights, hotels, and sights, books one short
+trip as objects on the installing user's host, and cancels a
+booked trip. One app, one install, one desktop tile named
+Travel. Searching, booking, and cancelling are messages on
+that user's `app-travel` object.
 
 The same facade serves the travel page and, later, the AI Agent.
 This app does not change the agent.
@@ -21,7 +22,7 @@ No card is charged.
 Companion documents:
 
 - [Writing Apps](Writing-Apps.md) — manifest, AppInstall, facade
-- [LLM Messages](../platform/LLM-Messages.md) — the six tools
+- [LLM Messages](../platform/LLM-Messages.md) — the seven tools
 - [AI Agent](AIAgent.md) — later caller of this facade
 
 The Java realisation is `apps/travel/`.
@@ -155,14 +156,16 @@ not text sent to the model.
 Messages are on class `(travel, app)`, object `app-travel`.
 The service descriptor carries a class Description and, for
 each message, Name, Description, SideEffect, and Parms.
+BookTrip also carries Compensates.
 
 Class Description:
 
 ```
 Travel app. Search flights, hotels, and sights, then
-book one trip. Call the searches first. BookTrip only
-accepts Names returned by those searches. Do not invent
-flight numbers, hotel names, or sight names.
+book one trip or cancel a booked trip. Call the searches
+first. BookTrip only accepts Names returned by those
+searches. Do not invent flight numbers, hotel names, or
+sight names. CancelTrip cancels a trip that already exists.
 ```
 
 3.1  SearchFlights (Read)
@@ -179,7 +182,9 @@ include the Duffel offer id.
 
 3.2  SearchHotels (Read)
 
-Parms: City, CheckIn, Nights, Page. Page defaults to 1.
+Parms: City, CheckIn, Nights, Page. Page may be omitted and
+defaults to 1. Its type is String?, so the tool schema does
+not require it.
 
 ```
 { Total, Page, Hotels:[{ Name, Street, City,
@@ -192,7 +197,8 @@ include the Geoapify place id.
 
 3.3  SearchSights (Read)
 
-Parms: City, Page. Page defaults to 1.
+Parms: City, Page. Page may be omitted and defaults to 1.
+Its type is String?, so the tool schema does not require it.
 
 ```
 { Total, Page, Sights:[{ Name, Street, City, Category }] }
@@ -208,8 +214,10 @@ six required. A day may name more than one sight, separated
 by commas. Empty segments are skipped.
 
 BookTrip resolves those Names in this user's search cache.
-A miss is "Unknown flight; search again", "Unknown hotel;
-search again", or "Unknown sight; search again". An expired
+Hyphen characters in a Name, including the non-breaking
+hyphen, are matched as "-". A miss is "Unknown flight;
+search again", "Unknown hotel; search again", or "Unknown
+sight; search again". An expired
 offer is "Offer expired; search again". A second BookTrip
 with the same Title, matched case-insensitively, is "Trip
 already exists: <Title>". Any of those stops before a Duffel
@@ -228,15 +236,40 @@ The trip is then written. If that write fails after the order
 was created, the app cancels the test order and does not leave
 a trip. The response is the GetTrip shape for the new trip.
 
-3.5  GetTrips (Read)
+BookTrip declares Compensates: CancelTrip. A cancelled title
+can be booked again.
 
-No parms. Newest BookedAt first.
+3.5  CancelTrip (Write)
+
+Parm: Title. Match is case-insensitive, same as GetTrip.
+
+CancelTrip is the compensating message for BookTrip. It does
+not declare Compensates. The agent calls CancelTrip by Title.
+Platform Compensate of the original BookTrip visit invokes
+this same message in-process.
+
+A missing Title is "Missing Title". An unknown title is
+"Unknown trip: <Title>". A trip that is already cancelled
+returns that trip and does not call Duffel again.
+
+Otherwise the app confirms a Duffel order cancellation for
+DuffelOrderId and sets CancelledAt. A Duffel refusal is
+"Duffel rejected the order: <reason>", and CancelledAt stays
+empty. The hotel and the sights were not reserved. The
+response is the GetTrip shape, including CancelledAt.
+
+A BookTrip that is still waiting on the approval card is not
+a trip. Reject on that card drops it.
+
+3.6  GetTrips (Read)
+
+No parms. Newest BookedAt first. Cancelled trips are omitted.
 
 ```
 { Trips:[{ Title, Destination, Depart, Return, HotelName }] }
 ```
 
-3.6  GetTrip (Read)
+3.7  GetTrip (Read)
 
 Parm: Title. Match is case-insensitive. Unknown title is
 "Unknown trip: <Title>". The attributes are:
@@ -246,14 +279,15 @@ Title, Origin, Destination, Depart, Return,
 FlightName, Airline, FlightPrice, FlightCurrency,
 DuffelOrderId, BookingReference,
 HotelName, HotelStreet, CheckIn, Nights, NightlyPrice,
-HotelTotal, HotelCurrency, Day1, Day2, Day3, BookedAt
+HotelTotal, HotelCurrency, Day1, Day2, Day3, BookedAt,
+CancelledAt
 ```
 
 HotelCurrency is EUR. Day1, Day2, and Day3 are the sight
-Names. The trip does not store Duffel offer ids or Geoapify
-place ids.
+Names. CancelledAt is empty until CancelTrip. The trip does
+not store Duffel offer ids or Geoapify place ids.
 
-3.7  Cache
+3.8  Cache
 
 One object per user, class `(travel, cache)`, ObjId `cache`,
 not linked from `app-travel`. It holds the latest flight
@@ -261,18 +295,20 @@ offers and the latest hotel and sight lists for this user,
 including the server ids and the offer expiry. A new search
 of one kind replaces only that kind.
 
-3.8  Side effects
+3.9  Side effects
 
 SearchFlights, SearchHotels, SearchSights, GetTrips, and
-GetTrip are Read. BookTrip is the only Write.
+GetTrip are Read. BookTrip and CancelTrip are Write.
 
 
 ## PART 4 — PAGE
 
-The Travel tile opens `travel.html`. The page posts the six
+The Travel tile opens `travel.html`. The page posts the seven
 facade messages to TravelWui. It searches flights, hotels, and
 sights, pages hotels and sights, fills BookTrip from clicked
-Names, lists trips, and opens one. While a search is in flight the section shows "Searching...".
+Names, lists trips, opens one, and cancels one. Cancel sits
+on each trip row. Cancelled trips leave the list. The opened
+trip shows CancelledAt. While a search is in flight the section shows "Searching...".
 For flights it sits beside Search flights. For hotels and
 sights it sits to the right of Next. The previous rows of that
 search are cleared. The text is removed when the new rows

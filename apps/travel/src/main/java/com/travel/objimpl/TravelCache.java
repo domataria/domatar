@@ -91,7 +91,7 @@ public final class TravelCache
 
       final JsonMap row = (JsonMap) item;
 
-      if (name == null || !name.equals(row.getString("Name")))
+      if (!TravelNames.same(name, row.getString("Name")))
         continue;
       if (expired(row.getString("ExpiresAt")))
         return new FlightHit(null, true);
@@ -157,7 +157,7 @@ public final class TravelCache
 
       final JsonMap row = (JsonMap) item;
 
-      if (name != null && name.equals(row.getString("Name")))
+      if (TravelNames.same(name, row.getString("Name")))
         return row;
     }
     return null;

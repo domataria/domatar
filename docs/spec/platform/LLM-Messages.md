@@ -240,21 +240,26 @@ Status: [DONE]
 
 Description:
   Travel app entry point. Search flights, hotels, and sights, then
-  book one trip. Call the searches first. BookTrip only accepts Names
-  returned by those searches. Do not invent flight numbers, hotel
-  names, or sight names.
+  book one trip or cancel a booked trip. Call the searches first.
+  BookTrip only accepts Names returned by those searches. Do not
+  invent flight numbers, hotel names, or sight names. CancelTrip
+  cancels a trip that already exists.
 
 Msgs:
   SearchFlights(Origin,Destination,Depart,Return) -> {Total, Offers:[{Name,Airline,Origin,Destination,DepartAt,ArriveAt,Price,Currency,Cabin}]};
   SearchHotels(City,CheckIn,Nights,Page) -> {Total, Page, Hotels:[{Name,Street,City,NightlyPrice,Currency,Nights,TotalPrice}]};
   SearchSights(City,Page) -> {Total, Page, Sights:[{Name,Street,City,Category}]};
-  BookTrip(Title,FlightName,HotelName,Day1,Day2,Day3) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt};
+  BookTrip(Title,FlightName,HotelName,Day1,Day2,Day3) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt,CancelledAt};
+  CancelTrip(Title) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt,CancelledAt};
   GetTrips() -> {Trips:[{Title,Destination,Depart,Return,HotelName}]};
-  GetTrip(Title) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt}
+  GetTrip(Title) -> {Title,Origin,Destination,Depart,Return,FlightName,Airline,FlightPrice,FlightCurrency,DuffelOrderId,BookingReference,HotelName,HotelStreet,CheckIn,Nights,NightlyPrice,HotelTotal,HotelCurrency,Day1,Day2,Day3,BookedAt,CancelledAt}
 
 SideEffect:
   SearchFlights:Read, SearchHotels:Read, SearchSights:Read, BookTrip:Write,
-  GetTrips:Read, GetTrip:Read
+  CancelTrip:Write, GetTrips:Read, GetTrip:Read
+
+Compensates:
+  BookTrip:CancelTrip
 
 Notes:
   Hotel NightlyPrice and TotalPrice are displayed EUR amounts computed
@@ -264,9 +269,13 @@ Notes:
   resolved with Duffel place suggestions to an airport code,
   preferring the city's own airport code.
   SearchFlights returns at most 8 offers. SearchHotels and
-  SearchSights return at most 12 rows; Page defaults to 1.
-  BookTrip is the only Write. It accepts Names from the searches above
-  and refuses a second trip with the same Title.
+  SearchSights return at most 12 rows. Page may be omitted and
+  defaults to 1. The tool schema does not require Page.
+  BookTrip and CancelTrip are the Writes. BookTrip accepts Names from
+  the searches above and refuses a second active trip with the same
+  Title. BookTrip Compensates CancelTrip. CancelTrip cancels the
+  Duffel test order and sets CancelledAt. GetTrips omits cancelled
+  trips. A second CancelTrip for the same title does not call Duffel.
   Implementation: TravelAppImpl handling (travel, app) on app-travel.
   See docs/spec/apps/Travel.md.
 

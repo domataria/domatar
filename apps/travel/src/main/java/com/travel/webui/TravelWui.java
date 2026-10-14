@@ -72,6 +72,7 @@ public class TravelWui extends DomatarServlet
         || "SearchHotels".equals(action)
         || "SearchSights".equals(action)
         || "BookTrip".equals(action)
+        || "CancelTrip".equals(action)
         || "GetTrips".equals(action)
         || "GetTrip".equals(action);
   }

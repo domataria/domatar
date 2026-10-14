@@ -57,6 +57,8 @@ import com.aiagent.llm.LlmResult;
  */
 public class ConvImpl extends ObjImpl
 {
+  private static final String DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant.";
+
   @Override
   public String handleMsg(final String msg, final Obj obj, final String contextPath,
                           final String contextRealPath, final DomatarMsgClient msgClient)
@@ -99,6 +101,8 @@ public class ConvImpl extends ObjImpl
       setMode(opr, inMsg, outMsg, conv);
     else if ("SetPolicy".equals(opr))
       setPolicy(opr, inMsg, outMsg, conv);
+    else if ("SetSystemPrompt".equals(opr))
+      setSystemPrompt(opr, inMsg, outMsg, conv);
     else if ("SetForeignActIds".equals(opr))
       setForeignActIds(opr, inMsg, outMsg, conv);
     else if ("ApproveToolCall".equals(opr))
@@ -182,6 +186,8 @@ public class ConvImpl extends ObjImpl
         defaultIfNull(safeGetAttr(obj.attrs, "Policy"),        "{}"));
     outAttrs.addAttr("ForeignActIds",
         defaultIfNull(safeGetAttr(obj.attrs, "ForeignActIds"), "[]"));
+    outAttrs.addAttr("SystemPrompt",
+        defaultIfNull(safeGetAttr(obj.attrs, "SystemPrompt"), DEFAULT_SYSTEM_PROMPT));
     outAttrs.addAttr("Messages", msgList);
     outMsg.addResponseBody(opr, outAttrs);
   }
@@ -303,6 +309,30 @@ public class ConvImpl extends ObjImpl
 
     final ObjAttrs out = new ObjAttrs();
     out.addAttr("Saved", "True");
+    outMsg.addResponseBody(opr, out);
+  }
+
+  private void setSystemPrompt(final String opr, final JsonMsg inMsg,
+                               final JsonMsg outMsg, final Obj obj)
+      throws DomatarException
+  {
+    final String given = inMsg.getAttr("SystemPrompt");
+
+    if (given == null)
+    {
+      outMsg.addError(opr, "SystemPrompt is required");
+      return;
+    }
+
+    final String stored = given.isBlank() ? DEFAULT_SYSTEM_PROMPT : given;
+
+    obj.attrs.addAttr("SystemPrompt", stored);
+    ObjDb.modifyObj(new Obj(obj.domId, "aiagent", "conv",
+                             obj.objName, obj.objDesc, obj.attrs));
+
+    final ObjAttrs out = new ObjAttrs();
+
+    out.addAttr("SystemPrompt", stored);
     outMsg.addResponseBody(opr, out);
   }
 
@@ -485,7 +515,7 @@ public class ConvImpl extends ObjImpl
     // 3. Call the LLM.
     String systemPrompt = safeGetAttr(convAttrs, "SystemPrompt");
     if (systemPrompt == null || systemPrompt.isEmpty())
-      systemPrompt = "You are a helpful assistant.";
+      systemPrompt = DEFAULT_SYSTEM_PROMPT;
 
     String model = safeGetAttr(convAttrs, "Model");
     if (model == null || model.isEmpty())

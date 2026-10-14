@@ -72,6 +72,35 @@ public final class TravelNames
     return named;
   }
 
+  /**
+   * True when two display names are the same after hyphen characters
+   * are folded to '-'. Models often emit U+2011 in a copied flight name.
+   */
+  public static boolean same(final String left, final String right)
+  {
+    if (left == null || right == null)
+      return false;
+    return foldHyphens(left).equals(foldHyphens(right));
+  }
+
+  private static String foldHyphens(final String value)
+  {
+    final StringBuilder folded = new StringBuilder(value.length());
+
+    for (int i = 0; i < value.length(); i++)
+    {
+      final char c = value.charAt(i);
+
+      if (c == '\u2010' || c == '\u2011' || c == '\u2012' || c == '\u2013'
+          || c == '\u2014' || c == '\u2015' || c == '\u2212'
+          || c == '\uFE63' || c == '\uFF0D')
+        folded.append('-');
+      else
+        folded.append(c);
+    }
+    return folded.toString();
+  }
+
   private static String text(final String value)
   {
     return value == null ? "" : value;

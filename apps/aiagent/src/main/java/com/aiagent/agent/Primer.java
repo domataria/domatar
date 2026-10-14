@@ -18,8 +18,7 @@ public final class Primer
 {
   /**
    * Build the primer for the given caller.
-   * Emits the adaptive-toolset primer (Spec-AIAgent.txt PART 16.4) —
-   * under 100 tokens.
+   * Emits the adaptive-toolset primer (Spec-AIAgent.txt PART 16.4).
    */
   public static String build(final Context callerCtx)
   {
@@ -32,7 +31,14 @@ public final class Primer
         + "do NOT guess or paraphrase app names.\n"
         + "3. Call the loaded operation tools to answer the question.\n"
         + "4. To switch apps, call 'useApp' again with a different exact name from listApps.\n"
-        + "Your identity: actId = " + actId + ".";
+        + "Your identity: actId = " + actId + ".\n"
+        + "If a tool description says to copy a value from an earlier result, copy it unchanged.\n"
+        + "Do not invent names, prices, dates, or booking references.\n"
+        + "If a required argument is not in the conversation, ask the user. "
+        + "Do not guess a city or a date.\n"
+        + "Call a write when the user asked for the change, then wait. "
+        + "After it runs, describe what the result contains. "
+        + "Do not add a payment, a reservation, or a confirmation the result does not contain.";
   }
 
   private Primer()
